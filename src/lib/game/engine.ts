@@ -49,7 +49,9 @@ export class BackroomsEngine {
   private chunks = new Map<string, ChunkData>();
   private sections = new Map<string, Section>();
   private lights: THREE.SpotLight[] = [];
-  private audio = new BackroomsAudio();
+  private audio: BackroomsAudio;
+  private audioForward = new THREE.Vector3();
+  private audioUp = new THREE.Vector3();
   private entity = createEntity(this.materials.darkness);
   private flashlight = new THREE.SpotLight("#e5e0b0", 0, 23, 0.46, 0.7, 1.8);
   private keys = new Set<string>();
@@ -77,7 +79,6 @@ export class BackroomsEngine {
   private lastStats = 0;
   private lastLights = -10;
   private lastChange = 0;
-  private lastSound = 0;
   private lastEntity = 0;
   private entityAge = 0;
   private drag: { x: number; y: number; id: number } | null = null;
@@ -94,6 +95,8 @@ export class BackroomsEngine {
     overlayCanvas: HTMLCanvasElement | null = null,
   ) {
     this.settings = settings;
+    this.audio = new BackroomsAudio(seed);
+    this.audio.setVolume(settings.volume);
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
     // Hide the outer edge of the bounded resident window, including along the
@@ -425,7 +428,7 @@ export class BackroomsEngine {
     if (this.stepDistance > (running ? 1.15 : 0.94)) {
       this.stepDistance = 0;
       this.stepSide *= -1;
-      this.audio.step(running, false, this.stepSide);
+      this.audio.step(running, this.stepSide);
     }
     const bob = this.settings.reducedMotion
       ? 0
@@ -483,7 +486,7 @@ export class BackroomsEngine {
     this.tapeBurst = 1;
     this.clipProgress = 0;
     this.keys.delete("KeyE");
-    this.audio.anomaly();
+    this.audio.resetSpace(this.seconds);
     for (const section of this.sections.values()) section.dispose();
     this.sections.clear();
     this.chunks.clear();
@@ -551,7 +554,6 @@ export class BackroomsEngine {
       this.entity.visible = true;
       this.entityAge = 0;
       this.lastEntity = this.seconds;
-      this.audio.distant(this.seconds);
     }
     this.entityAge += dt;
     const delta = this.entity.position.clone().sub(this.position);
@@ -654,11 +656,16 @@ export class BackroomsEngine {
           this.lastChange = this.seconds;
           this.alterUnseen();
         }
-        if (this.seconds - this.lastSound > 21) {
-          this.lastSound = this.seconds;
-          this.audio.distant(this.seconds);
-        }
-        this.audio.update(this.elapsed, this.stress, 1);
+        this.audio.update(
+          this.seconds,
+          this.camera.position,
+          this.audioForward
+            .set(0, 0, -1)
+            .applyQuaternion(this.camera.quaternion),
+          this.audioUp.set(0, 1, 0).applyQuaternion(this.camera.quaternion),
+          this.chunks,
+          this.sections.values(),
+        );
       } else if (!this.hasStarted) {
         this.camera.position.copy(this.position);
         this.camera.rotation.set(
