@@ -56,7 +56,9 @@ Press E while facing a nearby CRT, or tap its contextual hint. The camera frames
 
 Computer mode requests fullscreen so native Escape returns to the camera even after clicking or typing inside the cross-origin site. On browsers or embedded previews that deny fullscreen, use BACK TO CAMERA or the browser window's × button. The page remains mounted when leaving and re-entering nearby; it resets after distance or section eviction. Some embedded app browsers also block third-party iframes; verify live site navigation in a normal browser.
 
-Sites that send frame-blocking headers cannot run inside the monitor; Open in tab is available for the last entered address. The shell cannot read cross-origin navigation: the address bar, Reload, and Open in tab refer to the last address entered, while links within the site navigate normally. No page proxy or frame-protection bypass is used. Websites require a network connection; the procedural world does not.
+Back and Forward use the embedded site's cooperative `vackrooms-browser` bridge and its frame-local Navigation API. The arrows stay disabled until the site reports accurate navigation state. The [companion vgpu site integration](https://github.com/vercel-labs/vgpu/pull/446) must be deployed before they work on vgpu.sh. A supported site also keeps Location, Reload, and Open in tab synchronized with its current page. This never calls the game's history or reads a foreign frame's history.
+
+Sites that send frame-blocking headers cannot run inside the monitor; Open in tab is available. For sites without the bridge, Location, Reload, and Open in tab use the last entered address, while links within the site navigate normally. No page proxy or frame-protection bypass is used. Websites require a network connection; the procedural world does not.
 
 ## Vercel
 
