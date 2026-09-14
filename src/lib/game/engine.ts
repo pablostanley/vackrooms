@@ -2,19 +2,14 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { CharacterMotor } from "./physics";
 import { BackroomsAudio } from "./audio";
-import {
-  canStand,
-  cellAt,
-  CELL,
-  directions,
-  generateChunk,
-  SPAN,
-  type ChunkData,
-} from "./maze";
+import { CELL, generateChunk, SPAN, type ChunkData } from "./maze";
 import { createMaterials } from "./materials";
 import { createRenderer, type GameRenderer } from "./renderer";
 import { TapeOverlay } from "./tape-overlay";
-import { buildSection, createEntity, type Portal, type Section } from "./world";
+import { buildSection, type Portal, type Section } from "./world";
+import { EntityNavigation } from "./entity-navigation";
+import { EntityModel } from "./entity-model";
+import { Stalker } from "./stalker";
 
 export interface GameSettings {
   volume: number;
@@ -52,7 +47,15 @@ export class BackroomsEngine {
   private audio: BackroomsAudio;
   private audioForward = new THREE.Vector3();
   private audioUp = new THREE.Vector3();
-  private entity = createEntity(this.materials.darkness);
+  private entityMaterial = new THREE.MeshStandardMaterial({
+    color: "#15150f",
+    roughness: 0.96,
+    metalness: 0,
+  });
+  private entity = new EntityModel(this.entityMaterial);
+  private navigation = new EntityNavigation();
+  private stalker: Stalker;
+  private playerSpeed = 0;
   private flashlight = new THREE.SpotLight("#e5e0b0", 0, 23, 0.46, 0.7, 1.8);
   private keys = new Set<string>();
   private position = new THREE.Vector3(CELL * 2.5, 1.66, CELL * 4.5);
@@ -79,8 +82,6 @@ export class BackroomsEngine {
   private lastStats = 0;
   private lastLights = -10;
   private lastChange = 0;
-  private lastEntity = 0;
-  private entityAge = 0;
   private drag: { x: number; y: number; id: number } | null = null;
   private touchMove = { x: 0, y: 0 };
   private mutation = 0;
@@ -96,6 +97,7 @@ export class BackroomsEngine {
   ) {
     this.settings = settings;
     this.audio = new BackroomsAudio(seed);
+    this.stalker = new Stalker(seed, this.navigation);
     this.audio.setVolume(settings.volume);
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
@@ -352,6 +354,7 @@ export class BackroomsEngine {
         const section = buildSection(data, this.materials, this.depth);
         this.prepareWater(section);
         this.sections.set(key, section);
+        this.navigation.addSection(key, data, section.colliders);
         this.motor?.addSection(key, data, section.colliders);
         this.scene.add(section.group);
       }
@@ -360,6 +363,7 @@ export class BackroomsEngine {
         this.sections.get(key)?.dispose();
         this.motor?.removeSection(key);
         this.sections.delete(key);
+        this.navigation.removeSection(key);
         this.chunks.delete(key);
       }
   }
@@ -385,20 +389,6 @@ export class BackroomsEngine {
       }
     });
   }
-  private clearPath(x: number, z: number) {
-    if (!canStand(this.chunks, x, z)) return false;
-    for (const section of this.sections.values())
-      for (const box of section.colliders) {
-        if (
-          x > box.min.x - 0.2 &&
-          x < box.max.x + 0.2 &&
-          z > box.min.z - 0.2 &&
-          z < box.max.z + 0.2
-        )
-          return false;
-      }
-    return true;
-  }
   private walk(dt: number) {
     let x =
       (this.keys.has("KeyD") || this.keys.has("ArrowRight") ? 1 : 0) -
@@ -423,6 +413,7 @@ export class BackroomsEngine {
       this.position.x - previous.x,
       this.position.z - previous.z,
     );
+    this.playerSpeed = moved / Math.max(dt, 0.001);
     this.distance += moved;
     this.stepDistance += moved;
     if (this.stepDistance > (running ? 1.15 : 0.94)) {
@@ -490,11 +481,13 @@ export class BackroomsEngine {
     for (const section of this.sections.values()) section.dispose();
     this.sections.clear();
     this.chunks.clear();
+    this.navigation.clear();
     this.motor?.clearSections();
     this.position.set(CELL * 2.5, 1.66, CELL * 4.5);
     this.motor?.teleport(this.position);
     this.entity.visible = false;
-    this.lastEntity = this.seconds;
+    this.stalker.reset();
+    this.playerSpeed = 0;
     this.stream();
     this.updateLights();
     this.callbacks.message(
@@ -513,6 +506,12 @@ export class BackroomsEngine {
       -Math.cos(this.yaw),
     );
     for (const [key, data] of this.chunks) {
+      if (
+        this.stalker.present &&
+        Math.floor(this.stalker.position.x / SPAN) === data.x &&
+        Math.floor(this.stalker.position.z / SPAN) === data.z
+      )
+        continue;
       const dx = data.x * SPAN + SPAN / 2 - this.position.x,
         dz = data.z * SPAN + SPAN / 2 - this.position.z;
       const delta = new THREE.Vector3(dx, 0, dz);
@@ -533,6 +532,7 @@ export class BackroomsEngine {
       const section = buildSection(revised, this.materials, this.depth);
       this.prepareWater(section);
       this.sections.set(key, section);
+      this.navigation.addSection(key, revised, section.colliders);
       this.motor?.addSection(key, revised, section.colliders);
       this.scene.add(section.group);
       this.lastLights = -10;
@@ -540,105 +540,43 @@ export class BackroomsEngine {
     }
   }
   private updateEntity(dt: number) {
-    if (!this.entity.visible) {
-      if (this.seconds - this.lastEntity < 42) return;
-      const angle = this.yaw + Math.PI;
-      const x = this.position.x - Math.sin(angle) * 19,
-        z = this.position.z - Math.cos(angle) * 19;
-      const cell = cellAt(this.chunks, x, z);
-      if (!cell) return;
-      const ex = cell.chunk.x * SPAN + (cell.cx + 0.5) * CELL,
-        ez = cell.chunk.z * SPAN + (cell.cz + 0.5) * CELL;
-      if (!this.clearPath(ex, ez)) return;
-      this.entity.position.set(ex, 0, ez);
-      this.entity.visible = true;
-      this.entityAge = 0;
-      this.lastEntity = this.seconds;
-    }
-    this.entityAge += dt;
-    const delta = this.entity.position.clone().sub(this.position);
-    delta.y = 0;
-    const distance = delta.length();
-    let facing =
-      delta
-        .normalize()
-        .dot(new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))) >
-      0.82;
-    if (facing) {
-      for (let d = 0.4; d < distance; d += 0.35) {
-        if (
-          !canStand(
-            this.chunks,
-            this.position.x + delta.x * d,
-            this.position.z + delta.z * d,
-            0.01,
-          )
-        ) {
-          facing = false;
-          break;
-        }
-      }
-    }
-    if (facing && distance < 18)
-      this.stress = Math.max(this.stress, (1 - distance / 22) * 0.36);
-    if (!facing) {
-      const direction = this.entityDirection();
-      if (direction) {
-        const step = direction.sub(this.entity.position);
-        step.y = 0;
-        if (step.length() > 0.08) {
-          step.normalize().multiplyScalar(dt * 1.12);
-          if (
-            canStand(
-              this.chunks,
-              this.entity.position.x + step.x,
-              this.entity.position.z + step.z,
-              0.15,
-            )
-          )
-            this.entity.position.add(step);
-        }
-      }
-    }
-    this.entity.rotation.y = Math.atan2(
-      this.position.x - this.entity.position.x,
-      this.position.z - this.entity.position.z,
+    const previousGait = this.stalker.renderGait;
+    const caught = this.stalker.update(
+      dt,
+      {
+        view: {
+          position: this.camera.position,
+          forward: this.audioForward
+            .set(0, 0, -1)
+            .applyQuaternion(this.camera.quaternion),
+          up: this.audioUp.set(0, 1, 0).applyQuaternion(this.camera.quaternion),
+          fov: this.camera.fov,
+          aspect: this.camera.aspect,
+        },
+        playerSpeed: this.playerSpeed,
+      },
+      (position, running) => this.audio.entityStep(position, running),
     );
-    if (distance < 1.6) {
+    this.entity.visible = this.stalker.present;
+    this.stalker.renderPosition(this.entity.position);
+    this.entity.rotation.y = this.stalker.heading;
+    this.entity.animate(
+      this.stalker.renderGait,
+      this.stalker.renderGait !== previousGait,
+      this.stalker.speed,
+      dt,
+    );
+    if (this.stalker.observed) {
+      const distance = this.position.distanceTo(this.stalker.position);
+      this.stress = Math.max(
+        this.stress,
+        Math.max(0, 1 - distance / 24) * 0.36,
+      );
+    }
+    if (caught) {
       this.descend();
       this.callbacks.message("Something moved with you.");
     }
-    if (this.entityAge > 90 || distance > 39) {
-      this.entity.visible = false;
-      this.lastEntity = this.seconds;
-    }
-  }
-  private entityDirection() {
-    const sx = Math.floor(this.entity.position.x / CELL),
-      sz = Math.floor(this.entity.position.z / CELL),
-      tx = Math.floor(this.position.x / CELL),
-      tz = Math.floor(this.position.z / CELL);
-    const queue: [number, number, number, number][] = [[sx, sz, sx, sz]],
-      seen = new Set([`${sx},${sz}`]);
-    for (let i = 0; i < queue.length && i < 350; i++) {
-      const [x, z, fx, fz] = queue[i];
-      if (x === tx && z === tz)
-        return new THREE.Vector3((fx + 0.5) * CELL, 0, (fz + 0.5) * CELL);
-      const cell = cellAt(this.chunks, (x + 0.5) * CELL, (z + 0.5) * CELL);
-      if (!cell) continue;
-      for (const d of directions) {
-        if (!(cell.bits & d.bit)) continue;
-        const nx = x + d.dx,
-          nz = z + d.dz,
-          key = `${nx},${nz}`;
-        if (seen.has(key)) continue;
-        if (!canStand(this.chunks, (nx + 0.5) * CELL, (nz + 0.5) * CELL, 0.15))
-          continue;
-        seen.add(key);
-        queue.push([nx, nz, i === 0 ? nx : fx, i === 0 ? nz : fz]);
-      }
-    }
-    return null;
   }
   private tick = (now: number) => {
     if (!this.alive) return;
@@ -651,7 +589,6 @@ export class BackroomsEngine {
         this.walk(dt);
         this.stream();
         this.findPortal(dt);
-        this.updateEntity(dt);
         if (this.seconds - this.lastChange > 24) {
           this.lastChange = this.seconds;
           this.alterUnseen();
@@ -665,7 +602,9 @@ export class BackroomsEngine {
           this.audioUp.set(0, 1, 0).applyQuaternion(this.camera.quaternion),
           this.chunks,
           this.sections.values(),
+          this.stalker.present,
         );
+        this.updateEntity(dt);
       } else if (!this.hasStarted) {
         this.camera.position.copy(this.position);
         this.camera.rotation.set(
@@ -763,6 +702,7 @@ export class BackroomsEngine {
     this.entity.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
     });
+    this.entityMaterial.dispose();
     this.lights.forEach((light) => light.dispose());
     this.materials.dispose();
     this.tapeOverlay?.dispose();

@@ -43,6 +43,7 @@ export class BackroomsAudio {
   private volume = 0.65;
   private active = false;
   private disposed = false;
+  private entityWasPresent = false;
   private suspendTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSpatialUpdate = -Infinity;
   private listener: SoundPosition = { x: 0, y: 1.66, z: 0 };
@@ -182,6 +183,7 @@ export class BackroomsAudio {
 
   /** Called after a tape descent so no source or echo is carried to the new floor. */
   resetSpace(time: number) {
+    this.entityWasPresent = false;
     this.pending = null;
     this.schedule.defer(time);
     for (const voice of this.transients) this.release(voice);
@@ -206,6 +208,7 @@ export class BackroomsAudio {
     up: SoundPosition,
     chunks: Map<string, ChunkData>,
     sections: Iterable<{ lights: readonly SoundPosition[] }>,
+    entityPresent = false,
   ) {
     this.listener = { ...position };
     this.forward = { ...forward };
@@ -236,7 +239,15 @@ export class BackroomsAudio {
       this.updateFixtures(sections);
       for (const voice of this.transients) this.occlude(voice);
     }
-    const sound = this.schedule.poll(time, chunks, position);
+    // During a real encounter, every approaching footstep belongs to the creature.
+    if (entityPresent !== this.entityWasPresent) {
+      this.entityWasPresent = entityPresent;
+      this.schedule.defer(time);
+      this.pending = null;
+    }
+    const sound = entityPresent
+      ? null
+      : this.schedule.poll(time, chunks, position);
     if (sound && this.volume > 0) this.pending = { sound, index: 0, at: time };
     if (this.pending && time >= this.pending.at) {
       const { sound, index } = this.pending;
@@ -400,10 +411,21 @@ export class BackroomsAudio {
     );
   }
 
+  entityStep(position: SoundPosition, pursuing: boolean) {
+    if (!this.active || !this.ctx || !this.noise || !this.volume) return;
+    this.footstep(
+      { x: position.x, y: 0.12, z: position.z },
+      pursuing,
+      true,
+      true,
+    );
+  }
+
   private footstep(
     position: SoundPosition,
     running: boolean,
     distant: boolean,
+    entity = false,
   ) {
     if (!this.ctx || !this.noise || this.transients.size >= 12) return;
     const ctx = this.ctx,
@@ -414,16 +436,19 @@ export class BackroomsAudio {
       filter = ctx.createBiquadFilter(),
       gain = ctx.createGain();
     source.buffer = this.noise;
-    source.playbackRate.value = 0.85 + this.rng() * 0.3;
+    source.playbackRate.value = (entity ? 0.6 : 0.85) + this.rng() * 0.3;
     filter.type = "lowpass";
-    filter.frequency.value = hard ? 2400 : 720;
+    filter.frequency.value = entity ? (hard ? 1700 : 540) : hard ? 2400 : 720;
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(running ? 0.48 : 0.3, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + (hard ? 0.19 : 0.14));
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      now + (entity ? 0.3 : hard ? 0.19 : 0.14),
+    );
     source.connect(filter).connect(gain).connect(voice.input);
     const thud = ctx.createOscillator(),
       low = ctx.createGain();
-    thud.frequency.setValueAtTime(hard ? 115 : 82, now);
+    thud.frequency.setValueAtTime(entity ? 67 : hard ? 115 : 82, now);
     thud.frequency.exponentialRampToValueAtTime(40, now + 0.1);
     low.gain.setValueAtTime(running ? 0.08 : 0.045, now);
     low.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
@@ -432,7 +457,7 @@ export class BackroomsAudio {
     voice.nodes.push(filter, gain, low);
     this.track(voice);
     source.start(now, this.rng());
-    source.stop(now + 0.24);
+    source.stop(now + (entity ? 0.34 : 0.24));
     thud.start(now);
     thud.stop(now + 0.15);
   }
