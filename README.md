@@ -57,6 +57,8 @@ Press E while facing a nearby CRT, or tap its contextual hint. The camera frames
 
 The power switch on the lower-right bezel turns the monitor off and on. Off hides the website and disables its controls; the computer keeps the page running so switching back on resumes the current page. Power state survives nearby page-cache replacement and is released when its section leaves the resident world.
 
+When sound is enabled, entering a computer plays an original synthesized dial-up handshake. Its five-second duration includes the final fade; leaving early fades it out immediately. It follows the existing sound volume and mute controls, and repeated entry never layers multiple modem voices.
+
 Computer mode requests fullscreen so native Escape returns to the camera even after clicking or typing inside the cross-origin site. On browsers or embedded previews that deny fullscreen, use BACK TO CAMERA or the browser window's × button. The page remains mounted when leaving and re-entering nearby; it resets after distance or section eviction. Some embedded app browsers also block third-party iframes; verify live site navigation in a normal browser.
 
 Chromium excludes foreign iframe pixels from parent SVG displacement. Full-page curvature therefore requires the cooperative adapter in [vgpu PR #446](https://github.com/vercel-labs/vgpu/pull/446) to be deployed on vgpu.sh. The host sends only its generated curvature map to the matching frame after an origin-checked readiness message. Other sites retain the tinted, vignetted, scanlined glass and live clicks.
