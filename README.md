@@ -25,6 +25,25 @@ Open http://localhost:3000. A WebGPU-capable browser with hardware acceleration 
 
 Touch devices have a movement stick, swipe-to-look, and contextual action buttons. The unbranded, translucent camcorder HUD uses Geist Mono; supporting setup text uses Geist Sans. One viewport-based scale controls the HUD type, spacing, icons, and viewfinder marks. Main rooms use sickly-yellow fluorescent illumination with soft cast shadows and restrained damp-brown floors. A single compact icon row exposes sound, flashlight, pause, and cassette settings. The date reads June 18, 1994; the simulated battery starts at 22% and drains with recording time. Setup includes sound, sensitivity, tape damage, and a steady camera option. System reduced-motion preferences are respected. The sound starts with the user's first interaction and pauses with the game.
 
+Sound volume, look sensitivity, tape damage, and steady camera are saved automatically in this browser on this device, including across tapes. Mute remembers the previous nonzero volume, even after a muted reload or setting the slider to zero. System reduced motion supplies the initial comfort default; a saved choice takes precedence. These preferences never leave the browser. If local storage is unavailable, controls still work for the current session.
+
+Standard-mapped Xbox and PlayStation-style controllers are supported. Press a controller button to make it available to the browser, then release the controls before playing. Click Record once to enable browser audio.
+
+| Gamepad input | Action |
+| --- | --- |
+| Left / right stick | Walk / look |
+| Hold L3 or RT / R2 | Run |
+| A / × | Record, use computer, or hold to noclip |
+| Y / △ | Flashlight |
+| X / □ | Mute / restore volume |
+| B / ○ | Leave computer / pause / close settings |
+| Menu / Options | Record / pause / close settings |
+| View / Share | Open / close settings |
+| D-pad up / down | Focus a settings control |
+| D-pad left / right; A / × | Adjust a slider; activate a button or checkbox |
+
+Stick input has a radial dead zone and uses the saved look sensitivity. Disconnecting pauses recording; reconnecting or returning from another tab requires neutral controls before input resumes. Computer websites still use mouse, keyboard, or touch. The camcorder row keeps its original four controls and fixed dimensions.
+
 ## How it works
 
 - `src/lib/game/maze.ts`: seeded, connected maze sections. Shared boundary hashes keep gates aligned across streaming and regeneration. A spanning tree guarantees a path through every room; additional openings create nonsensical office spaces and loops.
