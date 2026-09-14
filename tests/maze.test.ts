@@ -11,6 +11,7 @@ import {
   canStand,
   directions,
   generateChunk,
+  poolBounds,
 } from "../src/lib/game/maze";
 test("every room is reachable across varied seeds and negative coordinates", () => {
   for (const seed of [0, 1, 199307, 882731])
@@ -79,7 +80,14 @@ test("collision permits open gates and blocks every closed wall", () => {
       for (let cx = 0; cx < CHUNK; cx++) {
         const x = data.x * SPAN + (cx + 0.5) * CELL,
           z = data.z * SPAN + (cz + 0.5) * CELL;
-        assert.ok(canStand(chunks, x, z));
+        const pool = poolBounds(data.landmark);
+        const inPool =
+          pool &&
+          x - data.x * SPAN > pool.x - 0.4 &&
+          x - data.x * SPAN < pool.x + pool.width + 0.4 &&
+          z - data.z * SPAN > pool.z - 0.4 &&
+          z - data.z * SPAN < pool.z + pool.length + 0.4;
+        assert.equal(canStand(chunks, x, z), !inPool);
         for (const d of directions) {
           const px = x + d.dx * (CELL / 2 - 0.1),
             pz = z + d.dz * (CELL / 2 - 0.1);

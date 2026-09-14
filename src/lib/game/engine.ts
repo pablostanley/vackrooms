@@ -96,7 +96,9 @@ export class BackroomsEngine {
     this.settings = settings;
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
-    this.scene.fog = new THREE.Fog("#9e9450", 24, 43);
+    // Hide the outer edge of the bounded resident window, including along the
+    // continuous corridor runs. The fluorescent haze has no visible end wall.
+    this.scene.fog = new THREE.Fog("#9e9450", 32, SPAN - 1);
     this.scene.add(new THREE.HemisphereLight("#fff3bc", "#897947", 1.05));
     this.scene.add(new THREE.AmbientLight("#fff5c6", 0.42));
     for (let i = 0; i < 12; i++) {
@@ -135,6 +137,7 @@ export class BackroomsEngine {
         return;
       }
       this.renderer = renderer;
+      for (const section of this.sections.values()) this.prepareWater(section);
       this.controls = new PointerLockControls(this.camera, renderer.canvas);
       this.controls.pointerSpeed = this.settings.sensitivity;
       this.controls.minPolarAngle = 0.22;
@@ -344,6 +347,7 @@ export class BackroomsEngine {
         const data = generateChunk(x, z, this.seed, this.depth);
         this.chunks.set(key, data);
         const section = buildSection(data, this.materials, this.depth);
+        this.prepareWater(section);
         this.sections.set(key, section);
         this.motor?.addSection(key, data, section.colliders);
         this.scene.add(section.group);
@@ -355,6 +359,11 @@ export class BackroomsEngine {
         this.sections.delete(key);
         this.chunks.delete(key);
       }
+  }
+  private prepareWater(section: Section) {
+    if (this.renderer)
+      for (const water of section.water)
+        water.material = this.renderer.waterMaterial;
   }
   private updateLights() {
     const candidates = [...this.sections.values()]
@@ -519,6 +528,7 @@ export class BackroomsEngine {
       this.sections.get(key)?.dispose();
       this.chunks.set(key, revised);
       const section = buildSection(revised, this.materials, this.depth);
+      this.prepareWater(section);
       this.sections.set(key, section);
       this.motor?.addSection(key, revised, section.colliders);
       this.scene.add(section.group);
@@ -620,6 +630,8 @@ export class BackroomsEngine {
           nz = z + d.dz,
           key = `${nx},${nz}`;
         if (seen.has(key)) continue;
+        if (!canStand(this.chunks, (nx + 0.5) * CELL, (nz + 0.5) * CELL, 0.15))
+          continue;
         seen.add(key);
         queue.push([nx, nz, i === 0 ? nx : fx, i === 0 ? nz : fz]);
       }
@@ -667,7 +679,13 @@ export class BackroomsEngine {
         const jitter = this.settings.reducedMotion
           ? 0
           : Math.sin(this.elapsed * 8 + i * 8.7) * 0.035;
-        light.intensity = 24 * (1 + jitter) * (i < 8 ? 1 : 0.6);
+        // Taller halls retain the same oppressive fluorescent brightness.
+        const heightCompensation = Math.min(
+          3.2,
+          Math.pow(light.position.y / 3, 1.5),
+        );
+        light.intensity =
+          24 * heightCompensation * (1 + jitter) * (i < 8 ? 1 : 0.6);
       }
       this.flashlight.position.copy(this.camera.position);
       const target = new THREE.Vector3(0, 0, -1)

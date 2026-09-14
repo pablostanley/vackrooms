@@ -1,6 +1,16 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { Box3, Vector3 } from "three";
-import { CELL, CHUNK, HEIGHT, N, SPAN, W, type ChunkData } from "./maze";
+import {
+  CELL,
+  CHUNK,
+  HEIGHT,
+  N,
+  SPAN,
+  W,
+  ceilingAt,
+  poolBounds,
+  type ChunkData,
+} from "./maze";
 
 let initialization: Promise<void> | undefined;
 const BODY_HEIGHT = 0.89;
@@ -55,28 +65,71 @@ export class CharacterMotor {
           RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z),
         ),
       );
-    box(ox + SPAN / 2, -0.06, oz + SPAN / 2, SPAN / 2, 0.06, SPAN / 2);
-    box(ox + SPAN / 2, HEIGHT + 0.06, oz + SPAN / 2, SPAN / 2, 0.06, SPAN / 2);
+    const basin = poolBounds(data.landmark);
+    const floor = (x: number, z: number, w: number, d: number, y = 0) =>
+      box(ox + x + w / 2, y - 0.06, oz + z + d / 2, w / 2, 0.06, d / 2);
+    if (basin) {
+      floor(0, 0, SPAN, basin.z);
+      floor(0, basin.z + basin.length, SPAN, SPAN - basin.z - basin.length);
+      floor(0, basin.z, basin.x, basin.length);
+      floor(
+        basin.x + basin.width,
+        basin.z,
+        SPAN - basin.x - basin.width,
+        basin.length,
+      );
+      floor(basin.x, basin.z, basin.width, basin.length, -1.4);
+    } else floor(0, 0, SPAN, SPAN);
     for (let z = 0; z < CHUNK; z++)
       for (let x = 0; x < CHUNK; x++) {
         const bits = data.cells[z * CHUNK + x];
+        const height = ceilingAt(data, x, z);
+        box(
+          ox + (x + 0.5) * CELL,
+          height + 0.06,
+          oz + (z + 0.5) * CELL,
+          CELL / 2,
+          0.06,
+          CELL / 2,
+        );
+        const northHeight = Math.max(height, ceilingAt(data, x, z - 1));
+        const westHeight = Math.max(height, ceilingAt(data, x - 1, z));
         if (!(bits & N))
           box(
             ox + (x + 0.5) * CELL,
-            HEIGHT / 2,
+            northHeight / 2,
             oz + z * CELL,
             (CELL + 0.18) / 2,
-            HEIGHT / 2,
+            northHeight / 2,
             0.09,
           );
         if (!(bits & W))
           box(
             ox + x * CELL,
-            HEIGHT / 2,
+            westHeight / 2,
             oz + (z + 0.5) * CELL,
             0.09,
-            HEIGHT / 2,
+            westHeight / 2,
             (CELL + 0.18) / 2,
+          );
+        // Match the soffit above open transitions into taller halls.
+        if (bits & N && height !== ceilingAt(data, x, z - 1))
+          box(
+            ox + (x + 0.5) * CELL,
+            (northHeight + HEIGHT) / 2,
+            oz + z * CELL,
+            CELL / 2,
+            (northHeight - HEIGHT) / 2,
+            0.09,
+          );
+        if (bits & W && height !== ceilingAt(data, x - 1, z))
+          box(
+            ox + x * CELL,
+            (westHeight + HEIGHT) / 2,
+            oz + (z + 0.5) * CELL,
+            0.09,
+            (westHeight - HEIGHT) / 2,
+            CELL / 2,
           );
       }
     for (const b of obstacles)

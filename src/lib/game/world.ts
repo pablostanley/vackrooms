@@ -10,8 +10,12 @@ import {
   E,
   S,
   random,
+  inLandmark,
+  ceilingAt,
+  poolBounds,
   type ChunkData,
 } from "./maze";
+import { buildLandmark } from "./landmarks";
 import type { Materials } from "./materials";
 import {
   createFurniture,
@@ -34,6 +38,7 @@ export interface Section {
   lights: THREE.Vector3[];
   portals: Portal[];
   colliders: THREE.Box3[];
+  water: THREE.Mesh[];
   dispose: () => void;
 }
 export function buildSection(
@@ -48,7 +53,8 @@ export function buildSection(
     oz = data.z * SPAN;
   const lights: THREE.Vector3[] = [],
     portals: Portal[] = [],
-    colliders: THREE.Box3[] = [];
+    colliders: THREE.Box3[] = [],
+    water: THREE.Mesh[] = [];
   const theme = mats.forTheme(data.theme);
   const furnitureRng = random(data.seed + 3403);
   const models = new Map<FurnitureKind, FurnitureModel>();
@@ -124,13 +130,13 @@ export function buildSection(
     }
     add(g, mat, x, y, z, rx, ry);
   }
-  function wall(x: number, z: number, vertical: boolean) {
+  function wall(x: number, z: number, vertical: boolean, height = HEIGHT) {
     box(
       vertical ? 0.18 : CELL + 0.18,
-      HEIGHT,
+      height,
       vertical ? CELL + 0.18 : 0.18,
       x,
-      HEIGHT / 2,
+      height / 2,
       z,
       theme.wall,
     );
@@ -148,7 +154,7 @@ export function buildSection(
       0.055,
       vertical ? CELL + 0.21 : 0.21,
       x,
-      HEIGHT - 0.027,
+      height - 0.027,
       z,
       mats.trim,
     );
@@ -287,38 +293,77 @@ export function buildSection(
     }
     return false;
   }
-  plane(
-    SPAN,
-    SPAN,
-    SPAN / 2,
-    0,
-    SPAN / 2,
-    theme.floor,
-    -Math.PI / 2,
-    0,
-    data.theme === "pool" ? 3 : 4.8,
-  );
-  plane(SPAN, SPAN, SPAN / 2, HEIGHT, SPAN / 2, mats.top, Math.PI / 2, 0, 2.4);
+  const basin = poolBounds(data.landmark);
+  const floor = (x: number, z: number, w: number, d: number) =>
+    plane(w, d, x + w / 2, 0, z + d / 2, theme.floor, -Math.PI / 2, 0, 4.8);
+  if (basin) {
+    // The water occupies a real recess; no carpet plane intersects its surface.
+    floor(0, 0, SPAN, basin.z);
+    floor(0, basin.z + basin.length, SPAN, SPAN - basin.z - basin.length);
+    floor(0, basin.z, basin.x, basin.length);
+    floor(
+      basin.x + basin.width,
+      basin.z,
+      SPAN - basin.x - basin.width,
+      basin.length,
+    );
+  } else floor(0, 0, SPAN, SPAN);
+  buildLandmark(data, mats, { box, plane, lights, colliders, water, group });
   let madePortal = false;
   for (let cz = 0; cz < CHUNK; cz++)
     for (let cx = 0; cx < CHUNK; cx++) {
       const x = (cx + 0.5) * CELL,
         z = (cz + 0.5) * CELL,
         bits = data.cells[cz * CHUNK + cx];
-      if (!(bits & N)) wall(x, cz * CELL, false);
-      if (!(bits & W)) wall(cx * CELL, z, true);
+      const landmark = inLandmark(data.landmark, cx, cz);
+      const height = ceilingAt(data, cx, cz);
+      plane(CELL, CELL, x, height, z, mats.top, Math.PI / 2, 0, 2.4);
+      const northHeight = Math.max(height, ceilingAt(data, cx, cz - 1));
+      const westHeight = Math.max(height, ceilingAt(data, cx - 1, cz));
+      if (!(bits & N)) wall(x, cz * CELL, false, northHeight);
+      else if (height !== ceilingAt(data, cx, cz - 1))
+        box(
+          CELL + 0.18,
+          northHeight - HEIGHT,
+          0.18,
+          x,
+          (northHeight + HEIGHT) / 2,
+          cz * CELL,
+          theme.wall,
+        );
+      if (!(bits & W)) wall(cx * CELL, z, true, westHeight);
+      else if (height !== ceilingAt(data, cx - 1, cz))
+        box(
+          0.18,
+          westHeight - HEIGHT,
+          CELL + 0.18,
+          cx * CELL,
+          (westHeight + HEIGHT) / 2,
+          z,
+          theme.wall,
+        );
       const lit = rng() > 0.14 || (data.x === 0 && data.z === 0 && cx === 2);
-      box(1.28, 0.065, 0.67, x, HEIGHT - 0.045, z, mats.fixtures);
+      box(
+        landmark ? 2.4 : 1.28,
+        0.065,
+        0.67,
+        x,
+        height - 0.045,
+        z,
+        mats.fixtures,
+      );
       plane(
-        1.18,
+        landmark ? 2.3 : 1.18,
         0.57,
         x,
-        HEIGHT - 0.082,
+        height - 0.082,
         z,
         lit ? mats.luminous : mats.deadLight,
         Math.PI / 2,
       );
-      if (lit) lights.push(new THREE.Vector3(x + ox, HEIGHT - 0.19, z + oz));
+      if (lit) lights.push(new THREE.Vector3(x + ox, height - 0.19, z + oz));
+      // Landmarks have authored empty space and perimeter details of their own.
+      if (landmark) continue;
       const isSpawn = data.x === 0 && data.z === 0 && cx === 2 && cz >= 1;
       // Pillars break up open rooms without sealing a passage.
       if (bits === 15 && rng() < 0.38 && !isSpawn) {
@@ -432,17 +477,6 @@ export function buildSection(
         portals.push({ position: mesh.position.clone(), normal, mesh });
         madePortal = true;
       }
-      if (data.theme === "pool" && bits === 15 && !isSpawn && rng() < 0.25) {
-        // An abandoned paddling basin occupies part of an otherwise ordinary office.
-        box(1.8, 0.22, 1.8, x - 0.8, 0.11, z - 0.8, mats.tileWall);
-        plane(1.58, 1.58, x - 0.8, 0.225, z - 0.8, mats.darkness, -Math.PI / 2);
-        colliders.push(
-          new THREE.Box3(
-            new THREE.Vector3(ox + x - 1.7, 0, oz + z - 1.7),
-            new THREE.Vector3(ox + x + 0.1, 0.3, oz + z + 0.1),
-          ),
-        );
-      }
     }
   const propKinds: FurnitureKind[] = [
     "sofa",
@@ -465,6 +499,7 @@ export function buildSection(
   const available: { cx: number; cz: number }[] = [];
   for (let cz = 0; cz < CHUNK; cz++)
     for (let cx = 0; cx < CHUNK; cx++) {
+      if (inLandmark(data.landmark, cx, cz)) continue;
       if (data.x === 0 && data.z === 0 && cx === 2 && cz >= 1) continue;
       if (
         portals.some(
@@ -534,6 +569,7 @@ export function buildSection(
     lights,
     portals,
     colliders,
+    water,
     dispose: () => {
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
