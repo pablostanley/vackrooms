@@ -11,12 +11,16 @@ import {
   type ComputerStation,
 } from "./computers";
 import type { Section } from "./world";
+import { ComputerCrt } from "./computer-crt";
+import { attachComputerNavigation } from "./computer-navigation";
+import { ComputerPower } from "./computer-power";
 
 interface LiveScreen {
   station: ComputerStation;
   object: CSS3DObject;
   iframe: HTMLIFrameElement;
   address: HTMLInputElement;
+  power: ComputerPower;
   dispose: () => void;
 }
 
@@ -27,8 +31,10 @@ export class ComputerScreens {
   private dialog = document.createElement("dialog");
   private exitButton = document.createElement("button");
   private screens = new Map<string, LiveScreen>();
+  private poweredOff = new Set<string>();
   private raycaster = new THREE.Raycaster();
   private active: ComputerStation | null = null;
+  private crt: ComputerCrt;
   nearest: ComputerStation | null = null;
   visible = false;
 
@@ -52,6 +58,7 @@ export class ComputerScreens {
     });
     this.dialog.append(this.renderer.domElement, this.exitButton);
     container.append(this.dialog);
+    this.crt = new ComputerCrt(this.dialog);
     this.dialog.inert = true;
     this.dialog.show();
   }
@@ -68,9 +75,7 @@ export class ComputerScreens {
     this.dialog.close();
     this.dialog.showModal();
     for (const screen of this.screens.values()) {
-      screen.object.element.inert = screen.station.id !== station.id;
-      screen.object.element.style.pointerEvents =
-        screen.station.id === station.id ? "auto" : "none";
+      screen.power.setActive(screen.station.id === station.id);
     }
     this.exitButton.focus({ preventScroll: true });
   }
@@ -87,8 +92,7 @@ export class ComputerScreens {
     this.dialog.inert = true;
     this.dialog.show();
     for (const screen of this.screens.values()) {
-      screen.object.element.inert = true;
-      screen.object.element.style.pointerEvents = "none";
+      screen.power.setActive(false);
     }
   }
 
@@ -136,19 +140,32 @@ export class ComputerScreens {
       requested = url;
       address.value = url;
       status.textContent = "Connecting…";
+      navigation.setAddress(url);
       iframe.src = url;
       clearTimeout(loadTimer);
       loadTimer = setTimeout(() => {
         status.textContent = "Page not appearing? Try Reload or Open in tab.";
       }, 15000);
     };
-    const button = (label: string, action: () => void) => {
+    const button = (label: string, action?: () => void) => {
       const control = document.createElement("button");
       control.type = "button";
       control.textContent = label;
-      control.addEventListener("click", action);
+      if (action) control.addEventListener("click", action);
       toolbar.append(control);
+      return control;
     };
+    const back = button("← Back");
+    const forward = button("Forward →");
+    const navigation = attachComputerNavigation(
+      iframe,
+      back,
+      forward,
+      (url) => {
+        requested = url;
+        address.value = url;
+      },
+    );
     button("⌂ Home", () => navigate(COMPUTER_HOME));
     button("↻ Reload", () => {
       // Reassigning src also recovers from sites which refuse to be framed.
@@ -159,7 +176,7 @@ export class ComputerScreens {
     );
     toolbar.lastElementChild!.setAttribute(
       "title",
-      "Open the last entered address in a tab if this site blocks embedding",
+      "Open the current or last entered address in a tab if this site blocks embedding",
     );
     const note = document.createElement("span");
     note.textContent = "WORLD WIDE WEB";
@@ -184,7 +201,11 @@ export class ComputerScreens {
     const glass = document.createElement("div");
     glass.className = "crt-glass";
     glass.setAttribute("aria-hidden", "true");
-    element.append(title, toolbar, form, iframe, status, glass);
+    const picture = document.createElement("div");
+    picture.className = "crt-picture";
+    picture.append(title, toolbar, form, iframe, status);
+    element.append(picture, glass);
+    const detachCrt = this.crt.attach(element, picture, glass, iframe);
     const object = new CSS3DObject(element);
     object.position.copy(station.position);
     object.quaternion.copy(station.quaternion);
@@ -192,16 +213,31 @@ export class ComputerScreens {
     element.inert = true;
     element.style.pointerEvents = "none";
     this.scene.add(object);
+    const power = new ComputerPower(
+      station,
+      element,
+      !this.poweredOff.has(station.id),
+      (powered) => {
+        if (powered) this.poweredOff.delete(station.id);
+        else this.poweredOff.add(station.id);
+      },
+    );
+    power.setActive(this.active?.id === station.id);
+    this.scene.add(power.object);
     navigate(COMPUTER_HOME);
     return {
       station,
       object,
       iframe,
       address,
+      power,
       dispose: () => {
+        detachCrt();
+        navigation.dispose();
         clearTimeout(loadTimer);
         iframe.src = "about:blank";
         object.removeFromParent();
+        power.dispose();
       },
     };
   }
@@ -236,6 +272,14 @@ export class ComputerScreens {
     playing: boolean,
   ) {
     const resident = [...sections];
+    // Power state lives only as long as the resident section, independently of
+    // the smaller live-page cache. Walking out of the world cannot grow it.
+    const residentIds = new Set(
+      resident.flatMap((section) => section.computers.map((station) => station.id)),
+    );
+    for (const id of this.poweredOff) {
+      if (!residentIds.has(id)) this.poweredOff.delete(id);
+    }
     camera.updateMatrixWorld();
     const forward = camera.getWorldDirection(new THREE.Vector3());
     const candidates = resident
@@ -296,6 +340,7 @@ export class ComputerScreens {
       screen.object.visible =
         visible.includes(screen.station) &&
         (!this.active || screen.station.id === this.active.id);
+      screen.power.object.visible = screen.object.visible;
       this.visible ||= screen.object.visible;
     }
   }
@@ -312,6 +357,7 @@ export class ComputerScreens {
     if (flat && this.active) {
       const center = this.active.position.clone().project(camera);
       const { width, height } = this.renderer.getSize();
+      this.screens.get(this.active.id)?.power.project(camera, width, height);
       const distance = this.active.position.distanceTo(camera.position);
       const scale =
         (this.active.width * camera.projectionMatrix.elements[5] * height) /
@@ -330,10 +376,12 @@ export class ComputerScreens {
 
   dispose() {
     this.dialog.close();
+    this.crt.dispose();
     for (const screen of this.screens.values()) {
       screen.dispose();
     }
     this.screens.clear();
+    this.poweredOff.clear();
     this.dialog.remove();
   }
 }
