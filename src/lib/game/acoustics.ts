@@ -12,6 +12,7 @@ import {
   cellAt,
   directions,
   inLandmark,
+  poolBounds,
   random,
   type ChunkData,
 } from "./maze";
@@ -59,6 +60,28 @@ export function hardFloorAt(chunks: Map<string, ChunkData>, p: SoundPosition) {
     cell.chunk.landmark.kind === "poolroom" ||
     cell.chunk.landmark.kind === "foodCourt"
   );
+}
+
+export type FootstepSurface = "carpet" | "hard" | "water";
+// Match the recessed water plane and the 0.36m coping in landmarks.ts.
+export const POOL_WATER_Y = -0.18;
+
+/** The position is at the feet, so standing on the rim never splashes. */
+export function footstepSurfaceAt(
+  chunks: Map<string, ChunkData>,
+  feet: SoundPosition,
+): FootstepSurface {
+  const cell = cellAt(chunks, feet.x, feet.z);
+  const basin = cell && poolBounds(cell.chunk.landmark);
+  if (cell && basin && feet.y <= POOL_WATER_Y) {
+    const x = feet.x - cell.chunk.x * SPAN,
+      z = feet.z - cell.chunk.z * SPAN;
+    if (
+      x > basin.x + 0.18 && x < basin.x + basin.width - 0.18 &&
+      z > basin.z + 0.18 && z < basin.z + basin.length - 0.18
+    ) return "water";
+  }
+  return hardFloorAt(chunks, feet) ? "hard" : "carpet";
 }
 
 /** Trace actual cell boundaries, including negative coordinates and streamed seams.

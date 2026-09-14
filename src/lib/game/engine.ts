@@ -630,7 +630,7 @@ export class BackroomsEngine {
     if (this.stepDistance > (running ? 1.15 : 0.94)) {
       this.stepDistance = 0;
       this.stepSide *= -1;
-      this.audio.step(running, this.stepSide);
+      this.audio.step(running, this.stepSide, this.position);
     }
     const bob = this.settings.reducedMotion || !grounded
       ? 0

@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   BuildingSoundSchedule,
   hardFloorAt,
+  footstepSurfaceAt,
+  POOL_WATER_Y,
   ROOM_SOUNDS,
   roomSoundAt,
   transmission,
@@ -18,6 +20,7 @@ import {
   S,
   canStand,
   generateChunk,
+  poolBounds,
   type ChunkData,
 } from "../src/lib/game/maze";
 
@@ -129,6 +132,48 @@ test("room echoes follow footprint and ceilings, not the entire section theme", 
     tallLight = point(8.5, 9.5, 8.2);
   assert.equal(wallsBetween(chunks, office, point(8.5, 9.5)), 0);
   assert.equal(wallsBetween(chunks, office, tallLight), 1);
+});
+
+test("water footsteps require submerged feet inside the basin, including negative sections", () => {
+  for (const [cx, cz] of [[0, 0], [-1, -2]]) {
+    const chunk = { ...generateChunk(0, 0, 2), x: cx, z: cz };
+    const chunks = new Map([[`${cx},${cz}`, chunk]]);
+    const basin = poolBounds(chunk.landmark)!;
+    assert.ok(basin);
+    const x = cx * SPAN + basin.x,
+      z = cz * SPAN + basin.z;
+    const center = { x: x + basin.width / 2, y: -1.4, z: z + basin.length / 2 };
+    assert.equal(footstepSurfaceAt(chunks, center), "water");
+    assert.equal(footstepSurfaceAt(chunks, { ...center, y: POOL_WATER_Y }), "water");
+    assert.equal(footstepSurfaceAt(chunks, { ...center, y: 0.44 }), "hard");
+    for (const edge of [
+      { ...center, x: x + 0.1 },
+      { ...center, x: x + basin.width - 0.1 },
+      { ...center, z: z + 0.1 },
+      { ...center, z: z + basin.length - 0.1 },
+    ]) {
+      assert.equal(footstepSurfaceAt(chunks, edge), "hard", "coping stays dry");
+    }
+    assert.equal(footstepSurfaceAt(chunks, { ...center, x: x - 1, y: 0 }), "hard");
+    assert.equal(footstepSurfaceAt(chunks, { x: cx * SPAN + 1, y: 0, z: cz * SPAN + 1 }), "carpet");
+    chunks.clear();
+    assert.equal(footstepSurfaceAt(chunks, center), "carpet");
+  }
+});
+
+test("dry footsteps follow actual flooring across landmark and theme changes", () => {
+  const chunk = openChunk(), chunks = new Map([["0,0", chunk]]);
+  for (const theme of ["offices", "service", "archive", "pool"] as const) {
+    chunk.theme = theme;
+    assert.equal(footstepSurfaceAt(chunks, point(1.5, 1.5, 0)), "carpet");
+    for (const kind of ["lobby", "corridor", "foodCourt", "poolroom"] as const) {
+      chunk.landmark.kind = kind;
+      assert.equal(
+        footstepSurfaceAt(chunks, point(9.5, 9.5, 0)),
+        kind === "foodCourt" || kind === "poolroom" ? "hard" : "carpet",
+      );
+    }
+  }
 });
 
 test("building events are seeded, sparse, occluded, and stay on resident walkable routes", () => {

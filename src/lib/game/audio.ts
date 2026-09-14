@@ -1,6 +1,7 @@
 import {
   BuildingSoundSchedule,
-  hardFloorAt,
+  footstepSurfaceAt,
+  POOL_WATER_Y,
   ROOM_SOUNDS,
   roomSoundAt,
   transmission,
@@ -12,6 +13,7 @@ import {
 import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
 import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
+import { splashSamples } from "./footstep-splash";
 
 interface SpatialVoice {
   position: SoundPosition;
@@ -38,6 +40,7 @@ export class BackroomsAudio {
   private mix: DynamicsCompressorNode | null = null;
   private reflections: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private splash: AudioBuffer | null = null;
   private dialup: ComputerDialup | null = null;
   private interfaceAudio: InterfaceAudio | null = null;
   private interfaceLevel: GainNode | null = null;
@@ -124,6 +127,9 @@ export class BackroomsAudio {
       samples[i] = brown * 3.5;
     }
     this.noise = buffer;
+    const splash = splashSamples(ctx.sampleRate, this.seed);
+    this.splash = ctx.createBuffer(1, splash.length, ctx.sampleRate);
+    this.splash.getChannelData(0).set(splash);
     // A quiet air bed joins the localized fixtures without masking their direction.
     const air = ctx.createBufferSource(),
       filter = ctx.createBiquadFilter(),
@@ -448,13 +454,14 @@ export class BackroomsAudio {
     }
   }
 
-  step(running: boolean, side: number) {
+  step(running: boolean, side: number, position = this.listener) {
     if (!this.active || !this.ctx || !this.noise || !this.volume) return;
     this.footstep(
       {
-        x: this.listener.x - this.forward.z * side * 0.14,
-        y: 0.12,
-        z: this.listener.z + this.forward.x * side * 0.14,
+        x: position.x - this.forward.z * side * 0.14,
+        // CharacterMotor's standing eye height; use the unbobbed player position.
+        y: position.y - 1.66,
+        z: position.z + this.forward.x * side * 0.14,
       },
       running,
       false,
@@ -464,7 +471,7 @@ export class BackroomsAudio {
   entityStep(position: SoundPosition, pursuing: boolean) {
     if (!this.active || !this.ctx || !this.noise || !this.volume) return;
     this.footstep(
-      { x: position.x, y: 0.12, z: position.z },
+      { x: position.x, y: 0, z: position.z },
       pursuing,
       true,
       true,
@@ -480,17 +487,35 @@ export class BackroomsAudio {
     if (!this.ctx || !this.noise || this.transients.size >= 12) return;
     const ctx = this.ctx,
       now = ctx.currentTime;
-    const hard = hardFloorAt(this.chunks, position);
-    const voice = this.spatial(position, 1, distant ? 3 : 1.7);
+    const surface = footstepSurfaceAt(this.chunks, position);
+    const hard = surface === "hard";
+    const voice = this.spatial(
+      { ...position, y: surface === "water" ? POOL_WATER_Y : position.y + 0.12 },
+      surface === "carpet" ? 0.55 : 1.1,
+      distant ? 3 : 1.7,
+    );
+    if (surface === "water" && this.splash) {
+      const source = ctx.createBufferSource(), gain = ctx.createGain();
+      source.buffer = this.splash;
+      source.playbackRate.value = 0.85 + this.rng() * 0.3;
+      gain.gain.value = running ? 0.85 : 0.55;
+      source.connect(gain).connect(voice.input);
+      voice.sources.push(source);
+      voice.nodes.push(gain);
+      this.track(voice);
+      source.start(now);
+      return;
+    }
     const source = ctx.createBufferSource(),
       filter = ctx.createBiquadFilter(),
       gain = ctx.createGain();
     source.buffer = this.noise;
     source.playbackRate.value = (entity ? 0.6 : 0.85) + this.rng() * 0.3;
     filter.type = "lowpass";
-    filter.frequency.value = entity ? (hard ? 1700 : 540) : hard ? 2400 : 720;
+    filter.frequency.value = entity ? (hard ? 1700 : 540) : hard ? 2800 : 600;
+    const level = entity ? 0.3 : hard ? 0.34 : 0.22;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(running ? 0.48 : 0.3, now + 0.012);
+    gain.gain.linearRampToValueAtTime(level * (running ? 1.6 : 1), now + 0.012);
     gain.gain.exponentialRampToValueAtTime(
       0.001,
       now + (entity ? 0.3 : hard ? 0.19 : 0.14),
@@ -500,7 +525,7 @@ export class BackroomsAudio {
       low = ctx.createGain();
     thud.frequency.setValueAtTime(entity ? 67 : hard ? 115 : 82, now);
     thud.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-    low.gain.setValueAtTime(running ? 0.08 : 0.045, now);
+    low.gain.setValueAtTime((hard || entity ? 0.05 : 0.035) * (running ? 1.6 : 1), now);
     low.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
     thud.connect(low).connect(voice.input);
     voice.sources.push(source, thud);
@@ -579,6 +604,7 @@ export class BackroomsAudio {
     this.loops = [];
     this.rooms.clear();
     this.noise = null;
+    this.splash = null;
     if (this.ctx) void this.ctx.close().catch(() => {});
   }
 }
