@@ -5,6 +5,7 @@ const SVG = "http://www.w3.org/2000/svg";
 interface CrtMaps {
   curvature: string;
   grade: string;
+  raster: string;
 }
 interface CrtScreen {
   root: HTMLElement;
@@ -16,7 +17,7 @@ interface CrtScreen {
   disconnect: () => void;
 }
 
-// Two immutable maps for the entire game, not a device or render loop per desk.
+// Shared immutable maps, not a device or render loop per desk.
 let maps: Promise<CrtMaps | null> | undefined;
 
 async function renderMaps(): Promise<CrtMaps | null> {
@@ -43,14 +44,22 @@ async function renderMaps(): Promise<CrtMaps | null> {
     };
     const curvature = await image(0, 256, 192);
     const grade = await image(1, 1000, 750);
-    return { curvature, grade };
+    const raster = await image(2, 1000, 750);
+    return { curvature, grade, raster };
   } finally {
     // Readback is once for our own static maps; no website pixels or per-frame copies.
     gpu.dispose();
   }
 }
 
-/** vgpu-authored maps composed with native HTML; site curvature requires opt-in. */
+function svg(name: string, attributes: Record<string, string>) {
+  const node = document.createElementNS(SVG, name);
+  for (const [key, value] of Object.entries(attributes))
+    node.setAttribute(key, value);
+  return node;
+}
+
+/** Shared CRT maps composed over live HTML without capturing website pixels. */
 export class ComputerCrt {
   private definition = document.createElementNS(SVG, "svg");
   private id = `crt-${crypto.randomUUID()}`;
@@ -67,22 +76,37 @@ export class ComputerCrt {
     this.definition.style.position = "absolute";
     this.definition.style.pointerEvents = "none";
     container.append(this.definition);
+    // Six levels per channel reproduce the 216-color web palette while keeping
+    // grays neutral. This is available even when WebGPU cannot render the maps.
+    const palette = svg("filter", {
+      id: `${this.id}-palette`,
+      x: "0",
+      y: "0",
+      width: "1",
+      height: "1",
+      filterUnits: "objectBoundingBox",
+      primitiveUnits: "userSpaceOnUse",
+      "color-interpolation-filters": "sRGB",
+    });
+    const transfer = document.createElementNS(SVG, "feComponentTransfer");
+    for (const channel of ["R", "G", "B"]) {
+      const component = document.createElementNS(SVG, `feFunc${channel}`);
+      component.setAttribute("type", "discrete");
+      component.setAttribute("tableValues", "0 0.2 0.4 0.6 0.8 1");
+      transfer.append(component);
+    }
+    palette.append(transfer);
+    this.definition.append(palette);
     maps ??= renderMaps().catch((error) => {
       console.warn(
-        "CRT WebGPU treatment unavailable; keeping clear glass.",
+        "CRT WebGPU treatment unavailable; keeping CSS glass and reduced colors.",
         error,
       );
       return null;
     });
     void maps.then((result) => {
       if (!result || this.disposed) return;
-      const make = (name: string, attributes: Record<string, string>) => {
-        const node = document.createElementNS(SVG, name);
-        for (const [key, value] of Object.entries(attributes))
-          node.setAttribute(key, value);
-        return node;
-      };
-      const filter = make("filter", {
+      const filter = svg("filter", {
         id: this.id,
         x: "0",
         y: "0",
@@ -93,7 +117,7 @@ export class ComputerCrt {
         "color-interpolation-filters": "sRGB",
       });
       filter.append(
-        make("feImage", {
+        svg("feImage", {
           href: result.curvature,
           result: "curvature",
           x: "0",
@@ -102,13 +126,31 @@ export class ComputerCrt {
           height: "750",
           preserveAspectRatio: "none",
         }),
-        make("feDisplacementMap", {
+        svg("feDisplacementMap", {
           in: "SourceGraphic",
           in2: "curvature",
           scale: "20",
           xChannelSelector: "R",
           yChannelSelector: "G",
           result: "curved",
+        }),
+      );
+      palette.prepend(
+        svg("feImage", {
+          href: result.raster,
+          result: "raster",
+          x: "0",
+          y: "0",
+          width: "100%",
+          height: "100%",
+          preserveAspectRatio: "none",
+        }),
+        svg("feDisplacementMap", {
+          in: "SourceGraphic",
+          in2: "raster",
+          scale: "2",
+          xChannelSelector: "R",
+          yChannelSelector: "G",
         }),
       );
       this.definition.append(filter);
@@ -158,6 +200,9 @@ export class ComputerCrt {
       adapterReady: false,
       disconnect: () => {},
     };
+    // Backdrop composition includes foreign iframe pixels, unlike filtering
+    // the iframe's DOM ancestor. The glass remains above the reduced signal.
+    glass.style.backdropFilter = `url("#${this.id}-palette")`;
     const load = () => {
       delete root.dataset.crtContent;
     };
@@ -185,6 +230,7 @@ export class ComputerCrt {
       iframe.removeEventListener("load", load);
       window.removeEventListener("message", message);
       picture.style.removeProperty("filter");
+      glass.style.removeProperty("backdrop-filter");
       glass.style.removeProperty("background-image");
       delete root.dataset.crtEffect;
       delete root.dataset.crtContent;
