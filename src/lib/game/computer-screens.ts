@@ -11,6 +11,7 @@ import {
   type ComputerStation,
 } from "./computers";
 import type { Section } from "./world";
+import { ComputerCrt } from "./computer-crt";
 import { attachComputerNavigation } from "./computer-navigation";
 
 interface LiveScreen {
@@ -30,6 +31,7 @@ export class ComputerScreens {
   private screens = new Map<string, LiveScreen>();
   private raycaster = new THREE.Raycaster();
   private active: ComputerStation | null = null;
+  private crt: ComputerCrt;
   nearest: ComputerStation | null = null;
   visible = false;
 
@@ -53,6 +55,7 @@ export class ComputerScreens {
     });
     this.dialog.append(this.renderer.domElement, this.exitButton);
     container.append(this.dialog);
+    this.crt = new ComputerCrt(this.dialog);
     this.dialog.inert = true;
     this.dialog.show();
   }
@@ -198,7 +201,11 @@ export class ComputerScreens {
     const glass = document.createElement("div");
     glass.className = "crt-glass";
     glass.setAttribute("aria-hidden", "true");
-    element.append(title, toolbar, form, iframe, status, glass);
+    const picture = document.createElement("div");
+    picture.className = "crt-picture";
+    picture.append(title, toolbar, form, iframe, status);
+    element.append(picture, glass);
+    const detachCrt = this.crt.attach(element, picture, glass, iframe);
     const object = new CSS3DObject(element);
     object.position.copy(station.position);
     object.quaternion.copy(station.quaternion);
@@ -213,6 +220,7 @@ export class ComputerScreens {
       iframe,
       address,
       dispose: () => {
+        detachCrt();
         navigation.dispose();
         clearTimeout(loadTimer);
         iframe.src = "about:blank";
@@ -345,6 +353,7 @@ export class ComputerScreens {
 
   dispose() {
     this.dialog.close();
+    this.crt.dispose();
     for (const screen of this.screens.values()) {
       screen.dispose();
     }
