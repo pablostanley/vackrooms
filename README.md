@@ -27,6 +27,7 @@ Touch devices have a movement stick, swipe-to-look, and contextual action button
 ## How it works
 
 - `src/lib/game/maze.ts`: seeded, connected maze sections. Shared boundary hashes keep gates aligned across streaming and regeneration. A spanning tree guarantees a path through every room; additional openings create nonsensical office spaces and loops.
+- `src/lib/game/landmarks.ts`: one large landmark in every 57.6m section, with ordinary offices between discoveries. Empty lobbies have 8.4m ceilings; shuttered food courts have only two tables; pool halls contain recessed 25×16m basins and continuous dry decks. Three aligned sections form 172.8m corridors. Landmark families and footprints survive unseen mutations, while the surrounding office maze changes.
 - `src/lib/game/furniture-models.ts`: sofas, tables, lamps, slides, spring horses, alphabet blocks, and chairs, built from batched procedural geometry.
 - `src/lib/game/furniture-layout.ts`: solid attachment anchors keep every stacked chair leg embedded in the seat below. Arbitrarily rotated wall/ceiling props intersect the architecture, with reserved walking lanes through each room.
 - `src/lib/game/world.ts`: batched architecture, ceiling panels, wallpaper, furniture, faded service areas, and unstable walls. A 3×3 window of sections streams around the player and disposes sections left behind.
@@ -35,9 +36,12 @@ Touch devices have a movement stick, swipe-to-look, and contextual action button
 - `src/lib/game/renderer.ts`: `vgpu/three` turns exported WGSL helpers into Three.js TSL nodes using `tslExports`. A Three.js `RenderPipeline` samples the scene through `tapeWarp`, softens detail, blooms fluorescent highlights, offsets RGB channels, and grades every frame through `tapeGrade`. The GPU never copies the camera image back to the CPU.
 - `src/lib/game/tape-overlay.ts`: lightweight grain plates and scanline losses rendered over the camcorder HUD. Brief horizontal tears replace sustained wavy transitions; steady camera suppresses their motion.
 - `src/shaders/tape.wgsl`: reusable VHS warping, tracking, grain, scanlines, vignette, and anomaly distortion. The complete vgpu shader artifact preserves exports through the Next.js WGSL loader.
+- `src/shaders/water.wgsl` and `src/lib/game/pool-water.ts`: vgpu WGSL water displacement, moving caustics, view-dependent Fresnel response, and analytical reflections of the fluorescent ceiling rhythm. All resident pools share one material and animation clock; steady camera freezes water motion. WebGL uses an explicit GLSL fallback. Raised coping keeps the player on the connected deck; swimming is not implemented.
 - `src/lib/game/audio.ts`: synthesized fluorescent hum, ventilation, alternating carpet/tile footsteps, distant sounds, and transition interference using Web Audio.
 
 Ordinary visits and refreshes draw a new random tape, changing the maze and the selection and placement of furniture. Add `?tape=199307` to reproduce a particular starting maze. Cassette settings → COPY TAPE LINK shares the seed, not the player's current position. The initial visual composition is intentional; later sections vary with the tape and depth. On revisiting unloaded sections their base layout regenerates; unseen temporary mutations are bounded to resident sections.
+
+Every tape starts in an office, with a landmark reachable along a route of at most 30m. Further sections guarantee recurring landmarks instead of relying on random rolls with potentially long gaps. Tapes `1`, `2`, `3`, and `8` introduce a lobby, poolroom, corridor, and food court respectively. Each 12-section row contains all four families. Fog hides the outer edge of the nine resident sections without adding an end wall to the long corridors.
 
 ## Vercel
 
@@ -61,6 +65,6 @@ npm run check:shaders
 npm run build
 ```
 
-Rapier tests exercise wall sliding, floor contact, streaming, and teleportation. The maze tests cover reachability, paired edges, deterministic generation, regeneration-compatible gates, and closed-wall collision. `check:shaders` requires actual WGSL validation; a successful Next.js build alone is not shader validation. The browser preview must also be checked for real GPU rendering and interaction.
+Rapier tests exercise wall sliding, floor contact, streaming, teleportation, pool coping, and walking the complete pool deck. Maze and landmark tests cover first-discovery distance across 128 tapes, recurring variety, physically connected boundary gates around furniture and pool obstacles, straight corridor seams, deterministic generation, and regeneration-compatible gates. `check:shaders` validates both the tape and water WGSL; a successful Next.js build alone is not shader validation. The browser preview must also be checked for real GPU rendering and interaction.
 
-The current game includes procedural offices, service areas, archives, small abandoned basins, stacked/clipped furniture, noclip transitions, and stalking behavior. Large swimming pools, traversable vertical drops, and advanced platforming are future extensions.
+The current game includes procedural offices, service areas, archives, enormous lobbies, abandoned food courts, full-sized poolrooms, long corridors, stacked/clipped furniture, noclip transitions, and stalking behavior. Swimming, traversable vertical drops, and advanced platforming are future extensions.

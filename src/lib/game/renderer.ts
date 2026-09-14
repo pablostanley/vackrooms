@@ -3,12 +3,14 @@ import { WebGPURenderer, RenderPipeline, type Node } from "three/webgpu";
 import { pass, uniform, uv, vec2, vec3, max } from "three/tsl";
 import { tslExports } from "vgpu/three";
 import tapeModule from "@/shaders/tape.wgsl";
+import { createPoolWater } from "./pool-water";
 
 type WarpInputs = { uv: Node; seconds: Node; damage: Node; anomaly: Node };
 type GradeInputs = WarpInputs & { color: Node };
 export interface GameRenderer {
   canvas: HTMLCanvasElement;
   backend: "WebGPU · vgpu" | "WebGL";
+  waterMaterial: THREE.Material;
   resize: (w: number, h: number) => void;
   render: (time: number, damage: number, stress: number) => void;
   dispose: () => void;
@@ -86,19 +88,23 @@ export async function createRenderer(
           color: soft.add(glow.mul(0.075)),
         });
         const gpuRenderer = renderer;
+        const water = createPoolWater(true);
         return {
           canvas: renderer.domElement,
           backend: "WebGPU · vgpu",
+          waterMaterial: water.material,
           resize: (w, h) => {
             gpuRenderer.setSize(w, h);
           },
           render: (t, d, s) => {
+            water.update(t);
             seconds.value = t;
             damage.value = d;
             anomaly.value = s;
             pipeline.render();
           },
           dispose: () => {
+            water.material.dispose();
             pipeline.dispose();
             scenePass.dispose();
             gpuRenderer.dispose();
@@ -118,6 +124,7 @@ export async function createRenderer(
     antialias: true,
     powerPreference: "high-performance",
   });
+  const water = createPoolWater(false);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
@@ -148,13 +155,16 @@ export async function createRenderer(
       vec2 halo=vec2(.0035,.0025);vec3 glow=max(texture2D(image,p+halo).rgb-.82,0.)+max(texture2D(image,p-halo).rgb-.82,0.)+max(texture2D(image,p+vec2(halo.x,-halo.y)).rgb-.82,0.)+max(texture2D(image,p-vec2(halo.x,-halo.y)).rgb-.82,0.);color+=glow*.075;
       float v=pow(clamp(vUv.x*(1.-vUv.x)*vUv.y*(1.-vUv.y)*16.,0.,1.),.065);color*=mix(1.,v*.97,damage*.8);
       float grain=noise(floor(vUv*vec2(1280.,960.))+floor(seconds*29.97))-.5;color+=grain*(.013+anomaly*.08)*damage;
-      float loss=step(.86,noise(vec2(floor(vUv.y*240.),frame)));color*=1.-loss*anomaly*damage*.18;gl_FragColor=vec4(color,1.);}`,
+      float loss=step(.86,noise(vec2(floor(vUv.y*240.),frame)));color*=1.-loss*anomaly*damage*.18;gl_FragColor=vec4(color,1.);
+      #include <colorspace_fragment>
+    }`,
   });
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   postScene.add(quad);
   return {
     canvas: renderer.domElement,
     backend: "WebGL",
+    waterMaterial: water.material,
     resize: (w, h) => {
       renderer.setSize(w, h);
       target.setSize(
@@ -163,6 +173,7 @@ export async function createRenderer(
       );
     },
     render: (t, d, s) => {
+      water.update(t);
       material.uniforms.seconds.value = t;
       material.uniforms.damage.value = d;
       material.uniforms.anomaly.value = s;
@@ -172,6 +183,7 @@ export async function createRenderer(
       renderer.render(postScene, postCamera);
     },
     dispose: () => {
+      water.material.dispose();
       quad.geometry.dispose();
       material.dispose();
       target.dispose();

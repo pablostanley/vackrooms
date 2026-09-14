@@ -1,5 +1,5 @@
 export const CELL = 4.8;
-export const CHUNK = 6;
+export const CHUNK = 12;
 export const SPAN = CELL * CHUNK;
 export const HEIGHT = 3.15;
 export const N = 1,
@@ -13,12 +13,60 @@ export const directions = [
   { dx: -1, dz: 0, bit: W, opposite: E },
 ];
 export type Theme = "offices" | "service" | "pool" | "archive";
+export type LandmarkKind = "lobby" | "foodCourt" | "poolroom" | "corridor";
+export interface Landmark {
+  kind: LandmarkKind;
+  x: number;
+  z: number;
+  width: number;
+  length: number;
+  height: number;
+}
+export interface PoolBounds {
+  x: number;
+  z: number;
+  width: number;
+  length: number;
+}
 export interface ChunkData {
   x: number;
   z: number;
   cells: Uint8Array;
   theme: Theme;
   seed: number;
+  landmark: Landmark;
+}
+const modulo = (n: number, size: number) => ((n % size) + size) % size;
+
+/** A seeded cadence, rather than independent dice rolls with unbounded droughts. */
+export function landmarkKind(x: number, z: number, seed: number): LandmarkKind {
+  const phase = hash(0, 0, seed + 907);
+  // Three adjacent sections share a corridor. Its two internal gates stay aligned
+  // even when unseen office branches regenerate at a different depth.
+  if (modulo(Math.floor(x / 3) + z + phase, 4) === 0) return "corridor";
+  return (["lobby", "foodCourt", "poolroom"] as const)[
+    modulo(x + z + phase, 3)
+  ];
+}
+export function inLandmark(room: Landmark, x: number, z: number) {
+  return (
+    x >= room.x &&
+    x < room.x + room.width &&
+    z >= room.z &&
+    z < room.z + room.length
+  );
+}
+export function ceilingAt(data: ChunkData, x: number, z: number) {
+  return inLandmark(data.landmark, x, z) ? data.landmark.height : HEIGHT;
+}
+export function poolBounds(room: Landmark): PoolBounds | null {
+  if (room.kind !== "poolroom") return null;
+  return {
+    x: (room.x + room.width / 2) * CELL - 8,
+    z: (room.z + room.length / 2) * CELL - 12.5,
+    width: 16,
+    length: 25,
+  };
 }
 export function hash(x: number, z: number, seed: number): number {
   let h =
@@ -79,8 +127,8 @@ export function generateChunk(
   }
   // Open rooms within the maze: the spanning tree remains connected.
   for (let room = 0; room < 3; room++) {
-    const rx = Math.floor(rng() * 4),
-      rz = Math.floor(rng() * 4);
+    const rx = Math.floor(rng() * (CHUNK - 3)),
+      rz = Math.floor(rng() * (CHUNK - 2));
     const width = 2 + Math.floor(rng() * 2),
       length = 2;
     for (let dz = 0; dz < length; dz++)
@@ -93,8 +141,15 @@ export function generateChunk(
   // Boundary gates depend on a shared global edge, not generation order.
   const north = 1 + (hash(x, z, seed + 31) % (CHUNK - 2));
   const south = 1 + (hash(x, z + 1, seed + 31) % (CHUNK - 2));
-  const west = 1 + (hash(x, z, seed + 73) % (CHUNK - 2));
-  const east = 1 + (hash(x + 1, z, seed + 73) % (CHUNK - 2));
+  const kind = landmarkKind(x, z, seed);
+  const corridorRow = 6;
+  const horizontalGate = (edgeX: number) =>
+    landmarkKind(edgeX - 1, z, seed) === "corridor" &&
+    landmarkKind(edgeX, z, seed) === "corridor"
+      ? corridorRow
+      : 1 + (hash(edgeX, z, seed + 73) % (CHUNK - 2));
+  const west = horizontalGate(x);
+  const east = horizontalGate(x + 1);
   cells[north] |= N;
   cells[(CHUNK - 1) * CHUNK + south] |= S;
   cells[west * CHUNK] |= W;
@@ -105,6 +160,52 @@ export function generateChunk(
     for (let cz = 2; cz < 5; cz++)
       connect(cz * CHUNK + 2, cz * CHUNK + 3, E, W);
     connect(3 * CHUNK + 3, 3 * CHUNK + 4, E, W);
+  }
+  const shape = random(hash(x, z, seed + 181));
+  const landmark: Landmark =
+    kind === "corridor"
+      ? { kind, x: 0, z: corridorRow, width: CHUNK, length: 1, height: HEIGHT }
+      : {
+          kind,
+          x: 4,
+          z: 2,
+          width: 7,
+          length: 8 + Math.floor(shape() * 2),
+          height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
+        };
+  // Only remove walls: all original maze connections and shared gates survive.
+  for (let rz = landmark.z; rz < landmark.z + landmark.length; rz++)
+    for (let rx = landmark.x; rx < landmark.x + landmark.width; rx++) {
+      const at = rz * CHUNK + rx;
+      if (rx + 1 < landmark.x + landmark.width) connect(at, at + 1, E, W);
+      if (rz + 1 < landmark.z + landmark.length) connect(at, at + CHUNK, S, N);
+    }
+  // Direct approaches from every boundary keep discoveries on walking routes.
+  const approach = (ax: number, az: number, bx: number, bz: number) => {
+    while (ax !== bx) {
+      const dx = Math.sign(bx - ax),
+        at = az * CHUNK + ax;
+      connect(at, at + dx, dx > 0 ? E : W, dx > 0 ? W : E);
+      ax += dx;
+    }
+    while (az !== bz) {
+      const dz = Math.sign(bz - az),
+        at = az * CHUNK + ax;
+      connect(at, at + dz * CHUNK, dz > 0 ? S : N, dz > 0 ? N : S);
+      az += dz;
+    }
+  };
+  const rx = landmark.x,
+    rz = landmark.z;
+  const right = rx + landmark.width - 1,
+    bottom = rz + landmark.length - 1;
+  approach(north, 0, Math.max(rx, Math.min(right, north)), rz);
+  approach(south, CHUNK - 1, Math.max(rx, Math.min(right, south)), bottom);
+  approach(0, west, rx, Math.max(rz, Math.min(bottom, west)));
+  approach(CHUNK - 1, east, right, Math.max(rz, Math.min(bottom, east)));
+  if (x === 0 && z === 0) {
+    if (kind === "corridor") approach(2, 4, 2, rz);
+    else approach(2, 2, rx, rz);
   }
   const choice = rng();
   const theme: Theme =
@@ -121,7 +222,7 @@ export function generateChunk(
           : choice < 0.91
             ? "archive"
             : "pool";
-  return { x, z, cells, theme, seed: chunkSeed };
+  return { x, z, cells, theme, seed: chunkSeed, landmark };
 }
 export function cellAt(
   chunks: Map<string, ChunkData>,
@@ -144,6 +245,19 @@ export function canStand(
 ) {
   const cell = cellAt(chunks, x, z);
   if (!cell) return false;
+  const basin = poolBounds(cell.chunk.landmark);
+  if (basin) {
+    const px = x - cell.chunk.x * SPAN,
+      pz = z - cell.chunk.z * SPAN;
+    const coping = radius + 0.18;
+    if (
+      px > basin.x - coping &&
+      px < basin.x + basin.width + coping &&
+      pz > basin.z - coping &&
+      pz < basin.z + basin.length + coping
+    )
+      return false;
+  }
   const lx = x - (cell.chunk.x * SPAN + cell.cx * CELL),
     lz = z - (cell.chunk.z * SPAN + cell.cz * CELL);
   const pad = radius + 0.09;

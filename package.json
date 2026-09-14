@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "check:shaders": "vgpu check src/shaders/tape.wgsl --require-validation && vgpu check src/shaders/noise.wgsl --require-validation"
+    "check:shaders": "vgpu check src/shaders/tape.wgsl --require-validation && vgpu check src/shaders/noise.wgsl --require-validation && vgpu check src/shaders/water.wgsl --require-validation"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
