@@ -22,7 +22,7 @@ Open http://localhost:3000. A WebGPU-capable browser with hardware acceleration 
 | Hold E near an unstable wall | Noclip to a deeper level           |
 | Escape                       | Pause                              |
 
-Touch devices have a movement stick, swipe-to-look, and contextual action buttons. The unbranded, translucent camcorder HUD uses Geist Mono; supporting setup text uses Geist Sans. One viewport-based scale controls the HUD type, spacing, icons, and viewfinder marks. Main rooms use sickly-yellow fluorescent illumination with soft cast shadows and restrained damp-brown floors. Icon controls expose sound, flashlight, pause, and setup. The date reads June 18, 1994; the simulated battery starts at 22% and drains with recording time. Setup includes sound, sensitivity, tape damage, and a steady camera option. System reduced-motion preferences are respected. The sound starts with the user's first interaction and pauses with the game.
+Touch devices have a movement stick, swipe-to-look, and contextual action buttons. The unbranded, translucent camcorder HUD uses Geist Mono; supporting setup text uses Geist Sans. One viewport-based scale controls the HUD type, spacing, icons, and viewfinder marks. Main rooms use sickly-yellow fluorescent illumination with soft cast shadows and restrained damp-brown floors. A single compact icon row exposes sound, flashlight, pause, and cassette settings. The date reads June 18, 1994; the simulated battery starts at 22% and drains with recording time. Setup includes sound, sensitivity, tape damage, and a steady camera option. System reduced-motion preferences are respected. The sound starts with the user's first interaction and pauses with the game.
 
 ## How it works
 
@@ -37,9 +37,13 @@ Touch devices have a movement stick, swipe-to-look, and contextual action button
 - `src/shaders/tape.wgsl`: reusable VHS warping, tracking, grain, scanlines, vignette, and anomaly distortion. The complete vgpu shader artifact preserves exports through the Next.js WGSL loader.
 - `src/lib/game/audio.ts`: synthesized fluorescent hum, ventilation, alternating carpet/tile footsteps, distant sounds, and transition interference using Web Audio.
 
-Add `?tape=199307` to reproduce a starting maze. SETUP → COPY TAPE LINK shares the seed, not the player's current position. The initial visual composition is intentional; later sections vary with the tape and depth. On revisiting unloaded sections their base layout regenerates; unseen temporary mutations are bounded to resident sections.
+Ordinary visits and refreshes draw a new random tape, changing the maze and the selection and placement of furniture. Add `?tape=199307` to reproduce a particular starting maze. Cassette settings → COPY TAPE LINK shares the seed, not the player's current position. The initial visual composition is intentional; later sections vary with the tape and depth. On revisiting unloaded sections their base layout regenerates; unseen temporary mutations are bounded to resident sections.
 
 ## Vercel
+
+Public demo: https://vackrooms.vercel.app
+
+The public project lives in the `pablostanley` Vercel scope. The separate Internal Playground project retains its protected previews.
 
 Next.js statically renders the shell. The browser owns the interactive world. Vercel Web Analytics and Speed Insights are included; enable them in the linked Vercel project dashboard to collect deployment data. There is no artificial backend dependency in the game loop.
 

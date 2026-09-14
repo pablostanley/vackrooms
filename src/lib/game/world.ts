@@ -452,6 +452,16 @@ export function buildSection(
     "slide",
     "springHorse",
   ];
+  if (data.x === 0 && data.z === 0) {
+    // Each tape begins with its own small selection of familiar objects.
+    // Keep this shuffle independent of placement retries and chair generation.
+    const selectionRng = random(data.seed + 76129);
+    for (let i = propKinds.length - 1; i > 0; i--) {
+      const j = Math.floor(selectionRng() * (i + 1));
+      [propKinds[i], propKinds[j]] = [propKinds[j], propKinds[i]];
+    }
+    propKinds.splice(2 + Math.floor(selectionRng() * 2));
+  }
   const available: { cx: number; cz: number }[] = [];
   for (let cz = 0; cz < CHUNK; cz++)
     for (let cx = 0; cx < CHUNK; cx++) {
@@ -485,8 +495,8 @@ export function buildSection(
       scatterFurniture(kind, cx, cz, "floor");
   }
   if (data.x === 0 && data.z === 0) {
-    // Introduce several readable silhouettes near the opening route, then let
-    // procedural placement take over. Each placement still respects all exits.
+    // Introduce only this tape's selected silhouettes near the opening route.
+    // Later sections draw from the full set, and every placement respects exits.
     available.sort(
       (a, b) => Math.hypot(a.cx - 3, a.cz - 3) - Math.hypot(b.cx - 3, b.cz - 3),
     );

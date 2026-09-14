@@ -92,7 +92,7 @@ function passageZones(data: ChunkData) {
   return zones;
 }
 
-test("seeded origin rooms introduce every furniture and playground silhouette", () => {
+test("origin rooms vary a small furniture selection across tape seeds", () => {
   const mats = headlessMaterials();
   const expected: FurnitureKind[] = [
     "sofa",
@@ -102,8 +102,10 @@ test("seeded origin rooms introduce every furniture and playground silhouette", 
     "springHorse",
     "blocks",
   ];
+  const seenKinds = new Set<FurnitureKind>();
+  const selections = new Set<string>();
   try {
-    for (const seed of [1, 199307, 882731]) {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 199307, 882731]) {
       for (const depth of [0, 1, 4]) {
         const section = buildSection(
           generateChunk(0, 0, seed, depth),
@@ -112,17 +114,69 @@ test("seeded origin rooms introduce every furniture and playground silhouette", 
         );
         try {
           const present = new Set(
-            placements(section).map((placement) => placement.kind),
+            placements(section)
+              .map((placement) => placement.kind)
+              .filter((kind) => kind !== "chair"),
           );
-          for (const kind of expected)
-            assert.ok(
-              present.has(kind),
-              `${kind} missing from tape ${seed}, depth ${depth}`,
-            );
+          assert.ok(
+            present.size >= 2 && present.size <= 3,
+            `tape ${seed}, depth ${depth} has two or three new furniture kinds`,
+          );
+          present.forEach((kind) => seenKinds.add(kind));
+          selections.add([...present].sort().join(","));
         } finally {
           section.dispose();
         }
       }
+    }
+    assert.ok(
+      selections.size >= 5,
+      "different tapes have distinct opening furniture selections",
+    );
+    for (const kind of expected)
+      assert.ok(
+        seenKinds.has(kind),
+        `${kind} appears across the sampled tapes`,
+      );
+  } finally {
+    mats.dispose();
+  }
+});
+
+test("the same tape reproduces furniture kinds and poses, while other tapes vary", () => {
+  const mats = headlessMaterials();
+  const snapshot = (seed: number) => {
+    const section = buildSection(generateChunk(0, 0, seed), mats, 0);
+    try {
+      return placements(section).map((placement) => ({
+        kind: placement.kind,
+        attachment: placement.attachment,
+        min: placement.bounds.min.toArray(),
+        max: placement.bounds.max.toArray(),
+      }));
+    } finally {
+      section.dispose();
+    }
+  };
+  try {
+    const first = snapshot(199307);
+    assert.deepEqual(
+      snapshot(199307),
+      first,
+      "shared tape furniture is reproducible",
+    );
+    for (const seed of [1, 882731]) {
+      const next = snapshot(seed);
+      assert.notDeepEqual(
+        next,
+        first,
+        `tape ${seed} changes the furniture arrangement`,
+      );
+      assert.notDeepEqual(
+        next.map((prop) => prop.min),
+        first.map((prop) => prop.min),
+        "positions vary with the tape",
+      );
     }
   } finally {
     mats.dispose();
