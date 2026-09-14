@@ -6,19 +6,31 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check:shaders": "vgpu check src/shaders/tape.wgsl --require-validation && vgpu check src/shaders/noise.wgsl --require-validation"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.20.0",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "next": "16.3.5",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "three": "^0.186.0",
+    "vgpu": "^0.4.1"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
+    "@vgpu/wgsl": "^0.4.1",
+    "@webgpu/types": "^0.1.72",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }
