@@ -59,7 +59,9 @@ Computer mode requests fullscreen so native Escape returns to the camera even af
 
 Chromium excludes foreign iframe pixels from parent SVG displacement. Full-page curvature therefore requires the cooperative adapter in [vgpu PR #446](https://github.com/vercel-labs/vgpu/pull/446) to be deployed on vgpu.sh. The host sends only its generated curvature map to the matching frame after an origin-checked readiness message. Other sites retain the tinted, vignetted, scanlined glass and live clicks.
 
-Sites that send frame-blocking headers cannot run inside the monitor; Open in tab is available for the last entered address. The shell cannot read cross-origin navigation: the address bar, Reload, and Open in tab refer to the last address entered, while links within the site navigate normally. No page proxy or frame-protection bypass is used. Websites require a network connection; the procedural world does not.
+Back and Forward use the embedded site's cooperative `vackrooms-browser` bridge and its frame-local Navigation API. The arrows stay disabled until the site reports accurate navigation state. The [companion vgpu site integration](https://github.com/vercel-labs/vgpu/pull/446) must be deployed before they work on vgpu.sh. A supported site also keeps Location, Reload, and Open in tab synchronized with its current page. This never calls the game's history or reads a foreign frame's history.
+
+Sites that send frame-blocking headers cannot run inside the monitor; Open in tab is available. For sites without the bridge, Location, Reload, and Open in tab use the last entered address, while links within the site navigate normally. No page proxy or frame-protection bypass is used. Websites require a network connection; the procedural world does not.
 
 ## Vercel
 

@@ -12,6 +12,7 @@ import {
 } from "./computers";
 import type { Section } from "./world";
 import { ComputerCrt } from "./computer-crt";
+import { attachComputerNavigation } from "./computer-navigation";
 
 interface LiveScreen {
   station: ComputerStation;
@@ -139,19 +140,32 @@ export class ComputerScreens {
       requested = url;
       address.value = url;
       status.textContent = "Connecting…";
+      navigation.setAddress(url);
       iframe.src = url;
       clearTimeout(loadTimer);
       loadTimer = setTimeout(() => {
         status.textContent = "Page not appearing? Try Reload or Open in tab.";
       }, 15000);
     };
-    const button = (label: string, action: () => void) => {
+    const button = (label: string, action?: () => void) => {
       const control = document.createElement("button");
       control.type = "button";
       control.textContent = label;
-      control.addEventListener("click", action);
+      if (action) control.addEventListener("click", action);
       toolbar.append(control);
+      return control;
     };
+    const back = button("← Back");
+    const forward = button("Forward →");
+    const navigation = attachComputerNavigation(
+      iframe,
+      back,
+      forward,
+      (url) => {
+        requested = url;
+        address.value = url;
+      },
+    );
     button("⌂ Home", () => navigate(COMPUTER_HOME));
     button("↻ Reload", () => {
       // Reassigning src also recovers from sites which refuse to be framed.
@@ -162,7 +176,7 @@ export class ComputerScreens {
     );
     toolbar.lastElementChild!.setAttribute(
       "title",
-      "Open the last entered address in a tab if this site blocks embedding",
+      "Open the current or last entered address in a tab if this site blocks embedding",
     );
     const note = document.createElement("span");
     note.textContent = "WORLD WIDE WEB";
@@ -207,6 +221,7 @@ export class ComputerScreens {
       address,
       dispose: () => {
         detachCrt();
+        navigation.dispose();
         clearTimeout(loadTimer);
         iframe.src = "about:blank";
         object.removeFromParent();
