@@ -16,6 +16,8 @@ const initialStats: GameStats = {
   distance: 0,
   depth: 0,
   nearPortal: false,
+  nearComputer: false,
+  browsing: false,
   noclipProgress: 0,
   signal: 98,
   flashlight: false,
@@ -256,10 +258,18 @@ export default function Backrooms() {
           </button>
         </div>
       )}
-      {playing && (
+      {playing && !stats.browsing && (
         <>
           <span className="reticle" aria-hidden="true" />
-          {stats.nearPortal && (
+          {stats.nearComputer && (
+            <button
+              className="portal-hint computer-hint"
+              onClick={() => engine.current?.useComputer()}
+            >
+              <kbd>E</kbd> · USE COMPUTER
+            </button>
+          )}
+          {stats.nearPortal && !stats.nearComputer && (
             <div className="portal-hint">
               <span className="desktop-hint">
                 HOLD <kbd>E</kbd> · NOCLIP
@@ -379,12 +389,16 @@ export default function Backrooms() {
             <dd>LIGHT</dd>
           </div>
           <div>
+            <dt>E</dt>
+            <dd>USE A NEARBY COMPUTER</dd>
+          </div>
+          <div>
             <dt>HOLD E</dt>
             <dd>NOCLIP AT UNSTABLE WALLS</dd>
           </div>
           <div>
             <dt>ESC</dt>
-            <dd>PAUSE</dd>
+            <dd>LEAVE COMPUTER / PAUSE</dd>
           </div>
         </dl>
         <div className="settings-tape">

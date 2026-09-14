@@ -558,3 +558,182 @@ button:disabled {
 .settings-tape {
   font-family: var(--font-mono), monospace;
 }
+
+/* The live DOM occupies only the inset glass; the CRT shell stays in Three.js. */
+.computer-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
+  color: inherit;
+  pointer-events: none;
+  outline: none;
+}
+.computer-layer::backdrop {
+  background: transparent;
+  pointer-events: none;
+}
+.computer-layer.is-browsing {
+  pointer-events: auto;
+}
+.is-screen-flat .computer-perspective > div > div {
+  transform: none !important;
+}
+.is-screen-flat .crt-browser {
+  left: var(--screen-x);
+  top: var(--screen-y);
+  transform: translate(-50%, -50%) scale(var(--screen-scale)) !important;
+}
+.computer-perspective {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.computer-exit {
+  display: none;
+}
+.is-browsing .computer-exit {
+  display: block;
+  position: absolute;
+  bottom: calc(var(--hud-unit) * 5);
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  font-family: var(--font-mono), monospace;
+  font-size: calc(var(--hud-unit) * 1.5);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-shadow: var(--osd-shadow);
+  padding: 0.75em 1em;
+}
+.computer-hint {
+  pointer-events: auto;
+}
+.crt-browser {
+  width: 1000px;
+  height: 750px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px / 18px;
+  border: 5px solid #292e22;
+  background: #c4c2ad;
+  color: #24271f;
+  font-family: var(--font-geist), sans-serif;
+  font-size: 19px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-shadow: none;
+  backface-visibility: hidden;
+  color-scheme: light;
+}
+.crt-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 3px 5px 3px 12px;
+  background: #4c5340;
+  color: #fffde8;
+  font-weight: 650;
+}
+.explorer .crt-title {
+  background: #686345;
+}
+.crt-browser button {
+  padding: 4px 11px;
+  border: 2px solid;
+  border-color: #eeecdb #6b6d60 #6b6d60 #eeecdb;
+  background: #c4c2ad;
+  color: #252a20;
+  font-size: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  text-shadow: none;
+}
+.crt-browser button:active {
+  border-color: #6b6d60 #eeecdb #eeecdb #6b6d60;
+}
+.crt-browser button:focus-visible,
+.crt-browser input:focus-visible {
+  outline: 2px dotted #31362c;
+  outline-offset: -4px;
+}
+.crt-title button {
+  padding: 0 7px;
+  font-size: 21px;
+}
+.crt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border-bottom: 2px solid #8d8f7e;
+}
+.crt-toolbar span {
+  margin-left: auto;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  padding-right: 6px;
+}
+.crt-address {
+  display: flex;
+  gap: 7px;
+  padding: 6px 8px;
+}
+.crt-address label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+}
+.crt-address input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  background: #f6f5e9;
+  color: #252a20;
+  border: 2px solid;
+  border-color: #6b6d60 #eeecdb #eeecdb #6b6d60;
+  border-radius: 0;
+  font-size: 18px;
+  user-select: text;
+}
+.crt-browser iframe {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  background: #f7f7ef;
+}
+.crt-status {
+  min-height: 28px;
+  padding: 5px 10px;
+  font-size: 15px;
+  border-top: 2px solid #eeecdb;
+}
+.crt-glass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 20px #161d2140,
+    inset 0 0 4px 2px #11180f80;
+  background:
+    linear-gradient(135deg, #fffce80c, transparent 35%),
+    repeating-linear-gradient(0deg, #161e130a 0 1px, transparent 1px 3px);
+}
+.computer-hint {
+  flex-direction: row;
+  justify-content: center;
+  gap: 0.6em;
+}

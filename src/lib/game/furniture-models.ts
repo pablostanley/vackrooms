@@ -1,8 +1,20 @@
 import * as THREE from "three";
 import type { Materials } from "./materials";
+import {
+  createComputerModel,
+  isComputerKind,
+  type ComputerKind,
+} from "./computer-models";
 
 export type FurnitureKind =
-  "chair" | "sofa" | "table" | "lamp" | "slide" | "springHorse" | "blocks";
+  | "chair"
+  | "sofa"
+  | "table"
+  | "lamp"
+  | "slide"
+  | "springHorse"
+  | "blocks"
+  | ComputerKind;
 
 export interface FurnitureModel {
   parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[];
@@ -18,6 +30,7 @@ export function createFurniture(
   kind: FurnitureKind,
   mats: Materials,
 ): FurnitureModel {
+  if (isComputerKind(kind)) return createComputerModel(kind, mats);
   const parts: FurnitureModel["parts"] = [];
   const bounds = new THREE.Box3();
   const anchor = new THREE.Vector3();

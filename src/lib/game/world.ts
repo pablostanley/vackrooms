@@ -18,6 +18,12 @@ import {
 import { buildLandmark } from "./landmarks";
 import type { Materials } from "./materials";
 import {
+  computerKinds,
+  computerScreen,
+  type ComputerKind,
+} from "./computer-models";
+import type { ComputerStation } from "./computers";
+import {
   createFurniture,
   type FurnitureKind,
   type FurnitureModel,
@@ -39,6 +45,7 @@ export interface Section {
   portals: Portal[];
   colliders: THREE.Box3[];
   water: THREE.Mesh[];
+  computers: ComputerStation[];
   dispose: () => void;
 }
 export function buildSection(
@@ -55,6 +62,7 @@ export function buildSection(
     portals: Portal[] = [],
     colliders: THREE.Box3[] = [],
     water: THREE.Mesh[] = [];
+  const computers: ComputerStation[] = [];
   const theme = mats.forTheme(data.theme);
   const furnitureRng = random(data.seed + 3403);
   const models = new Map<FurnitureKind, FurnitureModel>();
@@ -511,6 +519,83 @@ export function buildSection(
         continue;
       available.push({ cx, cz });
     }
+  // A separate random stream keeps desks reproducible without changing the maze.
+  const computerRng = random(data.seed + 93011);
+  const placeComputer = (cx: number, cz: number, kind: ComputerKind) => {
+    if (furnished.has(cz * CHUNK + cx)) return false;
+    const bits = data.cells[cz * CHUNK + cx];
+    const source = model(kind);
+    const sides = [W, N, E, S].filter((bit) => !(bits & bit));
+    for (const side of sides) {
+      // The front always faces into the room; computers never clip through walls.
+      const yaw =
+        side === N
+          ? 0
+          : side === W
+            ? Math.PI / 2
+            : side === S
+              ? Math.PI
+              : -Math.PI / 2;
+      const pose = new THREE.Matrix4().makeRotationY(yaw);
+      const local = source.bounds.clone().applyMatrix4(pose);
+      const target = new THREE.Vector3(
+        (cx + 0.5) * CELL,
+        -local.min.y,
+        (cz + 0.5) * CELL,
+      );
+      if (side === N) target.z = cz * CELL + 0.24 - local.min.z;
+      if (side === S) target.z = (cz + 1) * CELL - 0.24 - local.max.z;
+      if (side === W) target.x = cx * CELL + 0.24 - local.min.x;
+      if (side === E) target.x = (cx + 1) * CELL - 0.24 - local.max.x;
+      pose.setPosition(target);
+      const bounds = source.bounds.clone().applyMatrix4(pose);
+      if (!leavesPassagesClear(bounds, cx, cz, bits)) continue;
+      const worldBounds = bounds
+        .clone()
+        .translate(new THREE.Vector3(ox, 0, oz))
+        .expandByScalar(0.08);
+      if (colliders.some((other) => other.intersectsBox(worldBounds))) continue;
+      furniture(kind, pose);
+      furnished.add(cz * CHUNK + cx);
+      const screen = computerScreen(kind);
+      const rotation = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        yaw,
+      );
+      computers.push({
+        id: `${data.x},${data.z}:${data.seed}:${cx},${cz}`,
+        kind,
+        position: screen.position
+          .applyMatrix4(pose)
+          .add(new THREE.Vector3(ox, 0, oz)),
+        quaternion: rotation,
+        normal: new THREE.Vector3(0, 0, 1).applyQuaternion(rotation),
+        width: screen.width,
+        height: screen.height,
+      });
+      return true;
+    }
+    return false;
+  };
+  if (data.x === 0 && data.z === 0) {
+    // Put one within reach of the opening route, then scatter the other models.
+    for (const cz of [4, 3, 2, 1]) {
+      if (placeComputer(2, cz, computerKinds[Math.floor(computerRng() * 3)]))
+        break;
+    }
+  }
+  const computerCells = available
+    .map((cell) => ({ ...cell, order: computerRng() }))
+    .sort((a, b) => a.order - b.order);
+  const firstModel = Math.floor(computerRng() * 3);
+  for (const { cx, cz } of computerCells) {
+    if (computers.length >= 3) break;
+    const kind = [
+      ...computerKinds.slice(firstModel),
+      ...computerKinds.slice(0, firstModel),
+    ].find((kind) => !computers.some((station) => station.kind === kind))!;
+    placeComputer(cx, cz, kind);
+  }
   // Familiar objects become rare landmarks; most of the maze remains empty.
   for (const { cx, cz } of available) {
     if (
@@ -570,6 +655,7 @@ export function buildSection(
     portals,
     colliders,
     water,
+    computers,
     dispose: () => {
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {

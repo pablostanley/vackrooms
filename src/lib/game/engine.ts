@@ -10,6 +10,8 @@ import { buildSection, type Portal, type Section } from "./world";
 import { EntityNavigation } from "./entity-navigation";
 import { EntityModel } from "./entity-model";
 import { Stalker } from "./stalker";
+import { ComputerScreens } from "./computer-screens";
+import { computerFocus, type ComputerStation } from "./computers";
 
 export interface GameSettings {
   volume: number;
@@ -22,6 +24,8 @@ export interface GameStats {
   distance: number;
   depth: number;
   nearPortal: boolean;
+  nearComputer: boolean;
+  browsing: boolean;
   noclipProgress: number;
   signal: number;
   flashlight: boolean;
@@ -39,6 +43,16 @@ export class BackroomsEngine {
   private camera = new THREE.PerspectiveCamera(68, 1, 0.065, 85);
   private renderer: GameRenderer | null = null;
   private controls: PointerLockControls | null = null;
+  private computerScreens: ComputerScreens | null = null;
+  private focusedComputer: ComputerStation | null = null;
+  private ownsComputerFullscreen = false;
+  private computerHadFullscreen = false;
+  private returnView: {
+    position: THREE.Vector3;
+    quaternion: THREE.Quaternion;
+    fov: number;
+  } | null = null;
+  private lastScreens = -1;
   private motor: CharacterMotor | null = null;
   private materials = createMaterials();
   private chunks = new Map<string, ChunkData>();
@@ -157,6 +171,9 @@ export class BackroomsEngine {
         "First person view of the backrooms",
       );
       this.container.appendChild(renderer.canvas);
+      this.computerScreens = new ComputerScreens(this.container, () =>
+        this.leaveComputer(),
+      );
       this.resize();
       this.bind();
       this.camera.position.copy(this.position);
@@ -179,6 +196,7 @@ export class BackroomsEngine {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer?.resize(w, h);
+    this.computerScreens?.resize(w, h);
     this.tapeOverlay?.resize(w, h);
   }
   private bind() {
@@ -197,6 +215,13 @@ export class BackroomsEngine {
       "keydown",
       (e) => {
         if (!this.active) return;
+        // Dialog cancel and native fullscreen exit own Escape during browsing.
+        if (this.focusedComputer) return;
+        if (e.code === "KeyE" && !e.repeat && this.computerScreens?.nearest) {
+          e.preventDefault();
+          this.useComputer();
+          return;
+        }
         if (
           [
             "KeyW",
@@ -225,7 +250,7 @@ export class BackroomsEngine {
       "pointerlockchange",
       () => {
         const locked = document.pointerLockElement === this.renderer?.canvas;
-        if (this.locked && !locked) this.pause();
+        if (this.locked && !locked && !this.focusedComputer) this.pause();
         this.locked = locked;
       },
       { signal },
@@ -237,17 +262,26 @@ export class BackroomsEngine {
       },
       { signal },
     );
+    document.addEventListener(
+      "fullscreenchange",
+      () => {
+        if (!this.focusedComputer) return;
+        if (document.fullscreenElement) this.computerHadFullscreen = true;
+        else if (this.computerHadFullscreen) this.leaveComputer();
+      },
+      { signal },
+    );
     window.addEventListener(
       "blur",
       () => {
-        if (this.active) this.pause();
+        if (this.active && !this.focusedComputer) this.pause();
       },
       { signal },
     );
     this.renderer!.canvas.addEventListener(
       "pointerdown",
       (e) => {
-        if (!this.active) return;
+        if (!this.active || this.focusedComputer) return;
         if (e.pointerType === "mouse" && !this.locked) this.requestLock();
         if (!this.locked) {
           this.drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
@@ -263,7 +297,12 @@ export class BackroomsEngine {
     this.renderer!.canvas.addEventListener(
       "pointermove",
       (e) => {
-        if (!this.active || this.locked || this.drag?.id !== e.pointerId)
+        if (
+          !this.active ||
+          this.focusedComputer ||
+          this.locked ||
+          this.drag?.id !== e.pointerId
+        )
           return;
         this.look(
           (e.clientX - this.drag.x) * 1.25,
@@ -317,6 +356,7 @@ export class BackroomsEngine {
   pause() {
     if (!this.active) return;
     this.active = false;
+    if (this.focusedComputer) this.leaveComputer(false);
     this.tapeBurst = 0.65;
     if (this.controls) this.controls.enabled = false;
     this.keys.clear();
@@ -326,6 +366,71 @@ export class BackroomsEngine {
     if (document.pointerLockElement === this.renderer?.canvas)
       document.exitPointerLock();
     this.callbacks.pause();
+  }
+  useComputer() {
+    const station = this.computerScreens?.nearest;
+    if (!this.active || this.focusedComputer || !station) return;
+    this.focusedComputer = station;
+    this.returnView = {
+      position: this.camera.position.clone(),
+      quaternion: this.camera.quaternion.clone(),
+      fov: this.camera.fov,
+    };
+    this.keys.clear();
+    this.touchMove = { x: 0, y: 0 };
+    this.drag = null;
+    this.clipProgress = 0;
+    this.nearestPortal = null;
+    if (this.controls) this.controls.enabled = false;
+    if (document.pointerLockElement === this.renderer?.canvas)
+      document.exitPointerLock();
+    // Cross-origin frames own their keyboard events. Native fullscreen Escape
+    // is observable by the parent even after a user clicks or types in the site.
+    this.computerHadFullscreen = !!document.fullscreenElement;
+    const surface = this.container.parentElement;
+    if (!document.fullscreenElement && surface?.requestFullscreen) {
+      this.ownsComputerFullscreen = true;
+      void surface
+        .requestFullscreen({ navigationUI: "hide" })
+        .then(() => {
+          if (!this.focusedComputer && document.fullscreenElement === surface)
+            void document.exitFullscreen().catch(() => {});
+          else if (this.focusedComputer === station)
+            // Add the modal after fullscreen, keeping HTML above the canvas.
+            this.computerScreens?.focus(station);
+        })
+        .catch(() => {
+          this.ownsComputerFullscreen = false;
+          if (this.focusedComputer === station) {
+            this.computerScreens?.focus(station);
+            this.computerScreens?.useButtonToExit();
+          }
+        });
+    } else {
+      this.computerScreens!.focus(station);
+      if (!document.fullscreenElement) this.computerScreens?.useButtonToExit();
+    }
+  }
+  leaveComputer(lock = true) {
+    if (!this.focusedComputer) return;
+    this.focusedComputer = null;
+    const exitFullscreen = this.ownsComputerFullscreen;
+    this.ownsComputerFullscreen = false;
+    this.computerHadFullscreen = false;
+    if (exitFullscreen && document.fullscreenElement)
+      void document.exitFullscreen().catch(() => {});
+    this.computerScreens?.leave();
+    if (this.returnView) {
+      this.camera.position.copy(this.returnView.position);
+      this.camera.quaternion.copy(this.returnView.quaternion);
+      this.camera.fov = this.returnView.fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.returnView = null;
+    this.keys.clear();
+    this.lastScreens = -1;
+    if (this.controls) this.controls.enabled = this.active;
+    if (lock && this.active) this.requestLock();
   }
   updateSettings(settings: GameSettings) {
     this.settings = settings;
@@ -584,7 +689,14 @@ export class BackroomsEngine {
     this.lastTime = now;
     this.elapsed += dt;
     try {
-      if (this.active) {
+      if (this.active && this.focusedComputer) {
+        const view = computerFocus(this.focusedComputer, this.camera.aspect);
+        const blend = this.settings.reducedMotion ? 1 : 1 - Math.exp(-dt * 14);
+        this.camera.position.lerp(view.position, blend);
+        this.camera.quaternion.slerp(view.quaternion, blend);
+        this.camera.fov += (view.fov - this.camera.fov) * blend;
+        this.camera.updateProjectionMatrix();
+      } else if (this.active) {
         this.seconds += dt;
         this.walk(dt);
         this.stream();
@@ -651,11 +763,22 @@ export class BackroomsEngine {
             this.tapeBurst,
             Math.floor(this.elapsed * 12) % 37 === 0 ? this.stress * 0.2 : 0,
           );
+      if (this.elapsed - this.lastScreens > 0.1) {
+        this.computerScreens?.update(
+          this.camera,
+          this.sections.values(),
+          this.active,
+        );
+        this.lastScreens = this.elapsed;
+      }
+      // Keep the DOM and mesh projections aligned; the separate VHS overlay stays.
+      const hasScreen = this.computerScreens?.visible;
       this.renderer?.render(
         this.settings.reducedMotion ? 0 : this.elapsed,
-        tapeDamage,
-        tapeAnomaly,
+        hasScreen ? 0 : tapeDamage,
+        hasScreen ? 0 : tapeAnomaly,
       );
+      this.computerScreens?.render(this.camera);
       this.tapeOverlay?.render(
         this.elapsed,
         tapeDamage,
@@ -670,6 +793,8 @@ export class BackroomsEngine {
           distance: this.distance,
           depth: this.depth,
           nearPortal: !!this.nearestPortal,
+          nearComputer: !!this.computerScreens?.nearest,
+          browsing: !!this.focusedComputer,
           noclipProgress: this.clipProgress,
           signal: Math.max(
             8,
@@ -692,11 +817,14 @@ export class BackroomsEngine {
     this.alive = false;
     cancelAnimationFrame(this.frameId);
     this.listeners.abort();
+    if (this.ownsComputerFullscreen && document.fullscreenElement)
+      void document.exitFullscreen().catch(() => {});
     this.resizeObserver.disconnect();
     if (document.pointerLockElement === this.renderer?.canvas)
       document.exitPointerLock();
     this.audio.dispose();
     this.controls?.dispose();
+    this.computerScreens?.dispose();
     this.motor?.dispose();
     for (const s of this.sections.values()) s.dispose();
     this.entity.traverse((o) => {

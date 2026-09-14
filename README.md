@@ -20,7 +20,8 @@ Open http://localhost:3000. A WebGPU-capable browser with hardware acceleration 
 | Shift                        | Run                                |
 | F                            | Toggle flashlight (off by default) |
 | Hold E near an unstable wall | Noclip to a deeper level           |
-| Escape                       | Pause                              |
+| E near a computer            | Focus its live browser             |
+| Escape                       | Leave computer / pause             |
 
 Touch devices have a movement stick, swipe-to-look, and contextual action buttons. The unbranded, translucent camcorder HUD uses Geist Mono; supporting setup text uses Geist Sans. One viewport-based scale controls the HUD type, spacing, icons, and viewfinder marks. Main rooms use sickly-yellow fluorescent illumination with soft cast shadows and restrained damp-brown floors. A single compact icon row exposes sound, flashlight, pause, and cassette settings. The date reads June 18, 1994; the simulated battery starts at 22% and drains with recording time. Setup includes sound, sensitivity, tape damage, and a steady camera option. System reduced-motion preferences are respected. The sound starts with the user's first interaction and pauses with the game.
 
@@ -29,6 +30,8 @@ Touch devices have a movement stick, swipe-to-look, and contextual action button
 - `src/lib/game/maze.ts`: seeded, connected maze sections. Shared boundary hashes keep gates aligned across streaming and regeneration. A spanning tree guarantees a path through every room; additional openings create nonsensical office spaces and loops.
 - `src/lib/game/landmarks.ts`: one large landmark in every 57.6m section, with ordinary offices between discoveries. Empty lobbies have 8.4m ceilings; shuttered food courts have only two tables; pool halls contain recessed 25×16m basins and continuous dry decks. Three aligned sections form 172.8m corridors. Landmark families and footprints survive unseen mutations, while the surrounding office maze changes.
 - `src/lib/game/furniture-models.ts`: sofas, tables, lamps, slides, spring horses, alphabet blocks, and chairs, built from batched procedural geometry.
+- `src/lib/game/computer-models.ts`: three procedural 90s workstations: laminate office desk with a desktop PC, walnut cart with speakers and a tower, and a simple wood hutch. All use real chunky CRT geometry.
+- `src/lib/game/computer-screens.ts`: live HTTPS iframes in CSS3D, with Netscape Navigator / Internet Explorer inspired browser chrome. At most two live screens; visibility rays hide glass behind walls and furniture, and distance/section eviction releases pages. Focus flattens the same DOM projection for reliable native iframe clicks.
 - `src/lib/game/furniture-layout.ts`: solid attachment anchors keep every stacked chair leg embedded in the seat below. Arbitrarily rotated wall/ceiling props intersect the architecture, with reserved walking lanes through each room.
 - `src/lib/game/world.ts`: batched architecture, ceiling panels, wallpaper, furniture, faded service areas, and unstable walls. A 3×3 window of sections streams around the player and disposes sections left behind.
 - `src/lib/game/engine.ts`: Three.js PointerLockControls, camera feedback, streaming, unseen room changes, noclipping, and the stalking encounter controller.
@@ -46,6 +49,14 @@ Touch devices have a movement stick, swipe-to-look, and contextual action button
 Ordinary visits and refreshes draw a new random tape, changing the maze and the selection and placement of furniture. Add `?tape=199307` to reproduce a particular starting maze. Cassette settings → COPY TAPE LINK shares the seed, not the player's current position. The initial visual composition is intentional; later sections vary with the tape and depth. On revisiting unloaded sections their base layout regenerates; unseen temporary mutations are bounded to resident sections.
 
 Every tape starts in an office, with a landmark reachable along a route of at most 30m. Further sections guarantee recurring landmarks instead of relying on random rolls with potentially long gaps. Tapes `1`, `2`, `3`, and `8` introduce a lobby, poolroom, corridor, and food court respectively. Each 12-section row contains all four families. Fog hides the outer edge of the nine resident sections without adding an end wall to the long corridors.
+
+## Computer browsing
+
+Press E while facing a nearby CRT, or tap its contextual hint. The camera frames the screen and its plastic bezel; walking, noclipping, and world mutations pause while browsing. The live site starts at https://vgpu.sh/. Home, Reload, and an HTTPS address bar work inside the period browser shell.
+
+Computer mode requests fullscreen so native Escape returns to the camera even after clicking or typing inside the cross-origin site. On browsers or embedded previews that deny fullscreen, use BACK TO CAMERA or the browser window's × button. The page remains mounted when leaving and re-entering nearby; it resets after distance or section eviction. Some embedded app browsers also block third-party iframes; verify live site navigation in a normal browser.
+
+Sites that send frame-blocking headers cannot run inside the monitor; Open in tab is available for the last entered address. The shell cannot read cross-origin navigation: the address bar, Reload, and Open in tab refer to the last address entered, while links within the site navigate normally. No page proxy or frame-protection bypass is used. Websites require a network connection; the procedural world does not.
 
 ## Vercel
 
