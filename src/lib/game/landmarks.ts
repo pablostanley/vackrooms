@@ -123,8 +123,8 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: Builder) {
       mats.tileFloor,
       -Math.PI / 2,
     );
-    // Visible coping is high enough to stop Rapier's autostep. The entire deck
-    // remains connected, and players cannot drop into an inescapable basin.
+    // Coping blocks accidental walking entry but can be jumped onto. A double
+    // jump clears the 1.84m rise back out of the basin; the deck stays connected.
     for (const side of [-1, 1]) {
       solid(
         0.36,

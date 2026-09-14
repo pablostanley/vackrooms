@@ -15,6 +15,12 @@ import {
 let initialization: Promise<void> | undefined;
 const BODY_HEIGHT = 0.89;
 const EYE_OFFSET = 0.77;
+const GRAVITY = 18;
+const JUMP_SPEED = 5.6;
+// Clears the 1.84m rise from the pool floor to its coping, even on a quick tap.
+const DOUBLE_JUMP_SPEED = 8.8;
+const COYOTE_TIME = 0.1;
+const JUMP_BUFFER = 0.12;
 
 /** Rapier owns capsule sweeps, wall sliding, small steps, and floor contact. */
 export class CharacterMotor {
@@ -24,6 +30,23 @@ export class CharacterMotor {
   private capsule: RAPIER.Collider;
   private sections = new Map<string, RAPIER.Collider[]>();
   private fallSpeed = 0;
+  private onGround = false;
+  private timeSinceGround = Infinity;
+  private jumps = 0;
+  private jumpPresses = 0;
+  private jumpBuffer = 0;
+  get grounded() {
+    return this.onGround;
+  }
+  /** Call on a fresh press only; holding the key never repeats a jump. */
+  jump() {
+    this.jumpPresses = Math.min(this.jumpPresses + 1, 2);
+    this.jumpBuffer = JUMP_BUFFER;
+  }
+  clearJumpInput() {
+    this.jumpPresses = 0;
+    this.jumpBuffer = 0;
+  }
   static async create(position: { x: number; z: number }) {
     initialization ??= RAPIER.init();
     await initialization;
@@ -163,14 +186,55 @@ export class CharacterMotor {
       z: position.z,
     });
     this.fallSpeed = 0;
+    this.onGround = false;
+    this.timeSinceGround = Infinity;
+    this.jumps = 0;
+    this.clearJumpInput();
     this.world.step();
   }
   move(dx: number, dz: number, dt: number, position: Vector3) {
     if (dt <= 0) return;
-    this.fallSpeed = Math.max(this.fallSpeed - 9.81 * dt, -18);
+    // Bound sweeps at low frame rates without dropping input or elapsed time.
+    const steps = Math.ceil(dt / (1 / 120));
+    for (let i = 0; i < steps; i++)
+      this.step(dx / steps, dz / steps, dt / steps);
+    const next = this.body.translation();
+    position.set(next.x, next.y + EYE_OFFSET, next.z);
+  }
+  private step(dx: number, dz: number, dt: number) {
+    if (this.onGround) this.timeSinceGround = 0;
+    else this.timeSinceGround += dt;
+    while (this.jumpPresses > 0 && this.jumpBuffer > 0) {
+      if (
+        this.onGround ||
+        (this.jumps === 0 && this.timeSinceGround <= COYOTE_TIME)
+      ) {
+        this.fallSpeed = JUMP_SPEED;
+        this.jumps = 1;
+      } else if (this.jumps < 2 && this.timeSinceGround !== Infinity) {
+        this.fallSpeed = DOUBLE_JUMP_SPEED;
+        this.jumps = 2;
+      } else break;
+      this.onGround = false;
+      this.timeSinceGround = Math.max(this.timeSinceGround, COYOTE_TIME);
+      this.jumpPresses--;
+    }
+    this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+    if (!this.jumpBuffer) this.jumpPresses = 0;
+    // Autostep and snapping are walking aids; in air they can pull the capsule
+    // onto a chair back or keep it glued to the lip it is trying to leave.
+    if (this.onGround) {
+      this.controller.enableAutostep(0.28, 0.25, false);
+      this.controller.enableSnapToGround(0.3);
+    } else {
+      this.controller.disableAutostep();
+      this.controller.disableSnapToGround();
+    }
+    const dy = this.fallSpeed * dt - 0.5 * GRAVITY * dt * dt;
+    this.fallSpeed = Math.max(this.fallSpeed - GRAVITY * dt, -18);
     this.controller.computeColliderMovement(this.capsule, {
       x: dx,
-      y: this.fallSpeed * dt,
+      y: dy,
       z: dz,
     });
     const movement = this.controller.computedMovement(),
@@ -182,9 +246,19 @@ export class CharacterMotor {
     });
     this.world.timestep = dt;
     this.world.step();
-    const next = this.body.translation();
-    position.set(next.x, next.y + EYE_OFFSET, next.z);
-    if (this.controller.computedGrounded()) this.fallSpeed = 0;
+    this.onGround = this.fallSpeed <= 0 && this.controller.computedGrounded();
+    if (this.onGround) {
+      this.fallSpeed = 0;
+      this.jumps = 0;
+      this.timeSinceGround = 0;
+    } else if (this.fallSpeed > 0) {
+      for (let i = 0; i < this.controller.numComputedCollisions(); i++) {
+        if ((this.controller.computedCollision(i)?.normal1.y ?? 0) < -0.5) {
+          this.fallSpeed = 0;
+          break;
+        }
+      }
+    }
   }
   dispose() {
     this.world.removeCharacterController(this.controller);

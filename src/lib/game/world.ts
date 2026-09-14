@@ -200,8 +200,18 @@ export function buildSection(
     }
     const bounds = source.bounds.clone().applyMatrix4(pose);
     propRecords.push({ kind, attachment, bounds: bounds.clone() });
-    if (bounds.min.y < HEIGHT && bounds.max.y > 0.02)
-      colliders.push(bounds.translate(new THREE.Vector3(ox, 0, oz)));
+    if (bounds.min.y < HEIGHT && bounds.max.y > 0.02) {
+      // Seats need their real solid parts: a whole-chair/sofa box fills the air
+      // above the cushion and makes players stand on an invisible platform.
+      const solids =
+        kind === "chair" || kind === "sofa"
+          ? source.parts.map(({ geometry }) =>
+              geometry.boundingBox!.clone().applyMatrix4(pose),
+            )
+          : [bounds];
+      for (const solid of solids)
+        colliders.push(solid.translate(new THREE.Vector3(ox, 0, oz)));
+    }
   }
   function chair(x: number, z: number, angle: number) {
     furniture(

@@ -252,6 +252,8 @@ export class BackroomsEngine {
           ].includes(e.code)
         )
           e.preventDefault();
+        if (e.code === "Space" && !e.repeat && !this.keys.has(e.code))
+          this.jump();
         this.keys.add(e.code);
         if (e.code === "KeyF" && !e.repeat) this.toggleFlashlight();
         if (e.code === "Escape") this.pause();
@@ -375,6 +377,7 @@ export class BackroomsEngine {
     this.tapeBurst = 0.65;
     if (this.controls) this.controls.enabled = false;
     this.keys.clear();
+    this.motor?.clearJumpInput();
     this.touchMove = { x: 0, y: 0 };
     this.drag = null;
     this.audio.pause();
@@ -393,6 +396,7 @@ export class BackroomsEngine {
       fov: this.camera.fov,
     };
     this.keys.clear();
+    this.motor?.clearJumpInput();
     this.touchMove = { x: 0, y: 0 };
     this.drag = null;
     this.clipProgress = 0;
@@ -456,6 +460,9 @@ export class BackroomsEngine {
   }
   move(x: number, y: number) {
     this.touchMove = { x, y };
+  }
+  jump() {
+    if (this.active && !this.focusedComputer) this.motor?.jump();
   }
   noclip(held: boolean) {
     if (held) this.keys.add("KeyE");
@@ -537,13 +544,14 @@ export class BackroomsEngine {
     );
     this.playerSpeed = moved / Math.max(dt, 0.001);
     this.distance += moved;
-    this.stepDistance += moved;
+    const grounded = this.motor?.grounded ?? false;
+    if (grounded) this.stepDistance += moved;
     if (this.stepDistance > (running ? 1.15 : 0.94)) {
       this.stepDistance = 0;
       this.stepSide *= -1;
       this.audio.step(running, this.stepSide);
     }
-    const bob = this.settings.reducedMotion
+    const bob = this.settings.reducedMotion || !grounded
       ? 0
       : Math.sin(this.distance * 6.7) *
         Math.min(moved / Math.max(dt, 0.001), 0.7) *
@@ -553,7 +561,7 @@ export class BackroomsEngine {
     this.camera.rotation.set(
       this.pitch,
       this.yaw,
-      this.settings.reducedMotion
+      this.settings.reducedMotion || !grounded
         ? 0
         : Math.sin(this.distance * 3.35) *
             Math.min(moved / Math.max(dt, 0.001), 1) *
