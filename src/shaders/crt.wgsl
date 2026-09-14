@@ -6,6 +6,13 @@ struct CrtParams {
 // Output maps are applied by the browser compositor to the live HTML surface.
 // This pass never reads or captures pixels from the cross-origin website.
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  if (params.mode > 1.5) {
+    // A subtle 500 x 375 signal: pairs of source pixels share one sample.
+    // Only the sampling map is stored; the browser composites the live page.
+    let pixel = uv * vec2f(1000.0, 750.0);
+    let samplePixel = (floor(pixel / 2.0) + 0.5) * 2.0;
+    return vec4f(0.5 + (samplePixel - pixel) / 2.0, 0.5, 1.0);
+  }
   let p = uv - 0.5;
   let radius = dot(p, p);
   // Maximum displacement is seven CSS pixels on a 1000 x 750 screen.
