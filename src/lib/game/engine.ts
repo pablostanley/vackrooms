@@ -12,13 +12,11 @@ import { EntityModel } from "./entity-model";
 import { Stalker } from "./stalker";
 import { ComputerScreens } from "./computer-screens";
 import { computerFocus, type ComputerStation } from "./computers";
+import { ShadowCache } from "./shadow-cache";
+import { connectedGamepads, GamepadInput, PAD, type GamepadFrame } from "./gamepad";
+import type { GameSettings } from "./settings";
 
-export interface GameSettings {
-  volume: number;
-  sensitivity: number;
-  tape: number;
-  reducedMotion: boolean;
-}
+export type { GameSettings } from "./settings";
 export interface GameStats {
   seconds: number;
   distance: number;
@@ -30,10 +28,15 @@ export interface GameStats {
   signal: number;
   flashlight: boolean;
   backend: string;
+  gamepad: boolean;
 }
 interface Callbacks {
   ready: (backend: string) => void;
+  play: () => void;
   pause: () => void;
+  settings: () => void;
+  mute: () => void;
+  gamepadMenu: (input: GamepadFrame) => boolean;
   stats: (stats: GameStats) => void;
   message: (text: string) => void;
   error: (text: string) => void;
@@ -58,6 +61,9 @@ export class BackroomsEngine {
   private chunks = new Map<string, ChunkData>();
   private sections = new Map<string, Section>();
   private lights: THREE.SpotLight[] = [];
+  private shadows: ShadowCache;
+  private streamedX = NaN;
+  private streamedZ = NaN;
   private audio: BackroomsAudio;
   private audioForward = new THREE.Vector3();
   private audioUp = new THREE.Vector3();
@@ -98,6 +104,11 @@ export class BackroomsEngine {
   private lastChange = 0;
   private drag: { x: number; y: number; id: number } | null = null;
   private touchMove = { x: 0, y: 0 };
+  private gamepad = new GamepadInput();
+  private gamepadConnected = false;
+  private padMove = { x: 0, y: 0 };
+  private padRun = false;
+  private padInteract = false;
   private mutation = 0;
   private settings: GameSettings;
   private listeners = new AbortController();
@@ -132,6 +143,7 @@ export class BackroomsEngine {
       this.scene.add(light, light.target);
       this.lights.push(light);
     }
+    this.shadows = new ShadowCache(this.lights);
     this.scene.add(this.flashlight, this.flashlight.target, this.entity);
     this.camera.rotation.order = "YXZ";
     this.stream();
@@ -182,7 +194,7 @@ export class BackroomsEngine {
       this.camera.rotation.set(this.pitch, this.yaw, 0);
       renderer.render(0, this.settings.tape, 0);
       this.callbacks.ready(renderer.backend);
-      this.frameId = requestAnimationFrame(this.tick);
+      if (!document.hidden) this.frameId = requestAnimationFrame(this.tick);
     } catch (error) {
       console.error(error);
       if (this.alive)
@@ -275,7 +287,14 @@ export class BackroomsEngine {
     document.addEventListener(
       "visibilitychange",
       () => {
-        if (document.hidden) this.pause();
+        if (document.hidden) {
+          this.pause();
+          cancelAnimationFrame(this.frameId);
+          this.frameId = 0;
+          this.lastTime = 0;
+        } else if (this.alive && this.renderer && !this.frameId) {
+          this.frameId = requestAnimationFrame(this.tick);
+        }
       },
       { signal },
     );
@@ -355,13 +374,15 @@ export class BackroomsEngine {
       // The same drag controls work when pointer lock is unavailable.
     }
   }
-  start() {
+  start(lock = true) {
     if (!this.renderer || !this.alive) return;
     this.active = true;
+    this.lastTime = 0;
     this.tapeBurst = 0.65;
     if (this.controls) this.controls.enabled = true;
     this.hasStarted = true;
-    this.requestLock();
+    if (lock) this.requestLock();
+    this.callbacks.play();
     void this.audio
       .start()
       .catch(() =>
@@ -371,6 +392,10 @@ export class BackroomsEngine {
       );
   }
   pause() {
+    this.gamepad.suspend();
+    this.padMove = { x: 0, y: 0 };
+    this.padRun = false;
+    this.padInteract = false;
     if (!this.active) return;
     this.active = false;
     if (this.focusedComputer) this.leaveComputer(false);
@@ -385,7 +410,7 @@ export class BackroomsEngine {
       document.exitPointerLock();
     this.callbacks.pause();
   }
-  useComputer() {
+  useComputer(fullscreen = true) {
     const station = this.computerScreens?.nearest;
     if (!this.active || this.focusedComputer || !station) return;
     this.focusedComputer = station;
@@ -400,6 +425,7 @@ export class BackroomsEngine {
     this.touchMove = { x: 0, y: 0 };
     this.drag = null;
     this.clipProgress = 0;
+    this.gamepad.suspend();
     this.nearestPortal = null;
     if (this.controls) this.controls.enabled = false;
     if (document.pointerLockElement === this.renderer?.canvas)
@@ -408,7 +434,7 @@ export class BackroomsEngine {
     // is observable by the parent even after a user clicks or types in the site.
     this.computerHadFullscreen = !!document.fullscreenElement;
     const surface = this.container.parentElement;
-    if (!document.fullscreenElement && surface?.requestFullscreen) {
+    if (fullscreen && !document.fullscreenElement && surface?.requestFullscreen) {
       this.ownsComputerFullscreen = true;
       void surface
         .requestFullscreen({ navigationUI: "hide" })
@@ -471,9 +497,61 @@ export class BackroomsEngine {
   toggleFlashlight() {
     this.flashOn = !this.flashOn;
   }
+  private pollGamepad(dt: number) {
+    const input = this.gamepad.read(connectedGamepads(), !document.hidden && document.hasFocus());
+    this.gamepadConnected = input.connected;
+    this.padMove = { x: 0, y: 0 };
+    this.padRun = false;
+    this.padInteract = false;
+    if (input.disconnected) {
+      this.pause();
+      this.callbacks.message("Controller disconnected. Recording paused.");
+      return;
+    }
+    if (this.callbacks.gamepadMenu(input)) return;
+    const pressed = input.pressed;
+    if (pressed.has(PAD.settings)) {
+      this.callbacks.settings();
+      return;
+    }
+    if (pressed.has(PAD.menu)) {
+      if (this.active) this.pause();
+      else this.start(false);
+      return;
+    }
+    if (pressed.has(PAD.mute)) this.callbacks.mute();
+    if (this.focusedComputer) {
+      if (pressed.has(PAD.back)) {
+        this.leaveComputer(false);
+        this.gamepad.suspend();
+      }
+      return;
+    }
+    if (pressed.has(PAD.back)) {
+      this.pause();
+      return;
+    }
+    if (!this.active) {
+      if (pressed.has(PAD.interact)) this.start(false);
+      return;
+    }
+    if (pressed.has(PAD.light)) this.toggleFlashlight();
+    if (pressed.has(PAD.interact) && this.computerScreens?.nearest) {
+      this.useComputer(false);
+      return;
+    }
+    this.padMove = input.move;
+    this.padRun = input.held.has(PAD.run) || input.held.has(PAD.sprint);
+    this.padInteract = input.held.has(PAD.interact);
+    // Match mouse sensitivity, with stick turning measured per second.
+    this.look(input.look.x * 1100 * dt, input.look.y * 850 * dt);
+  }
   private stream() {
     const cx = Math.floor(this.position.x / SPAN),
       cz = Math.floor(this.position.z / SPAN);
+    if (cx === this.streamedX && cz === this.streamedZ) return;
+    this.streamedX = cx;
+    this.streamedZ = cz;
     for (let z = cz - 1; z <= cz + 1; z++)
       for (let x = cx - 1; x <= cx + 1; x++) {
         const key = `${x},${z}`;
@@ -495,6 +573,9 @@ export class BackroomsEngine {
         this.navigation.removeSection(key);
         this.chunks.delete(key);
       }
+    this.shadows.invalidate();
+    this.lastLights = -10;
+    this.lastScreens = -1;
   }
   private prepareWater(section: Section) {
     if (this.renderer)
@@ -512,35 +593,33 @@ export class BackroomsEngine {
     this.lights.forEach((light, i) => {
       const p = candidates[i];
       light.visible = !!p;
-      if (p) {
-        light.position.copy(p);
-        light.target.position.set(p.x, 0, p.z);
-      }
+      if (p) this.shadows.place(light, p);
     });
   }
   private walk(dt: number) {
     let x =
       (this.keys.has("KeyD") || this.keys.has("ArrowRight") ? 1 : 0) -
       (this.keys.has("KeyA") || this.keys.has("ArrowLeft") ? 1 : 0) +
-      this.touchMove.x;
+      this.touchMove.x + this.padMove.x;
     let z =
       (this.keys.has("KeyS") || this.keys.has("ArrowDown") ? 1 : 0) -
       (this.keys.has("KeyW") || this.keys.has("ArrowUp") ? 1 : 0) +
-      this.touchMove.y;
+      this.touchMove.y + this.padMove.y;
     const length = Math.hypot(x, z);
     if (length > 1) {
       x /= length;
       z /= length;
     }
-    const running = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    const running = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || this.padRun;
     const speed = running ? 4.1 : 2.35;
     const dx = (x * Math.cos(this.yaw) + z * Math.sin(this.yaw)) * speed * dt,
       dz = (-x * Math.sin(this.yaw) + z * Math.cos(this.yaw)) * speed * dt;
-    const previous = this.position.clone();
+    const previousX = this.position.x,
+      previousZ = this.position.z;
     this.motor?.move(dx, dz, dt, this.position);
     const moved = Math.hypot(
-      this.position.x - previous.x,
-      this.position.z - previous.z,
+      this.position.x - previousX,
+      this.position.z - previousZ,
     );
     this.playerSpeed = moved / Math.max(dt, 0.001);
     this.distance += moved;
@@ -595,7 +674,7 @@ export class BackroomsEngine {
             ? 0
             : Math.sin(this.elapsed * 13) * 0.016);
       }
-    if (this.nearestPortal && this.keys.has("KeyE")) {
+    if (this.nearestPortal && (this.keys.has("KeyE") || this.padInteract)) {
       this.clipProgress += dt / 1.15;
       this.stress = Math.max(this.stress, this.clipProgress * 0.7);
       if (this.clipProgress >= 1) this.descend();
@@ -607,10 +686,13 @@ export class BackroomsEngine {
     this.tapeBurst = 1;
     this.clipProgress = 0;
     this.keys.delete("KeyE");
+    this.gamepad.suspend();
+    this.padInteract = false;
     this.audio.resetSpace(this.seconds);
     for (const section of this.sections.values()) section.dispose();
     this.sections.clear();
     this.chunks.clear();
+    this.streamedX = this.streamedZ = NaN;
     this.navigation.clear();
     this.motor?.clearSections();
     this.position.set(CELL * 2.5, 1.66, CELL * 4.5);
@@ -665,6 +747,8 @@ export class BackroomsEngine {
       this.navigation.addSection(key, revised, section.colliders);
       this.motor?.addSection(key, revised, section.colliders);
       this.scene.add(section.group);
+      this.shadows.invalidate();
+      this.lastScreens = -1;
       this.lastLights = -10;
       return;
     }
@@ -710,10 +794,21 @@ export class BackroomsEngine {
   }
   private tick = (now: number) => {
     if (!this.alive) return;
+    this.frameId = 0;
+    if (document.hidden) {
+      this.lastTime = 0;
+      return;
+    }
+    // Standby keeps the VHS preview at tape cadence, without a full-rate scene.
+    if (!this.active && this.lastTime && now - this.lastTime < 1000 / 30 - 1) {
+      this.frameId = requestAnimationFrame(this.tick);
+      return;
+    }
     const dt = Math.min((now - (this.lastTime || now)) / 1000, 0.045);
     this.lastTime = now;
     this.elapsed += dt;
     try {
+      this.pollGamepad(dt);
       if (this.active && this.focusedComputer) {
         const view = computerFocus(this.focusedComputer, this.camera.aspect);
         const blend = this.settings.reducedMotion ? 1 : 1 - Math.exp(-dt * 14);
@@ -771,12 +866,15 @@ export class BackroomsEngine {
           24 * heightCompensation * (1 + jitter) * (i < 8 ? 1 : 0.6);
       }
       this.flashlight.position.copy(this.camera.position);
-      const target = new THREE.Vector3(0, 0, -1)
+      this.flashlight.target.position
+        .set(0, 0, -1)
         .applyQuaternion(this.camera.quaternion)
         .multiplyScalar(8)
         .add(this.camera.position);
-      this.flashlight.target.position.copy(target);
       this.flashlight.intensity = this.flashOn ? 22 : 0;
+      this.shadows.update(
+        this.active && !this.focusedComputer && this.entity.visible,
+      );
       this.stress = Math.max(0, this.stress - dt * 0.4);
       const tapeDamage = this.settings.reducedMotion
         ? Math.min(0.18, this.settings.tape)
@@ -827,6 +925,7 @@ export class BackroomsEngine {
           ),
           flashlight: this.flashOn,
           backend: this.renderer?.backend ?? "",
+          gamepad: this.gamepadConnected,
         });
       }
       this.frameId = requestAnimationFrame(this.tick);

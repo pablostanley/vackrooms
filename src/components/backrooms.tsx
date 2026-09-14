@@ -2,15 +2,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   BackroomsEngine,
-  GameSettings,
   GameStats,
 } from "@/lib/game/engine";
-const defaults: GameSettings = {
-  volume: 0.65,
-  sensitivity: 1,
-  tape: 0.65,
-  reducedMotion: false,
-};
+import { defaultSettings, loadSettings, saveSettings, setVolume, toggleMute, type SavedSettings } from "@/lib/game/settings";
+import { PAD, type GamepadFrame } from "@/lib/game/gamepad";
 const initialStats: GameStats = {
   seconds: 0,
   distance: 0,
@@ -22,6 +17,7 @@ const initialStats: GameStats = {
   signal: 98,
   flashlight: false,
   backend: "",
+  gamepad: false,
 };
 function timecode(seconds: number) {
   return [
@@ -41,10 +37,11 @@ export default function Backrooms() {
   const [ready, setReady] = useState(false),
     [started, setStarted] = useState(false),
     [playing, setPlaying] = useState(false);
-  const [settings, setSettings] = useState(defaults),
+  const [savedSettings, setSettings] = useState<SavedSettings | null>(null),
     [stats, setStats] = useState(initialStats),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  const settings = savedSettings ?? defaultSettings;
   const [seed, setSeed] = useState(0),
     [copied, setCopied] = useState(false);
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
@@ -62,13 +59,10 @@ export default function Backrooms() {
       provided && /^\d{1,9}$/.test(provided)
         ? Number(provided)
         : 100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000);
-    const initial = {
-      ...defaults,
-      reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
-    };
     void import("@/lib/game/engine")
       .then(({ BackroomsEngine }) => {
         if (disposed || !container.current) return;
+        const initial = loadSettings(matchMedia("(prefers-reduced-motion: reduce)").matches);
         setSeed(tape);
         setSettings(initial);
         instance = new BackroomsEngine(
@@ -76,7 +70,23 @@ export default function Backrooms() {
           tape,
           {
             ready: () => setReady(true),
+            play: () => {
+              setPlaying(true);
+              setStarted(true);
+            },
             pause: () => setPlaying(false),
+            settings: () => {
+              instance?.pause();
+              dialog.current?.showModal();
+            },
+            mute: () => setSettings((s) => toggleMute(s ?? initial)),
+            gamepadMenu: (input) => {
+              if (!dialog.current?.open) return false;
+              navigateSettings(dialog.current, input, (update) =>
+                setSettings((s) => update(s ?? initial)),
+              );
+              return true;
+            },
             stats: setStats,
             message: announce,
             error: setError,
@@ -101,12 +111,12 @@ export default function Backrooms() {
     };
   }, [announce]);
   useEffect(() => {
-    engine.current?.updateSettings(settings);
-  }, [settings]);
+    if (!savedSettings) return;
+    engine.current?.updateSettings(savedSettings);
+    saveSettings(savedSettings);
+  }, [savedSettings]);
   function start() {
     engine.current?.start();
-    setPlaying(true);
-    setStarted(true);
   }
   function openSettings() {
     engine.current?.pause();
@@ -195,8 +205,9 @@ export default function Backrooms() {
             </button>
             <button
               onClick={() =>
-                setSettings((s) => ({ ...s, volume: s.volume ? 0 : 0.65 }))
+                setSettings((s) => toggleMute(s ?? defaultSettings))
               }
+              disabled={!savedSettings}
               aria-label={settings.volume ? "Mute sound" : "Unmute sound"}
               aria-pressed={settings.volume > 0}
               title={settings.volume ? "Mute sound" : "Unmute sound"}
@@ -216,6 +227,7 @@ export default function Backrooms() {
             <button
               className="cassette-button"
               onClick={openSettings}
+              disabled={!savedSettings}
               aria-label="Open settings"
               title="Settings"
             >
@@ -244,16 +256,22 @@ export default function Backrooms() {
             <span aria-hidden="true">{started ? "▶" : "●"}</span>
             {started ? "RESUME" : "RECORD"}
           </button>
-          <p className="desktop-hint">
-            WASD WALK &nbsp; MOUSE LOOK &nbsp; SHIFT RUN
-            <br />
-            SPACE JUMP &nbsp; SPACE AGAIN BIG JUMP
-          </p>
-          <p className="mobile-hint">
-            LEFT THUMB TO MOVE · SWIPE TO LOOK
-            <br />
-            TAP JUMP · TAP AGAIN FOR A BIG JUMP
-          </p>
+          {stats.gamepad ? (
+            <p>LEFT STICK WALK · RIGHT STICK LOOK · A/× RECORD</p>
+          ) : (
+            <>
+              <p className="desktop-hint">
+                WASD WALK &nbsp; MOUSE LOOK &nbsp; SHIFT RUN
+                <br />
+                SPACE JUMP &nbsp; SPACE AGAIN BIG JUMP
+              </p>
+              <p className="mobile-hint">
+                LEFT THUMB TO MOVE · SWIPE TO LOOK
+                <br />
+                TAP JUMP · TAP AGAIN FOR A BIG JUMP
+              </p>
+            </>
+          )}
         </div>
       )}
       {error && (
@@ -272,13 +290,13 @@ export default function Backrooms() {
               className="portal-hint computer-hint"
               onClick={() => engine.current?.useComputer()}
             >
-              <kbd>E</kbd> · USE COMPUTER
+              <kbd>{stats.gamepad ? "A/×" : "E"}</kbd> · USE COMPUTER
             </button>
           )}
           {stats.nearPortal && !stats.nearComputer && (
             <div className="portal-hint">
-              <span className="desktop-hint">
-                HOLD <kbd>E</kbd> · NOCLIP
+              <span className={stats.gamepad ? undefined : "desktop-hint"}>
+                HOLD <kbd>{stats.gamepad ? "A/×" : "E"}</kbd> · NOCLIP
               </span>
               <span className="clip-progress">
                 <i style={{ width: `${stats.noclipProgress * 100}%` }} />
@@ -323,13 +341,14 @@ export default function Backrooms() {
           </span>
           <input
             aria-label="Sound volume"
+            data-setting="volume"
             type="range"
             min="0"
             max="1"
             step=".01"
             value={settings.volume}
             onChange={(e) =>
-              setSettings({ ...settings, volume: Number(e.target.value) })
+              setSettings(setVolume(settings, Number(e.target.value)))
             }
           />
         </label>
@@ -339,6 +358,7 @@ export default function Backrooms() {
           </span>
           <input
             aria-label="Look sensitivity"
+            data-setting="sensitivity"
             type="range"
             min=".3"
             max="2.5"
@@ -355,6 +375,7 @@ export default function Backrooms() {
           </span>
           <input
             aria-label="Tape damage"
+            data-setting="tape"
             type="range"
             min="0"
             max="1"
@@ -379,15 +400,15 @@ export default function Backrooms() {
         </label>
         <dl className="controls-list">
           <div>
-            <dt>WASD / ARROWS</dt>
+            <dt>{stats.gamepad ? "LEFT STICK" : "WASD / ARROWS"}</dt>
             <dd>WALK</dd>
           </div>
           <div>
-            <dt>MOUSE / DRAG</dt>
+            <dt>{stats.gamepad ? "RIGHT STICK" : "MOUSE / DRAG"}</dt>
             <dd>LOOK</dd>
           </div>
           <div>
-            <dt>SHIFT</dt>
+            <dt>{stats.gamepad ? "L3 / RT / R2" : "SHIFT"}</dt>
             <dd>RUN</dd>
           </div>
           <div>
@@ -399,22 +420,34 @@ export default function Backrooms() {
             <dd>BIG JUMP WHILE AIRBORNE</dd>
           </div>
           <div>
-            <dt>F</dt>
+            <dt>{stats.gamepad ? "Y / △" : "F"}</dt>
             <dd>LIGHT</dd>
           </div>
           <div>
-            <dt>E</dt>
+            <dt>{stats.gamepad ? "A / ×" : "E"}</dt>
             <dd>USE A NEARBY COMPUTER</dd>
           </div>
           <div>
-            <dt>HOLD E</dt>
+            <dt>{stats.gamepad ? "HOLD A / ×" : "HOLD E"}</dt>
             <dd>NOCLIP AT UNSTABLE WALLS</dd>
           </div>
           <div>
-            <dt>ESC</dt>
+            <dt>{stats.gamepad ? "B / ○" : "ESC"}</dt>
             <dd>LEAVE COMPUTER / PAUSE</dd>
           </div>
+          {stats.gamepad && (
+            <>
+              <div><dt>MENU / OPTIONS</dt><dd>RECORD / PAUSE</dd></div>
+              <div><dt>VIEW / SHARE</dt><dd>SETTINGS</dd></div>
+              <div><dt>X / □</dt><dd>MUTE</dd></div>
+              <div><dt>D-PAD · A / ×</dt><dd>ADJUST · SELECT</dd></div>
+            </>
+          )}
         </dl>
+        <p className="settings-note">
+          Preferences stay in this browser on this device.
+          {stats.gamepad ? " Click Record once to enable sound. Use mouse or touch inside computer websites." : " Press a button on a connected controller to use it."}
+        </p>
         <div className="settings-tape">
           <span>TAPE {seed}</span>
           <button onClick={copyTape}>
@@ -430,6 +463,37 @@ export default function Backrooms() {
       </dialog>
     </main>
   );
+}
+function navigateSettings(
+  dialog: HTMLDialogElement,
+  input: GamepadFrame,
+  update: (change: (settings: SavedSettings) => SavedSettings) => void,
+) {
+  const pressed = input.pressed;
+  if (!pressed.size) return;
+  if (pressed.has(PAD.back) || pressed.has(PAD.menu) || pressed.has(PAD.settings)) {
+    dialog.close();
+    return;
+  }
+  const controls = [...dialog.querySelectorAll<HTMLInputElement | HTMLButtonElement>("button:not(:disabled), input:not(:disabled)")];
+  const current = controls.findIndex((control) => control === document.activeElement);
+  const direction = Number(pressed.has(PAD.down)) - Number(pressed.has(PAD.up));
+  if (direction && controls.length) {
+    controls[(current + direction + controls.length) % controls.length].focus();
+    return;
+  }
+  const focused = controls[current];
+  if (!focused) return;
+  if (focused instanceof HTMLInputElement && focused.type === "range") {
+    const delta = Number(pressed.has(PAD.right)) - Number(pressed.has(PAD.left));
+    const key = focused.dataset.setting;
+    if (!delta || (key !== "volume" && key !== "sensitivity" && key !== "tape")) return;
+    const min = Number(focused.min), max = Number(focused.max), step = Number(focused.step);
+    update((settings) => {
+      const value = Math.max(min, Math.min(max, Number((settings[key] + delta * step).toFixed(2))));
+      return key === "volume" ? setVolume(settings, value) : { ...settings, [key]: value };
+    });
+  } else if (pressed.has(PAD.interact)) focused.click();
 }
 function TouchControls({
   engine,

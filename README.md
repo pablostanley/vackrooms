@@ -35,6 +35,25 @@ The motor allows 100ms of grace after leaving an edge and buffers presses up to 
 
 References: [Minecraft's Space / forward-and-jump controls](https://edusupport.minecraft.net/hc/en-us/articles/360047116832-Minecraft-keyboard-and-mouse-controls), [Jumping Flash's second airborne press](https://secure.cdn.us.playstation.com/manuals/classic/games/jumping-flash-manual-en.pdf), and [Fortnite's forward-and-jump approach to ledges](https://dev.epicgames.com/documentation/en-us/fortnite/mantle). These inform the controls; the heights and timing forgiveness are tuned for this game's furniture and pool depth. This implements physical jumping onto surfaces, without a separate grab-and-pull mantle animation.
 
+Sound volume, look sensitivity, tape damage, and steady camera are saved automatically in this browser on this device, including across tapes. Mute remembers the previous nonzero volume, even after a muted reload or setting the slider to zero. System reduced motion supplies the initial comfort default; a saved choice takes precedence. These preferences never leave the browser. If local storage is unavailable, controls still work for the current session.
+
+Standard-mapped Xbox and PlayStation-style controllers are supported. Press a controller button to make it available to the browser, then release the controls before playing. Click Record once to enable browser audio.
+
+| Gamepad input | Action |
+| --- | --- |
+| Left / right stick | Walk / look |
+| Hold L3 or RT / R2 | Run |
+| A / × | Record, use computer, or hold to noclip |
+| Y / △ | Flashlight |
+| X / □ | Mute / restore volume |
+| B / ○ | Leave computer / pause / close settings |
+| Menu / Options | Record / pause / close settings |
+| View / Share | Open / close settings |
+| D-pad up / down | Focus a settings control |
+| D-pad left / right; A / × | Adjust a slider; activate a button or checkbox |
+
+Stick input has a radial dead zone and uses the saved look sensitivity. Disconnecting pauses recording; reconnecting or returning from another tab requires neutral controls before input resumes. Computer websites still use mouse, keyboard, or touch. The camcorder row keeps its original four controls and fixed dimensions.
+
 ## How it works
 
 - `src/lib/game/maze.ts`: seeded, connected maze sections. Shared boundary hashes keep gates aligned across streaming and regeneration. A spanning tree guarantees a path through every room; additional openings create nonsensical office spaces and loops.
@@ -45,6 +64,8 @@ References: [Minecraft's Space / forward-and-jump controls](https://edusupport.m
 - `src/lib/game/computer-crt.ts` and `src/shaders/crt.wgsl`: vgpu renders shared static curvature, raster, and glass maps once, then releases its GPU device. Native SVG curves the browser chrome; the glass backdrop reduces the entire live screen to a 216-color web palette with subtle, approximately 500×375 pixel sampling. Scanlines, warm phosphor color, and a soft vignette sit above the reduced signal. No website pixels are captured and no extra per-frame readback is needed. WebGPU failure keeps the palette and existing CSS glass in browsers supporting SVG backdrop filters; other browsers retain the CSS glass.
 - `src/lib/game/furniture-layout.ts`: solid attachment anchors keep every stacked chair leg embedded in the seat below. Arbitrarily rotated wall/ceiling props intersect the architecture, with reserved walking lanes through each room.
 - `src/lib/game/world.ts`: batched architecture, ceiling panels, wallpaper, furniture, faded service areas, and unstable walls. A 3×3 window of sections streams around the player and disposes sections left behind.
+- Static section meshes bake their transforms and bounds once. Computer visibility reuses the section's opaque meshes, checks all five glass samples, and stops at the first obstruction or the two-screen limit.
+- `src/lib/game/shadow-cache.ts`: fluorescent shadow maps refresh when fixtures move, sections change, or the creature animates. Flickering light intensity reuses the depth maps, including one final refresh to clear a departing creature. Gameplay renders at the display rate, standby at 30 fps, and hidden tabs stop rendering until visible again. Section streaming runs only when the player crosses a section boundary.
 - `src/lib/game/engine.ts`: Three.js PointerLockControls, camera feedback, streaming, unseen room changes, noclipping, and the stalking encounter controller.
 - `src/lib/game/stalker.ts`: fixed-step, tape-seeded isolation, stalking, pursuit, search, and retreat. The first opportunity comes after 75–135 active seconds; later encounters have 105–210 seconds of isolation and skipped opportunities. Early eye contact freezes the creature for its 18–32 second stalking grace period, after which it can walk under your gaze. Running draws attention and faster pursuit; losing sight and going quiet sends it to the last perceived position. Some encounters remain sightings. Spawns and departures stay outside visible sightlines.
 - `src/lib/game/entity-navigation.ts`: bounded A* routes over resident walls, furniture bounds, and dry pool decks, with body clearance and cached grid samples invalidated by streaming or mutations. Visibility tests head, chest, shoulders, and legs against the actual camera frustum and height-aware wall/furniture segments.
