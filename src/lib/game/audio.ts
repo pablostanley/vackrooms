@@ -10,6 +10,7 @@ import {
   type SoundPosition,
 } from "./acoustics";
 import { hash, random, type ChunkData } from "./maze";
+import { ComputerDialup } from "./computer-dialup";
 
 interface SpatialVoice {
   position: SoundPosition;
@@ -36,6 +37,7 @@ export class BackroomsAudio {
   private mix: DynamicsCompressorNode | null = null;
   private reflections: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private dialup: ComputerDialup | null = null;
   private rooms = new Map<RoomSound, RoomBus>();
   private fixtures = new Map<string, FixtureVoice>();
   private transients = new Set<SpatialVoice>();
@@ -159,6 +161,7 @@ export class BackroomsAudio {
     this.volume = Number.isFinite(volume)
       ? Math.max(0, Math.min(1, volume))
       : 0;
+    if (!this.volume) this.stopComputer();
     if (this.ctx && this.master)
       this.master.gain.setTargetAtTime(
         this.active ? this.volume * 0.7 : 0,
@@ -169,6 +172,7 @@ export class BackroomsAudio {
 
   pause() {
     this.active = false;
+    this.stopComputer();
     this.pending = null;
     this.setVolume(this.volume);
     for (const voice of this.transients) this.release(voice);
@@ -183,6 +187,7 @@ export class BackroomsAudio {
 
   /** Called after a tape descent so no source or echo is carried to the new floor. */
   resetSpace(time: number) {
+    this.stopComputer();
     this.entityWasPresent = false;
     this.pending = null;
     this.schedule.defer(time);
@@ -199,6 +204,16 @@ export class BackroomsAudio {
       bus.convolver.buffer = impulse;
     }
     this.lastSpatialUpdate = -Infinity;
+  }
+
+  playComputer() {
+    if (!this.active || !this.ctx || !this.mix || !this.volume) return;
+    this.dialup ??= new ComputerDialup(this.ctx, this.mix);
+    this.dialup.play();
+  }
+
+  stopComputer() {
+    this.dialup?.stop();
   }
 
   update(
@@ -516,6 +531,8 @@ export class BackroomsAudio {
   dispose() {
     this.disposed = true;
     this.active = false;
+    this.dialup?.dispose();
+    this.dialup = null;
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
     this.resetSpace(0);
     for (const source of this.loops) {

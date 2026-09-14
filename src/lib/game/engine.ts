@@ -371,6 +371,7 @@ export class BackroomsEngine {
     const station = this.computerScreens?.nearest;
     if (!this.active || this.focusedComputer || !station) return;
     this.focusedComputer = station;
+    this.audio.playComputer();
     this.returnView = {
       position: this.camera.position.clone(),
       quaternion: this.camera.quaternion.clone(),
@@ -414,6 +415,7 @@ export class BackroomsEngine {
   leaveComputer(lock = true) {
     if (!this.focusedComputer) return;
     this.focusedComputer = null;
+    this.audio.stopComputer();
     const exitFullscreen = this.ownsComputerFullscreen;
     this.ownsComputerFullscreen = false;
     this.computerHadFullscreen = false;
