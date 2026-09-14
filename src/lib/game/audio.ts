@@ -11,6 +11,7 @@ import {
 } from "./acoustics";
 import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
+import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
 
 interface SpatialVoice {
   position: SoundPosition;
@@ -38,6 +39,8 @@ export class BackroomsAudio {
   private reflections: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private dialup: ComputerDialup | null = null;
+  private interfaceAudio: InterfaceAudio | null = null;
+  private interfaceLevel: GainNode | null = null;
   private rooms = new Map<RoomSound, RoomBus>();
   private fixtures = new Map<string, FixtureVoice>();
   private transients = new Set<SpatialVoice>();
@@ -85,6 +88,13 @@ export class BackroomsAudio {
     this.mix.knee.value = 12;
     this.mix.ratio.value = 4;
     this.mix.connect(this.master);
+    // Menus remain audible while the room ambience is paused.
+    this.interfaceLevel = ctx.createGain();
+    this.interfaceLevel.gain.value = this.volume * 0.7;
+    this.interfaceLevel.connect(ctx.destination);
+    this.interfaceAudio = new InterfaceAudio(ctx, this.interfaceLevel);
+    this.dialup = new ComputerDialup(ctx, this.mix);
+    void this.dialup.preload();
     this.reflections = ctx.createGain();
     for (const name of Object.keys(ROOM_SOUNDS) as RoomSound[]) {
       const profile = ROOM_SOUNDS[name];
@@ -162,6 +172,12 @@ export class BackroomsAudio {
       ? Math.max(0, Math.min(1, volume))
       : 0;
     if (!this.volume) this.stopComputer();
+    if (this.ctx && this.interfaceLevel)
+      this.interfaceLevel.gain.setTargetAtTime(
+        this.volume * 0.7,
+        this.ctx.currentTime,
+        0.005,
+      );
     if (this.ctx && this.master)
       this.master.gain.setTargetAtTime(
         this.active ? this.volume * 0.7 : 0,
@@ -176,13 +192,32 @@ export class BackroomsAudio {
     this.pending = null;
     this.setVolume(this.volume);
     for (const voice of this.transients) this.release(voice);
+    this.suspendWhenIdle();
+  }
+
+  private suspendWhenIdle() {
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
-    if (this.ctx && !this.disposed)
+    this.suspendTimer = null;
+    if (!this.active && this.ctx && !this.disposed)
       this.suspendTimer = setTimeout(() => {
         this.suspendTimer = null;
         if (!this.active && !this.disposed)
           void this.ctx?.suspend().catch(() => {});
       }, 400);
+  }
+
+  playInterface(kind: InterfaceSound = "click") {
+    if (this.disposed || !this.volume) return;
+    if (!this.ctx) this.initialize();
+    if (this.suspendTimer) clearTimeout(this.suspendTimer);
+    this.suspendTimer = null;
+    this.interfaceAudio!.play(kind);
+    void this.ctx!.resume().then(() => this.suspendWhenIdle()).catch(() => {});
+  }
+
+  powerComputer(powered: boolean) {
+    if (!powered) this.stopComputer();
+    this.playInterface(powered ? "power-on" : "power-off");
   }
 
   /** Called after a tape descent so no source or echo is carried to the new floor. */
@@ -209,7 +244,7 @@ export class BackroomsAudio {
   playComputer() {
     if (!this.active || !this.ctx || !this.mix || !this.volume) return;
     this.dialup ??= new ComputerDialup(this.ctx, this.mix);
-    this.dialup.play();
+    void this.dialup.play();
   }
 
   stopComputer() {
@@ -533,6 +568,8 @@ export class BackroomsAudio {
     this.active = false;
     this.dialup?.dispose();
     this.dialup = null;
+    this.interfaceAudio?.dispose();
+    this.interfaceAudio = null;
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
     this.resetSpace(0);
     for (const source of this.loops) {
