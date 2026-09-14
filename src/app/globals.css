@@ -617,13 +617,17 @@ button:disabled {
   pointer-events: auto;
 }
 .crt-browser {
+  --crt-radius-x: 22px;
+  --crt-radius-y: 18px;
+  --crt-edge: 5px;
   width: 1000px;
   height: 750px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 22px / 18px;
-  border: 5px solid #292e22;
+  border-radius: var(--crt-radius-x) / var(--crt-radius-y);
+  border: var(--crt-edge) solid #292e22;
+  clip-path: inset(0 round var(--crt-radius-x) / var(--crt-radius-y));
   background: #c4c2ad;
   color: #24271f;
   font-family: var(--font-geist), sans-serif;
@@ -729,7 +733,9 @@ button:disabled {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  border-radius: inherit;
+  /* The overlay fills the inside of the border, so its curve is smaller. */
+  border-radius: calc(var(--crt-radius-x) - var(--crt-edge)) /
+    calc(var(--crt-radius-y) - var(--crt-edge));
   box-shadow:
     inset 0 0 20px #161d2140,
     inset 0 0 4px 2px #11180f80;
