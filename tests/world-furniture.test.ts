@@ -14,6 +14,7 @@ import {
 } from "../src/lib/game/maze";
 import { headlessMaterials } from "./helpers/materials";
 import type { FurnitureKind } from "../src/lib/game/furniture-models";
+import { isComputerKind } from "../src/lib/game/computer-models";
 
 interface Placement {
   kind: FurnitureKind;
@@ -75,7 +76,7 @@ test("origin rooms vary a small furniture selection across tape seeds", () => {
           const present = new Set(
             placements(section)
               .map((placement) => placement.kind)
-              .filter((kind) => kind !== "chair"),
+              .filter((kind) => kind !== "chair" && !isComputerKind(kind)),
           );
           assert.ok(
             present.size >= 2 && present.size <= 3,
