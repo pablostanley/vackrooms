@@ -160,8 +160,10 @@ export class BackroomsEngine {
         return;
       }
       this.motor = motor;
-      for (const [key, data] of this.chunks)
-        motor.addSection(key, data, this.sections.get(key)!.colliders);
+      for (const [key, data] of this.chunks) {
+        const section = this.sections.get(key)!;
+        motor.addSection(key, data, section.colliders, section.shapedColliders);
+      }
       const renderer = await createRenderer(this.scene, this.camera);
       if (!this.alive) {
         renderer.dispose();
@@ -562,7 +564,7 @@ export class BackroomsEngine {
         this.prepareWater(section);
         this.sections.set(key, section);
         this.navigation.addSection(key, data, section.colliders);
-        this.motor?.addSection(key, data, section.colliders);
+        this.motor?.addSection(key, data, section.colliders, section.shapedColliders);
         this.scene.add(section.group);
       }
     for (const [key, data] of this.chunks)
@@ -745,7 +747,7 @@ export class BackroomsEngine {
       this.prepareWater(section);
       this.sections.set(key, section);
       this.navigation.addSection(key, revised, section.colliders);
-      this.motor?.addSection(key, revised, section.colliders);
+      this.motor?.addSection(key, revised, section.colliders, section.shapedColliders);
       this.scene.add(section.group);
       this.shadows.invalidate();
       this.lastScreens = -1;

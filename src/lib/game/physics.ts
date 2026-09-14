@@ -22,6 +22,12 @@ const DOUBLE_JUMP_SPEED = 8.8;
 const COYOTE_TIME = 0.1;
 const JUMP_BUFFER = 0.12;
 
+/** A navigation bound whose player collision follows separate convex parts. */
+export interface ShapedObstacle {
+  bounds: Box3;
+  parts: Float32Array[];
+}
+
 /** Rapier owns capsule sweeps, wall sliding, small steps, and floor contact. */
 export class CharacterMotor {
   private world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -67,10 +73,15 @@ export class CharacterMotor {
     this.controller.enableAutostep(0.28, 0.25, false);
     this.controller.enableSnapToGround(0.3);
     this.controller.setMaxSlopeClimbAngle(Math.PI / 4);
-    this.controller.setMinSlopeSlideAngle(Math.PI / 6);
+    this.controller.setMinSlopeSlideAngle(Math.PI / 4);
     this.controller.setSlideEnabled(true);
   }
-  addSection(key: string, data: ChunkData, obstacles: Box3[]) {
+  addSection(
+    key: string,
+    data: ChunkData,
+    obstacles: Box3[],
+    shapedObstacles: ShapedObstacle[] = [],
+  ) {
     this.removeSection(key);
     const colliders: RAPIER.Collider[] = [],
       ox = data.x * SPAN,
@@ -155,7 +166,9 @@ export class CharacterMotor {
             CELL / 2,
           );
       }
-    for (const b of obstacles)
+    const shapedBounds = new Set(shapedObstacles.map(({ bounds }) => bounds));
+    for (const b of obstacles) {
+      if (shapedBounds.has(b)) continue;
       box(
         (b.min.x + b.max.x) / 2,
         (b.min.y + b.max.y) / 2,
@@ -164,6 +177,13 @@ export class CharacterMotor {
         (b.max.y - b.min.y) / 2,
         (b.max.z - b.min.z) / 2,
       );
+    }
+    for (const obstacle of shapedObstacles)
+      for (const vertices of obstacle.parts) {
+        const shape = RAPIER.ColliderDesc.convexHull(vertices);
+        if (!shape) throw new Error("Invalid convex furniture collider");
+        colliders.push(this.world.createCollider(shape));
+      }
     this.sections.set(key, colliders);
     this.world.step();
   }

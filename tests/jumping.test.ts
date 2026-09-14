@@ -141,7 +141,7 @@ test("the opening chair supports its seat and allows walking off", async () => {
   const position = new Vector3(x - 0.48, 1.66, z - 0.88);
   const motor = await CharacterMotor.create(position);
   try {
-    motor.addSection("0,0", data, section.colliders);
+    motor.addSection("0,0", data, section.colliders, section.shapedColliders);
     for (let i = 0; i < 5; i++) motor.move(0, 0, DT, position);
     motor.jump();
     for (let i = 0; i < 22; i++) motor.move(0.48 / 22, 0.88 / 22, DT, position);
@@ -159,7 +159,7 @@ test("jump onto pool coping, enter the basin, then double jump back to the dry d
   const position = new Vector3(basin.x - 0.8, 1.66, basin.z + basin.length / 2);
   const motor = await CharacterMotor.create(position);
   try {
-    motor.addSection("0,0", data, section.colliders);
+    motor.addSection("0,0", data, section.colliders, section.shapedColliders);
     for (let i = 0; i < 5; i++) motor.move(0, 0, DT, position);
     motor.jump();
     for (let i = 0; i < 22; i++) motor.move(0.8 / 22, 0, DT, position);

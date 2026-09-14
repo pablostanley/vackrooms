@@ -17,6 +17,7 @@ import {
 } from "./maze";
 import { buildLandmark } from "./landmarks";
 import type { Materials } from "./materials";
+import type { ShapedObstacle } from "./physics";
 import {
   computerKinds,
   computerScreen,
@@ -44,6 +45,7 @@ export interface Section {
   lights: THREE.Vector3[];
   portals: Portal[];
   colliders: THREE.Box3[];
+  shapedColliders: ShapedObstacle[];
   water: THREE.Mesh[];
   computers: ComputerStation[];
   occluders: THREE.Mesh[];
@@ -63,6 +65,7 @@ export function buildSection(
     portals: Portal[] = [],
     colliders: THREE.Box3[] = [],
     water: THREE.Mesh[] = [];
+  const shapedColliders: ShapedObstacle[] = [];
   const computers: ComputerStation[] = [];
   const theme = mats.forTheme(data.theme);
   const furnitureRng = random(data.seed + 3403);
@@ -191,17 +194,28 @@ export function buildSection(
     attachment = "floor",
   ) {
     const source = model(kind);
+    const parts: Float32Array[] = [];
     for (const part of source.parts) {
       const geometry = part.geometry
         .clone()
         .applyMatrix4(pose)
         .translate(ox, 0, oz);
+      if (kind === "slide")
+        parts.push(new Float32Array(geometry.getAttribute("position").array));
       if (!batches.has(part.material)) batches.set(part.material, []);
       batches.get(part.material)!.push(geometry);
     }
     const bounds = source.bounds.clone().applyMatrix4(pose);
     propRecords.push({ kind, attachment, bounds: bounds.clone() });
     if (bounds.min.y < HEIGHT && bounds.max.y > 0.02) {
+      if (kind === "slide") {
+        // Keep the coarse bound for maze navigation, but let the player walk
+        // on the actual chute. Each convex part preserves rails and supports.
+        bounds.translate(new THREE.Vector3(ox, 0, oz));
+        colliders.push(bounds);
+        shapedColliders.push({ bounds, parts });
+        return;
+      }
       // Seats need their real solid parts: a whole-chair/sofa box fills the air
       // above the cushion and makes players stand on an invisible platform.
       const solids =
@@ -286,6 +300,9 @@ export function buildSection(
           new THREE.Vector3(),
           new THREE.Euler(0, yaw, 0),
         );
+        // Floor slides live in low offices: leave standing headroom on the
+        // platform while preserving the chute width and reserved walking lanes.
+        if (kind === "slide") pose.scale(new THREE.Vector3(1, 0.84, 1));
         const box = source.bounds.clone().applyMatrix4(pose);
         const center = box.getCenter(new THREE.Vector3());
         const target = new THREE.Vector3(
@@ -684,6 +701,7 @@ export function buildSection(
     lights,
     portals,
     colliders,
+    shapedColliders,
     water,
     computers,
     occluders,
