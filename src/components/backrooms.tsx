@@ -162,6 +162,36 @@ export default function Backrooms() {
           </span>
           <nav className="hud-actions" aria-label="Camcorder controls">
             <button
+              onClick={() => engine.current?.toggleFlashlight()}
+              disabled={!ready || !!error}
+              aria-label={
+                stats.flashlight ? "Turn flashlight off" : "Turn flashlight on"
+              }
+              aria-pressed={stats.flashlight}
+              title={
+                stats.flashlight ? "Turn flashlight off" : "Turn flashlight on"
+              }
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 7h10l-3 5v9h-4v-9zM10 12h4M10 16h4" />
+                {stats.flashlight ? (
+                  <path d="M12 1v3M5 2l2 2m12-2-2 2" />
+                ) : (
+                  <path d="m4 21 16-18" />
+                )}
+              </svg>
+            </button>
+            <button
+              onClick={() => (playing ? engine.current?.pause() : start())}
+              disabled={!ready || !!error}
+              aria-label={playing ? "Pause recording" : "Play recording"}
+              title={playing ? "Pause recording" : "Play recording"}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d={playing ? "M7 5v14M17 5v14" : "m7 4 13 8-13 8z"} />
+              </svg>
+            </button>
+            <button
               onClick={() =>
                 setSettings((s) => ({ ...s, volume: s.volume ? 0 : 0.65 }))
               }
@@ -181,38 +211,6 @@ export default function Backrooms() {
                 )}
               </svg>
             </button>
-            {playing && (
-              <button
-                onClick={() => engine.current?.toggleFlashlight()}
-                aria-label={
-                  stats.flashlight ? "Turn flashlight off" : "Turn flashlight on"
-                }
-                aria-pressed={stats.flashlight}
-                title={
-                  stats.flashlight ? "Turn flashlight off" : "Turn flashlight on"
-                }
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M7 7h10l-3 5v9h-4v-9zM10 12h4M10 16h4" />
-                  {stats.flashlight ? (
-                    <path d="M12 1v3M5 2l2 2m12-2-2 2" />
-                  ) : (
-                    <path d="m4 21 16-18" />
-                  )}
-                </svg>
-              </button>
-            )}
-            {playing && (
-              <button
-                onClick={() => engine.current?.pause()}
-                aria-label="Pause recording"
-                title="Pause recording"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M7 5v14M17 5v14" />
-                </svg>
-              </button>
-            )}
             <button
               className="cassette-button"
               onClick={openSettings}
