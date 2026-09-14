@@ -46,6 +46,7 @@ export interface Section {
   colliders: THREE.Box3[];
   water: THREE.Mesh[];
   computers: ComputerStation[];
+  occluders: THREE.Mesh[];
   dispose: () => void;
 }
 export function buildSection(
@@ -649,6 +650,25 @@ export function buildSection(
     }
     geometries.forEach((g) => g.dispose());
   }
+  const occluders: THREE.Mesh[] = [];
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    // Bake static transforms and bounds once, before the first render/raycast.
+    // Portals retain their animated scale; water moves in the vertex shader.
+    if (!portals.some((portal) => portal.mesh === object)) {
+      object.updateMatrix();
+      object.matrixAutoUpdate = false;
+    }
+    object.geometry.computeBoundingBox();
+    object.geometry.computeBoundingSphere();
+    // Water receives its transparent renderer material after section creation.
+    if (
+      !water.includes(object) &&
+      !(object.material as THREE.Material).transparent
+    )
+      occluders.push(object);
+  });
+  group.updateMatrixWorld(true);
   return {
     group,
     lights,
@@ -656,6 +676,7 @@ export function buildSection(
     colliders,
     water,
     computers,
+    occluders,
     dispose: () => {
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
