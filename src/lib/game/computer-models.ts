@@ -115,7 +115,7 @@ export function createComputerModel(
   box([0.85, 0.075, 0.13], [0, y + 0.299, 0.126], mats.cream, 0.013);
   box([0.85, 0.115, 0.13], [0, y - 0.319, 0.126], mats.cream, 0.013);
   box([0.035, 0.021, 0.012], [0.32, y - 0.318, 0.197], mats.metal, 0.003);
-  box([0.015, 0.009, 0.012], [0.274, y - 0.318, 0.198], mats.luminous);
+  // The live bezel control owns the indicator so an off monitor cannot glow.
   for (let i = 0; i < 9; i++)
     box(
       [0.022, 0.17, 0.012],

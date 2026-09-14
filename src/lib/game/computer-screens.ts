@@ -13,12 +13,14 @@ import {
 import type { Section } from "./world";
 import { ComputerCrt } from "./computer-crt";
 import { attachComputerNavigation } from "./computer-navigation";
+import { ComputerPower } from "./computer-power";
 
 interface LiveScreen {
   station: ComputerStation;
   object: CSS3DObject;
   iframe: HTMLIFrameElement;
   address: HTMLInputElement;
+  power: ComputerPower;
   dispose: () => void;
 }
 
@@ -29,6 +31,7 @@ export class ComputerScreens {
   private dialog = document.createElement("dialog");
   private exitButton = document.createElement("button");
   private screens = new Map<string, LiveScreen>();
+  private poweredOff = new Set<string>();
   private raycaster = new THREE.Raycaster();
   private active: ComputerStation | null = null;
   private crt: ComputerCrt;
@@ -72,9 +75,7 @@ export class ComputerScreens {
     this.dialog.close();
     this.dialog.showModal();
     for (const screen of this.screens.values()) {
-      screen.object.element.inert = screen.station.id !== station.id;
-      screen.object.element.style.pointerEvents =
-        screen.station.id === station.id ? "auto" : "none";
+      screen.power.setActive(screen.station.id === station.id);
     }
     this.exitButton.focus({ preventScroll: true });
   }
@@ -91,8 +92,7 @@ export class ComputerScreens {
     this.dialog.inert = true;
     this.dialog.show();
     for (const screen of this.screens.values()) {
-      screen.object.element.inert = true;
-      screen.object.element.style.pointerEvents = "none";
+      screen.power.setActive(false);
     }
   }
 
@@ -213,18 +213,31 @@ export class ComputerScreens {
     element.inert = true;
     element.style.pointerEvents = "none";
     this.scene.add(object);
+    const power = new ComputerPower(
+      station,
+      element,
+      !this.poweredOff.has(station.id),
+      (powered) => {
+        if (powered) this.poweredOff.delete(station.id);
+        else this.poweredOff.add(station.id);
+      },
+    );
+    power.setActive(this.active?.id === station.id);
+    this.scene.add(power.object);
     navigate(COMPUTER_HOME);
     return {
       station,
       object,
       iframe,
       address,
+      power,
       dispose: () => {
         detachCrt();
         navigation.dispose();
         clearTimeout(loadTimer);
         iframe.src = "about:blank";
         object.removeFromParent();
+        power.dispose();
       },
     };
   }
@@ -259,6 +272,14 @@ export class ComputerScreens {
     playing: boolean,
   ) {
     const resident = [...sections];
+    // Power state lives only as long as the resident section, independently of
+    // the smaller live-page cache. Walking out of the world cannot grow it.
+    const residentIds = new Set(
+      resident.flatMap((section) => section.computers.map((station) => station.id)),
+    );
+    for (const id of this.poweredOff) {
+      if (!residentIds.has(id)) this.poweredOff.delete(id);
+    }
     camera.updateMatrixWorld();
     const forward = camera.getWorldDirection(new THREE.Vector3());
     const candidates = resident
@@ -319,6 +340,7 @@ export class ComputerScreens {
       screen.object.visible =
         visible.includes(screen.station) &&
         (!this.active || screen.station.id === this.active.id);
+      screen.power.object.visible = screen.object.visible;
       this.visible ||= screen.object.visible;
     }
   }
@@ -335,6 +357,7 @@ export class ComputerScreens {
     if (flat && this.active) {
       const center = this.active.position.clone().project(camera);
       const { width, height } = this.renderer.getSize();
+      this.screens.get(this.active.id)?.power.project(camera, width, height);
       const distance = this.active.position.distanceTo(camera.position);
       const scale =
         (this.active.width * camera.projectionMatrix.elements[5] * height) /
@@ -358,6 +381,7 @@ export class ComputerScreens {
       screen.dispose();
     }
     this.screens.clear();
+    this.poweredOff.clear();
     this.dialog.remove();
   }
 }
