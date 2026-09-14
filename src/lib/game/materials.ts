@@ -175,6 +175,23 @@ export function createMaterials() {
     color: "#535843",
     roughness: 1,
   });
+  const upholstery = new THREE.MeshStandardMaterial({
+    color: "#8b7c53",
+    roughness: 1,
+  });
+  const enamel = new THREE.MeshStandardMaterial({
+    color: "#b4a052",
+    roughness: 0.72,
+    metalness: 0.08,
+  });
+  const fadedRed = new THREE.MeshStandardMaterial({
+    color: "#9b5942",
+    roughness: 0.88,
+  });
+  const cream = new THREE.MeshStandardMaterial({
+    color: "#c8bc91",
+    roughness: 0.86,
+  });
   const metal = new THREE.MeshStandardMaterial({
     color: "#32392d",
     metalness: 0.65,
@@ -199,6 +216,10 @@ export function createMaterials() {
     shadow,
     wood,
     fabric,
+    upholstery,
+    enamel,
+    fadedRed,
+    cream,
     metal,
     paper,
     darkness,
@@ -224,6 +245,10 @@ export function createMaterials() {
         shadow,
         wood,
         fabric,
+        upholstery,
+        enamel,
+        fadedRed,
+        cream,
         metal,
         paper,
         darkness,

@@ -13,6 +13,7 @@ import {
 } from "./maze";
 import { createMaterials } from "./materials";
 import { createRenderer, type GameRenderer } from "./renderer";
+import { TapeOverlay } from "./tape-overlay";
 import { buildSection, createEntity, type Portal, type Section } from "./world";
 
 export interface GameSettings {
@@ -68,6 +69,8 @@ export class BackroomsEngine {
   private stepSide = 1;
   private depth = 0;
   private stress = 0;
+  private tapeBurst = 0;
+  private tapeOverlay: TapeOverlay | null = null;
   private clipProgress = 0;
   private nearestPortal: Portal | null = null;
   private flashOn = false;
@@ -88,8 +91,10 @@ export class BackroomsEngine {
     private seed: number,
     private callbacks: Callbacks,
     settings: GameSettings,
+    overlayCanvas: HTMLCanvasElement | null = null,
   ) {
     this.settings = settings;
+    if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
     this.scene.fog = new THREE.Fog("#9e9450", 24, 43);
     this.scene.add(new THREE.HemisphereLight("#fff3bc", "#897947", 1.05));
@@ -166,6 +171,7 @@ export class BackroomsEngine {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer?.resize(w, h);
+    this.tapeOverlay?.resize(w, h);
   }
   private bind() {
     const signal = this.listeners.signal;
@@ -288,6 +294,7 @@ export class BackroomsEngine {
   start() {
     if (!this.renderer || !this.alive) return;
     this.active = true;
+    this.tapeBurst = 0.65;
     if (this.controls) this.controls.enabled = true;
     this.hasStarted = true;
     this.requestLock();
@@ -302,6 +309,7 @@ export class BackroomsEngine {
   pause() {
     if (!this.active) return;
     this.active = false;
+    this.tapeBurst = 0.65;
     if (this.controls) this.controls.enabled = false;
     this.keys.clear();
     this.touchMove = { x: 0, y: 0 };
@@ -463,6 +471,7 @@ export class BackroomsEngine {
   private descend() {
     this.depth++;
     this.stress = 1;
+    this.tapeBurst = 1;
     this.clipProgress = 0;
     this.keys.delete("KeyE");
     this.audio.anomaly();
@@ -668,13 +677,28 @@ export class BackroomsEngine {
       this.flashlight.target.position.copy(target);
       this.flashlight.intensity = this.flashOn ? 22 : 0;
       this.stress = Math.max(0, this.stress - dt * 0.4);
+      const tapeDamage = this.settings.reducedMotion
+        ? Math.min(0.18, this.settings.tape)
+        : this.settings.tape;
+      // Proximity can cause a brief dropout, but never a sustained screen wobble.
+      const tapeAnomaly = this.settings.reducedMotion
+        ? 0
+        : Math.max(
+            this.tapeBurst,
+            Math.floor(this.elapsed * 12) % 37 === 0 ? this.stress * 0.2 : 0,
+          );
       this.renderer?.render(
-        this.elapsed,
-        this.settings.reducedMotion
-          ? Math.min(0.18, this.settings.tape)
-          : this.settings.tape,
-        this.settings.reducedMotion ? 0 : this.stress,
+        this.settings.reducedMotion ? 0 : this.elapsed,
+        tapeDamage,
+        tapeAnomaly,
       );
+      this.tapeOverlay?.render(
+        this.elapsed,
+        tapeDamage,
+        tapeAnomaly,
+        this.settings.reducedMotion,
+      );
+      this.tapeBurst = Math.max(0, this.tapeBurst - dt * 5);
       if (this.elapsed - this.lastStats > 0.12) {
         this.lastStats = this.elapsed;
         this.callbacks.stats({
@@ -716,6 +740,7 @@ export class BackroomsEngine {
     });
     this.lights.forEach((light) => light.dispose());
     this.materials.dispose();
+    this.tapeOverlay?.dispose();
     this.renderer?.dispose();
     this.renderer?.canvas.remove();
   }

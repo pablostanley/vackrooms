@@ -13,6 +13,16 @@ import {
   type ChunkData,
 } from "./maze";
 import type { Materials } from "./materials";
+import {
+  createFurniture,
+  type FurnitureKind,
+  type FurnitureModel,
+} from "./furniture-models";
+import {
+  anchorPose,
+  chairStack,
+  leavesPassagesClear,
+} from "./furniture-layout";
 
 export interface Portal {
   position: THREE.Vector3;
@@ -40,6 +50,15 @@ export function buildSection(
     portals: Portal[] = [],
     colliders: THREE.Box3[] = [];
   const theme = mats.forTheme(data.theme);
+  const furnitureRng = random(data.seed + 3403);
+  const models = new Map<FurnitureKind, FurnitureModel>();
+  const furnished = new Set<number>();
+  const propRecords: {
+    kind: FurnitureKind;
+    attachment: string;
+    bounds: THREE.Box3;
+  }[] = [];
+  group.userData.furniture = propRecords;
   const matrix = new THREE.Matrix4(),
     quaternion = new THREE.Quaternion();
   function add(
@@ -147,44 +166,126 @@ export function buildSection(
       );
     }
   }
-  function chair(x: number, z: number, angle: number, y = 0) {
-    const parts: [
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-      THREE.Material,
-    ][] = [
-      [0.48, 0.065, 0.48, 0, 0.45, 0, mats.wood],
-      [0.43, 0.055, 0.43, 0, 0.51, 0, mats.fabric],
-    ];
-    for (const dx of [-0.19, 0.19])
-      for (const dz of [-0.19, 0.19])
-        parts.push([0.045, 0.46, 0.045, dx, 0.23, dz, mats.wood]);
-    for (const dx of [-0.21, 0.21])
-      parts.push([0.035, 0.58, 0.035, dx, 0.76, 0.21, mats.wood]);
-    for (const dy of [0.67, 0.81, 0.96])
-      parts.push([0.45, 0.065, 0.028, 0, dy, 0.21, mats.wood]);
-    for (const [w, h, d, px, py, pz, m] of parts)
-      box(
-        w,
-        h,
-        d,
-        x + px * Math.cos(angle) + pz * Math.sin(angle),
-        y + py,
-        z - px * Math.sin(angle) + pz * Math.cos(angle),
-        m,
-        angle,
-      );
-    if (y < 0.5)
-      colliders.push(
-        new THREE.Box3(
-          new THREE.Vector3(ox + x - 0.31, 0, oz + z - 0.31),
-          new THREE.Vector3(ox + x + 0.31, 1.1, oz + z + 0.31),
-        ),
-      );
+  function model(kind: FurnitureKind) {
+    if (!models.has(kind)) models.set(kind, createFurniture(kind, mats));
+    return models.get(kind)!;
+  }
+  function furniture(
+    kind: FurnitureKind,
+    pose: THREE.Matrix4,
+    attachment = "floor",
+  ) {
+    const source = model(kind);
+    for (const part of source.parts) {
+      const geometry = part.geometry
+        .clone()
+        .applyMatrix4(pose)
+        .translate(ox, 0, oz);
+      if (!batches.has(part.material)) batches.set(part.material, []);
+      batches.get(part.material)!.push(geometry);
+    }
+    const bounds = source.bounds.clone().applyMatrix4(pose);
+    propRecords.push({ kind, attachment, bounds: bounds.clone() });
+    if (bounds.min.y < HEIGHT && bounds.max.y > 0.02)
+      colliders.push(bounds.translate(new THREE.Vector3(ox, 0, oz)));
+  }
+  function chair(x: number, z: number, angle: number) {
+    furniture(
+      "chair",
+      anchorPose(
+        new THREE.Vector3(),
+        new THREE.Vector3(x, 0, z),
+        new THREE.Euler(0, angle, 0),
+      ),
+    );
+  }
+  function scatterFurniture(
+    kind: FurnitureKind,
+    cx: number,
+    cz: number,
+    mode: "floor" | "wall" | "ceiling",
+  ) {
+    const source = model(kind),
+      bits = data.cells[cz * CHUNK + cx];
+    const x = (cx + 0.5) * CELL,
+      z = (cz + 0.5) * CELL;
+    const closed = [N, E, S, W].filter((bit) => !(bits & bit));
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const wallBit =
+        closed[
+          (attempt + Math.floor(furnitureRng() * closed.length)) % closed.length
+        ];
+      let yaw =
+        wallBit === N
+          ? Math.PI
+          : wallBit === E
+            ? Math.PI / 2
+            : wallBit === W
+              ? -Math.PI / 2
+              : 0;
+      // The slide's long axis lies along a wall, leaving a path in front of it.
+      if (kind === "slide") yaw += Math.PI / 2;
+      let pose: THREE.Matrix4;
+      if (mode === "wall" && wallBit) {
+        const target = new THREE.Vector3(x, 0.75 + furnitureRng() * 0.8, z);
+        if (wallBit === N) target.z = cz * CELL;
+        if (wallBit === S) target.z = (cz + 1) * CELL;
+        if (wallBit === W) target.x = cx * CELL;
+        if (wallBit === E) target.x = (cx + 1) * CELL;
+        pose = anchorPose(
+          source.anchor,
+          target,
+          new THREE.Euler(
+            (furnitureRng() - 0.5) * 1.3,
+            yaw + (furnitureRng() - 0.5) * 0.7,
+            (furnitureRng() - 0.5) * 1.5,
+          ),
+        );
+      } else if (mode === "ceiling") {
+        pose = anchorPose(
+          source.anchor,
+          new THREE.Vector3(
+            x + (attempt % 2 ? -1.5 : 1.5),
+            HEIGHT - 0.025,
+            z + (attempt % 3 ? -1.5 : 1.5),
+          ),
+          new THREE.Euler(
+            2.4 + furnitureRng() * 0.95,
+            furnitureRng() * Math.PI * 2,
+            (furnitureRng() - 0.5) * 1.1,
+          ),
+        );
+      } else {
+        pose = anchorPose(
+          new THREE.Vector3(),
+          new THREE.Vector3(),
+          new THREE.Euler(0, yaw, 0),
+        );
+        const box = source.bounds.clone().applyMatrix4(pose);
+        const center = box.getCenter(new THREE.Vector3());
+        const target = new THREE.Vector3(
+          x - center.x,
+          -box.min.y,
+          z - center.z,
+        );
+        if (wallBit === N) target.z = cz * CELL + 0.2 - box.min.z;
+        else if (wallBit === S) target.z = (cz + 1) * CELL - 0.2 - box.max.z;
+        else if (wallBit === W) target.x = cx * CELL + 0.2 - box.min.x;
+        else if (wallBit === E) target.x = (cx + 1) * CELL - 0.2 - box.max.x;
+        else {
+          target.x += attempt % 2 ? -1.75 : 1.75;
+          target.z += attempt % 3 ? -1.75 : 1.75;
+        }
+        pose.setPosition(target);
+      }
+      const bounds = source.bounds.clone().applyMatrix4(pose);
+      if (leavesPassagesClear(bounds, cx, cz, bits)) {
+        furniture(kind, pose, mode === "wall" && !wallBit ? "floor" : mode);
+        furnished.add(cz * CHUNK + cx);
+        return true;
+      }
+    }
+    return false;
   }
   plane(
     SPAN,
@@ -230,18 +331,24 @@ export function buildSection(
           ),
         );
       }
-      if (!isSpawn && rng() < (data.theme === "archive" ? 0.45 : 0.11)) {
-        chair(x + 1.35, z + 0.9, rng() * 6.28);
-        if (data.theme === "archive" || rng() < 0.25)
-          for (let i = 1; i < 4; i++)
-            chair(
-              x + 1.2 + (rng() - 0.5) * 0.5,
-              z + 0.9 + (rng() - 0.5) * 0.5,
-              rng() * 6.28,
-              i * 0.65,
-            );
-        if (depth > 1 && rng() < 0.4)
-          chair(x - 0.7, z + 1.1, 0.8, HEIGHT - 0.65);
+      if (!isSpawn && rng() < (data.theme === "archive" ? 0.4 : 0.1)) {
+        const yaw = rng() * Math.PI * 2;
+        const count =
+          data.theme === "archive" || rng() < 0.4
+            ? 4 + Math.floor(rng() * 3)
+            : 1;
+        const poses = chairStack(x + 1.4, z + 1.4, yaw, count, furnitureRng);
+        const pileBounds = new THREE.Box3();
+        for (const pose of poses)
+          pileBounds.union(model("chair").bounds.clone().applyMatrix4(pose));
+        if (leavesPassagesClear(pileBounds, cx, cz, bits)) {
+          poses.forEach((pose, index) =>
+            furniture("chair", pose, index ? "chair" : "floor"),
+          );
+        } else chair(x + 1.4, z + 1.4, yaw);
+        furnished.add(cz * CHUNK + cx);
+        if (depth > 1 && rng() < 0.35)
+          scatterFurniture("chair", cx, cz, "ceiling");
       }
       if (!isSpawn && rng() < 0.075 && !(bits & N)) {
         box(1.1, 1.3, 0.48, x, 0.65, cz * CELL + 0.36, mats.metal);
@@ -337,8 +444,71 @@ export function buildSection(
         );
       }
     }
+  const propKinds: FurnitureKind[] = [
+    "sofa",
+    "table",
+    "lamp",
+    "blocks",
+    "slide",
+    "springHorse",
+  ];
+  const available: { cx: number; cz: number }[] = [];
+  for (let cz = 0; cz < CHUNK; cz++)
+    for (let cx = 0; cx < CHUNK; cx++) {
+      if (data.x === 0 && data.z === 0 && cx === 2 && cz >= 1) continue;
+      if (
+        portals.some(
+          (portal) =>
+            Math.floor((portal.position.x - ox) / CELL) === cx &&
+            Math.floor((portal.position.z - oz) / CELL) === cz,
+        )
+      )
+        continue;
+      available.push({ cx, cz });
+    }
+  // Familiar objects become rare landmarks; most of the maze remains empty.
+  for (const { cx, cz } of available) {
+    if (
+      furnished.has(cz * CHUNK + cx) ||
+      furnitureRng() > (data.theme === "archive" ? 0.21 : 0.13)
+    )
+      continue;
+    const kind = propKinds[Math.floor(furnitureRng() * propKinds.length)];
+    const abnormal = furnitureRng();
+    const mode =
+      abnormal < 0.23 + Math.min(depth, 4) * 0.06
+        ? "wall"
+        : abnormal < 0.38
+          ? "ceiling"
+          : "floor";
+    if (!scatterFurniture(kind, cx, cz, mode))
+      scatterFurniture(kind, cx, cz, "floor");
+  }
+  if (data.x === 0 && data.z === 0) {
+    // Introduce several readable silhouettes near the opening route, then let
+    // procedural placement take over. Each placement still respects all exits.
+    available.sort(
+      (a, b) => Math.hypot(a.cx - 3, a.cz - 3) - Math.hypot(b.cx - 3, b.cz - 3),
+    );
+    for (const kind of propKinds) {
+      if (propRecords.some((prop) => prop.kind === kind)) continue;
+      for (const { cx, cz } of available) {
+        if (furnished.has(cz * CHUNK + cx)) continue;
+        const mode =
+          kind === "table" ? "wall" : kind === "blocks" ? "ceiling" : "floor";
+        if (
+          scatterFurniture(kind, cx, cz, mode) ||
+          scatterFurniture(kind, cx, cz, "floor")
+        )
+          break;
+      }
+    }
+  }
   // One solitary chair in the opening vista makes scale immediately familiar.
-  if (data.x === 0 && data.z === 0) chair(CELL * 3.68, CELL * 2.4, 0.5);
+  if (data.x === 0 && data.z === 0)
+    chair(CELL * 3.5 + 1.4, CELL * 2.5 + 1.4, 0.5);
+  for (const source of models.values())
+    source.parts.forEach((part) => part.geometry.dispose());
   for (const [material, geometries] of batches) {
     const merged = mergeGeometries(geometries);
     if (merged) {

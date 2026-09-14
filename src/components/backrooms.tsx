@@ -33,6 +33,7 @@ function timecode(seconds: number) {
 }
 export default function Backrooms() {
   const container = useRef<HTMLDivElement>(null),
+    tapeOverlay = useRef<HTMLCanvasElement>(null),
     engine = useRef<BackroomsEngine | null>(null),
     dialog = useRef<HTMLDialogElement>(null);
   const [ready, setReady] = useState(false),
@@ -79,6 +80,7 @@ export default function Backrooms() {
             error: setError,
           },
           initial,
+          tapeOverlay.current,
         );
         engine.current = instance;
       })
@@ -119,19 +121,19 @@ export default function Backrooms() {
       setMessage("Could not copy the link. Tape number: " + seed);
     }
   }
+  const battery = Math.max(2, 22 - Math.floor(stats.seconds / 90));
   return (
     <main className={`experience ${playing ? "is-playing" : ""}`}>
       <h1 className="sr-only">vackrooms</h1>
       <div className="world" ref={container} />
       <div className="camera-vignette" aria-hidden="true" />
-      <div className="camera-grain" aria-hidden="true" />
-      <div className="viewfinder" aria-hidden="true">
+      <div className="viewfinder camera-osd" aria-hidden="true">
         <i />
         <i />
         <i />
         <i />
       </div>
-      <div className="camera-top">
+      <div className="camera-top camera-osd">
         <div className="camera-status">
           <div
             className="recording"
@@ -143,10 +145,12 @@ export default function Backrooms() {
             />
             {playing ? "REC" : "STBY"}
           </div>
-          <span className="battery" aria-label="Battery full">
-            <i />
-            <i />
-            <i />
+          <span
+            className="battery"
+            role="img"
+            aria-label={`Battery ${battery}%`}
+          >
+            <i style={{ width: `${battery}%` }} />
           </span>
         </div>
         <div className="camera-time" aria-label="Recording time">
@@ -165,31 +169,67 @@ export default function Backrooms() {
           </span>
         </div>
       </div>
-      <nav className="hud-actions" aria-label="Camcorder controls">
+      <nav className="hud-actions camera-osd" aria-label="Camcorder controls">
         <button
           onClick={() =>
             setSettings((s) => ({ ...s, volume: s.volume ? 0 : 0.65 }))
           }
           aria-label={settings.volume ? "Mute sound" : "Unmute sound"}
+          aria-pressed={settings.volume > 0}
+          title={settings.volume ? "Mute sound" : "Unmute sound"}
         >
-          SOUND {settings.volume ? "ON" : "OFF"}
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 9h4l5-4v14l-5-4H3z" />
+            {settings.volume ? (
+              <>
+                <path d="M16 8c2 2 2 6 0 8" />
+                <path d="M19 5c4 4 4 10 0 14" />
+              </>
+            ) : (
+              <path d="m16 9 6 6m0-6-6 6" />
+            )}
+          </svg>
         </button>
         {playing && (
           <button
             onClick={() => engine.current?.toggleFlashlight()}
-            aria-label="Toggle flashlight"
+            aria-label={
+              stats.flashlight ? "Turn flashlight off" : "Turn flashlight on"
+            }
             aria-pressed={stats.flashlight}
+            title={
+              stats.flashlight ? "Turn flashlight off" : "Turn flashlight on"
+            }
           >
-            LIGHT {stats.flashlight ? "ON" : "OFF"}
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 7h10l-3 5v9h-4v-9zM10 12h4M10 16h4" />
+              {stats.flashlight ? (
+                <path d="M12 1v3M5 2l2 2m12-2-2 2" />
+              ) : (
+                <path d="m4 21 16-18" />
+              )}
+            </svg>
           </button>
         )}
-        <button onClick={openSettings}>SETUP</button>
+        <button
+          onClick={openSettings}
+          aria-label="Open settings"
+          title="Settings"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 2h4v3l2 1 3-2 2 3-3 2v3l3 2-2 3-3-2-2 1v4h-4v-4l-2-1-3 2-2-3 3-2V9L3 7l2-3 3 2 2-1z" />
+            <circle cx="12" cy="11" r="3" />
+          </svg>
+        </button>
         {playing && (
           <button
             onClick={() => engine.current?.pause()}
             aria-label="Pause recording"
+            title="Pause recording"
           >
-            Ⅱ
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 5v14M17 5v14" />
+            </svg>
           </button>
         )}
       </nav>
@@ -246,15 +286,11 @@ export default function Backrooms() {
       >
         {message}
       </p>
-      <div className="camera-bottom">
-        <span>JUL. 16 1993</span>
-        {playing ? (
-          <span className="desktop-hint">F LIGHT &nbsp; ESC PAUSE</span>
-        ) : (
-          <span />
-        )}
+      <div className="camera-bottom camera-osd">
+        <span>JUN. 18 1994</span>
         <span>16BIT</span>
       </div>
+      <canvas className="camera-grain" ref={tapeOverlay} aria-hidden="true" />
       <dialog
         ref={dialog}
         className="settings-dialog"

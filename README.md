@@ -22,15 +22,18 @@ Open http://localhost:3000. A WebGPU-capable browser with hardware acceleration 
 | Hold E near an unstable wall | Noclip to a deeper level           |
 | Escape                       | Pause                              |
 
-Touch devices have a movement stick, swipe-to-look, and contextual action buttons. The unbranded camcorder HUD uses Geist Mono; supporting setup text uses Geist Sans. One viewport-based scale controls the HUD type, spacing, icons, and viewfinder marks. Main rooms use sickly-yellow fluorescent illumination with soft cast shadows and restrained damp-brown floors. Setup includes sound, sensitivity, tape damage, and a steady camera option. System reduced-motion preferences are respected. The sound starts with the user's first interaction and pauses with the game.
+Touch devices have a movement stick, swipe-to-look, and contextual action buttons. The unbranded, translucent camcorder HUD uses Geist Mono; supporting setup text uses Geist Sans. One viewport-based scale controls the HUD type, spacing, icons, and viewfinder marks. Main rooms use sickly-yellow fluorescent illumination with soft cast shadows and restrained damp-brown floors. Icon controls expose sound, flashlight, pause, and setup. The date reads June 18, 1994; the simulated battery starts at 22% and drains with recording time. Setup includes sound, sensitivity, tape damage, and a steady camera option. System reduced-motion preferences are respected. The sound starts with the user's first interaction and pauses with the game.
 
 ## How it works
 
 - `src/lib/game/maze.ts`: seeded, connected maze sections. Shared boundary hashes keep gates aligned across streaming and regeneration. A spanning tree guarantees a path through every room; additional openings create nonsensical office spaces and loops.
+- `src/lib/game/furniture-models.ts`: sofas, tables, lamps, slides, spring horses, alphabet blocks, and chairs, built from batched procedural geometry.
+- `src/lib/game/furniture-layout.ts`: solid attachment anchors keep every stacked chair leg embedded in the seat below. Arbitrarily rotated wall/ceiling props intersect the architecture, with reserved walking lanes through each room.
 - `src/lib/game/world.ts`: batched architecture, ceiling panels, wallpaper, furniture, faded service areas, and unstable walls. A 3×3 window of sections streams around the player and disposes sections left behind.
 - `src/lib/game/engine.ts`: Three.js PointerLockControls, camera feedback, streaming, unseen room changes, noclipping, and an entity that searches the maze when the player looks away.
 - `src/lib/game/physics.ts`: Rapier kinematic capsule movement, wall sliding, gravity, automatic small steps, and floor contact. Fixed colliders stream and dispose with each maze section.
 - `src/lib/game/renderer.ts`: `vgpu/three` turns exported WGSL helpers into Three.js TSL nodes using `tslExports`. A Three.js `RenderPipeline` samples the scene through `tapeWarp`, softens detail, blooms fluorescent highlights, offsets RGB channels, and grades every frame through `tapeGrade`. The GPU never copies the camera image back to the CPU.
+- `src/lib/game/tape-overlay.ts`: lightweight grain plates and scanline losses rendered over the camcorder HUD. Brief horizontal tears replace sustained wavy transitions; steady camera suppresses their motion.
 - `src/shaders/tape.wgsl`: reusable VHS warping, tracking, grain, scanlines, vignette, and anomaly distortion. The complete vgpu shader artifact preserves exports through the Next.js WGSL loader.
 - `src/lib/game/audio.ts`: synthesized fluorescent hum, ventilation, alternating carpet/tile footsteps, distant sounds, and transition interference using Web Audio.
 

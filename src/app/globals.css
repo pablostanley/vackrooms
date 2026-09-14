@@ -92,15 +92,19 @@ button:disabled {
 .camera-grain {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  opacity: 0.012;
-  background: repeating-linear-gradient(0deg, transparent 0 2px, #000 2px 3px);
+  z-index: 10;
+}
+.camera-osd {
+  opacity: 0.88;
+  filter: blur(calc(var(--hud-unit) * 0.025));
 }
 .viewfinder {
   position: absolute;
   inset: calc(var(--hud-unit) * 3);
   pointer-events: none;
-  opacity: 0.85;
 }
 .viewfinder i {
   position: absolute;
@@ -196,7 +200,6 @@ button:disabled {
   height: calc(var(--hud-unit) * 2);
   border: calc(var(--hud-unit) * 0.125) solid;
   display: flex;
-  gap: calc(var(--hud-unit) * 0.25);
   padding: calc(var(--hud-unit) * 0.25);
   position: relative;
 }
@@ -210,7 +213,7 @@ button:disabled {
   background: currentColor;
 }
 .battery i {
-  flex: 1;
+  display: block;
   background: currentColor;
 }
 .hud-actions {
@@ -218,20 +221,31 @@ button:disabled {
   right: calc(var(--hud-unit) * 5.625);
   top: calc(var(--hud-unit) * 15.625);
   display: flex;
-  gap: calc(var(--hud-unit) * 2.125);
+  gap: calc(var(--hud-unit) * 0.75);
   align-items: center;
   z-index: 3;
 }
 .hud-actions button {
-  padding: calc(var(--hud-unit) * 0.875) calc(var(--hud-unit) * 0.5);
-  font-size: calc(var(--hud-unit) * 1.5);
+  display: grid;
+  place-items: center;
+  width: calc(var(--hud-unit) * 6);
+  height: calc(var(--hud-unit) * 6);
+  padding: calc(var(--hud-unit) * 1.25);
   text-shadow: var(--osd-shadow);
-  opacity: 0.65;
-  transition: opacity 0.15s;
+  transition: background 0.15s;
+}
+.hud-actions svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linejoin: miter;
+  stroke-linecap: square;
 }
 .hud-actions button:hover,
 .hud-actions button:focus-visible {
-  opacity: 1;
+  background: #ffffe810;
 }
 .camera-bottom {
   position: absolute;
@@ -243,12 +257,6 @@ button:disabled {
   align-items: center;
   font-size: calc(var(--hud-unit) * 3.125);
   pointer-events: none;
-}
-.camera-bottom .desktop-hint,
-.tape-length,
-.signal {
-  font-size: calc(var(--hud-unit) * 1.5);
-  opacity: 0.7;
 }
 .record-prompt {
   position: absolute;

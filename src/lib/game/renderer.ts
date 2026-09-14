@@ -46,7 +46,7 @@ export async function createRenderer(
         const coordinates = uv(),
           inputs = { uv: coordinates, seconds, damage, anomaly };
         const warped = tapeWarp(inputs);
-        const bleed = vec2(damage.mul(0.0007).add(anomaly.mul(0.003)), 0);
+        const bleed = vec2(damage.mul(0.0007).add(anomaly.mul(0.0008)), 0);
         const picture = vec3(
           cameraTexture.sample(warped.add(bleed)).r,
           cameraTexture.sample(warped).g,
@@ -140,12 +140,15 @@ export async function createRenderer(
     fragmentShader: `uniform sampler2D image; uniform float seconds; uniform float damage; uniform float anomaly; varying vec2 vUv;
       float noise(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
       void main(){vec2 p=vUv; vec2 c=p-.5; p+=c*dot(c,c)*.032*damage;
-      p.x+=(noise(vec2(floor(p.y*480.),floor(seconds*24.)))-.5)*.0012*damage+sin(p.y*80.+seconds*21.)*anomaly*.032*damage;
-      float bleed=damage*.0007+anomaly*.003;vec3 color=vec3(texture2D(image,p+vec2(bleed,0)).r,texture2D(image,p).g,texture2D(image,p-vec2(bleed,0)).b);
+      float frame=floor(seconds*30.);float jitter=(noise(vec2(floor(vUv.y*480.),frame))-.5)*.0008;
+      float bandA=1.-step(.004,abs(vUv.y-fract(frame*.173+.19)));float bandB=1.-step(.0025,abs(vUv.y-fract(frame*.317+.63)));float dropout=1.-step(2.,mod(frame,211.));
+      p.x+=(jitter+(bandA-bandB*.6)*(anomaly*.010+dropout*.0015))*damage;p=clamp(p,.001,.999);
+      float bleed=damage*.0007+anomaly*.0008;vec3 color=vec3(texture2D(image,p+vec2(bleed,0)).r,texture2D(image,p).g,texture2D(image,p-vec2(bleed,0)).b);
       vec2 soft=vec2(damage*.0015,0.);color=color*.6+texture2D(image,p+soft).rgb*.2+texture2D(image,p-soft).rgb*.2;
       vec2 halo=vec2(.0035,.0025);vec3 glow=max(texture2D(image,p+halo).rgb-.82,0.)+max(texture2D(image,p-halo).rgb-.82,0.)+max(texture2D(image,p+vec2(halo.x,-halo.y)).rgb-.82,0.)+max(texture2D(image,p-vec2(halo.x,-halo.y)).rgb-.82,0.);color+=glow*.075;
       float v=pow(clamp(vUv.x*(1.-vUv.x)*vUv.y*(1.-vUv.y)*16.,0.,1.),.065);color*=mix(1.,v*.97,damage*.8);
-      color+=(noise(floor(vUv*vec2(1280.,960.))+floor(seconds*29.97))-.5)*.013*damage;gl_FragColor=vec4(color,1.);}`,
+      float grain=noise(floor(vUv*vec2(1280.,960.))+floor(seconds*29.97))-.5;color+=grain*(.013+anomaly*.08)*damage;
+      float loss=step(.86,noise(vec2(floor(vUv.y*240.),frame)));color*=1.-loss*anomaly*damage*.18;gl_FragColor=vec4(color,1.);}`,
   });
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   postScene.add(quad);
