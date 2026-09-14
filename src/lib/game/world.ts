@@ -587,36 +587,3 @@ function directionsCount(bits: number) {
   for (const bit of [N, E, S, W]) if (bits & bit) count++;
   return count;
 }
-export function createEntity(material: THREE.Material) {
-  const entity = new THREE.Group();
-  const limb = (a: number[], b: number[], radius: number) => {
-    const start = new THREE.Vector3(...a),
-      end = new THREE.Vector3(...b),
-      delta = end.clone().sub(start);
-    const mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius * 0.7, radius, delta.length(), 5),
-      material,
-    );
-    mesh.position.copy(start.add(end).multiplyScalar(0.5));
-    mesh.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0),
-      delta.normalize(),
-    );
-    entity.add(mesh);
-  };
-  limb([0, 1.1, 0], [0.07, 2.3, 0], 0.09);
-  limb([-0.02, 1.3, 0], [-0.29, 0.65, 0.05], 0.042);
-  limb([-0.29, 0.65, 0.05], [-0.32, 0, 0.16], 0.029);
-  limb([0.04, 1.3, 0], [0.3, 0.75, -0.1], 0.035);
-  limb([0.3, 0.75, -0.1], [0.38, 0, 0.1], 0.025);
-  limb([0, 2.15, 0], [-0.4, 1.6, 0], 0.035);
-  limb([-0.4, 1.6, 0], [-0.62, 0.66, 0.15], 0.025);
-  limb([0.05, 2.15, 0], [0.43, 1.7, 0], 0.035);
-  limb([0.43, 1.7, 0], [0.59, 0.8, 0.15], 0.024);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), material);
-  head.scale.set(0.9, 1.5, 0.8);
-  head.position.set(0.07, 2.5, 0);
-  entity.add(head);
-  entity.visible = false;
-  return entity;
-}
