@@ -494,11 +494,13 @@ export class BackroomsAudio {
       surface === "carpet" ? 0.55 : 1.1,
       distant ? 3 : 1.7,
     );
+    // A restrained footstep mix, including the low impact and room reflections.
+    voice.input.gain.value = 0.6;
     if (surface === "water" && this.splash) {
       const source = ctx.createBufferSource(), gain = ctx.createGain();
       source.buffer = this.splash;
       source.playbackRate.value = 0.85 + this.rng() * 0.3;
-      gain.gain.value = running ? 0.85 : 0.55;
+      gain.gain.value = running ? 0.6 : 0.42;
       source.connect(gain).connect(voice.input);
       voice.sources.push(source);
       voice.nodes.push(gain);
@@ -515,7 +517,7 @@ export class BackroomsAudio {
     filter.frequency.value = entity ? (hard ? 1700 : 540) : hard ? 2800 : 600;
     const level = entity ? 0.3 : hard ? 0.34 : 0.22;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(level * (running ? 1.6 : 1), now + 0.012);
+    gain.gain.linearRampToValueAtTime(level * (running ? 1.35 : 1), now + 0.012);
     gain.gain.exponentialRampToValueAtTime(
       0.001,
       now + (entity ? 0.3 : hard ? 0.19 : 0.14),
@@ -525,7 +527,7 @@ export class BackroomsAudio {
       low = ctx.createGain();
     thud.frequency.setValueAtTime(entity ? 67 : hard ? 115 : 82, now);
     thud.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-    low.gain.setValueAtTime((hard || entity ? 0.05 : 0.035) * (running ? 1.6 : 1), now);
+    low.gain.setValueAtTime((hard || entity ? 0.05 : 0.035) * (running ? 1.35 : 1), now);
     low.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
     thud.connect(low).connect(voice.input);
     voice.sources.push(source, thud);
