@@ -479,6 +479,15 @@ button:disabled {
 .settings-done:hover {
   background: #ffffe80e;
 }
+.settings-note {
+  font-size: calc(var(--hud-unit) * 1.5);
+  line-height: 1.6;
+  opacity: 0.6;
+}
+.settings-dialog :focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: calc(var(--hud-unit) * 0.5);
+}
 .touch-controls {
   display: none;
 }
