@@ -171,8 +171,10 @@ export class BackroomsEngine {
         "First person view of the backrooms",
       );
       this.container.appendChild(renderer.canvas);
-      this.computerScreens = new ComputerScreens(this.container, () =>
-        this.leaveComputer(),
+      this.computerScreens = new ComputerScreens(
+        this.container,
+        () => this.leaveComputer(),
+        (powered) => this.audio.powerComputer(powered),
       );
       this.resize();
       this.bind();
@@ -201,6 +203,19 @@ export class BackroomsEngine {
   }
   private bind() {
     const signal = this.listeners.signal;
+    // Capture also covers keyboard activation, HUD/settings, and CRT toolbars.
+    this.container.parentElement?.addEventListener(
+      "click",
+      (event) => {
+        const button = event.target instanceof Element
+          ? event.target.closest("button")
+          : null;
+        if (!button || button.disabled || button.closest("[inert]")) return;
+        if (button.classList.contains("crt-power-control")) return;
+        this.audio.playInterface();
+      },
+      { capture: true, signal },
+    );
     // An embedded preview may deny pointer capture. Handle that failure before
     // the addon's default logger, then retain the supported drag-to-look path.
     document.addEventListener(
@@ -371,7 +386,7 @@ export class BackroomsEngine {
     const station = this.computerScreens?.nearest;
     if (!this.active || this.focusedComputer || !station) return;
     this.focusedComputer = station;
-    this.audio.playComputer();
+    if (this.computerScreens!.isPowered(station)) this.audio.playComputer();
     this.returnView = {
       position: this.camera.position.clone(),
       quaternion: this.camera.quaternion.clone(),

@@ -41,6 +41,7 @@ export class ComputerScreens {
   constructor(
     container: HTMLElement,
     private exit: () => void,
+    private onPower: (powered: boolean) => void,
   ) {
     this.dialog.className = "computer-layer";
     this.dialog.setAttribute("aria-label", "Computer browser");
@@ -65,6 +66,10 @@ export class ComputerScreens {
 
   resize(width: number, height: number) {
     this.renderer.setSize(width, height);
+  }
+
+  isPowered(station: ComputerStation) {
+    return !this.poweredOff.has(station.id);
   }
 
   focus(station: ComputerStation) {
@@ -220,6 +225,7 @@ export class ComputerScreens {
       (powered) => {
         if (powered) this.poweredOff.delete(station.id);
         else this.poweredOff.add(station.id);
+        this.onPower(powered);
       },
     );
     power.setActive(this.active?.id === station.id);
