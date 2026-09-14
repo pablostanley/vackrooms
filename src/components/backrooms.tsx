@@ -262,8 +262,14 @@ export default function Backrooms() {
             <>
               <p className="desktop-hint">
                 WASD WALK &nbsp; MOUSE LOOK &nbsp; SHIFT RUN
+                <br />
+                SPACE JUMP &nbsp; SPACE AGAIN BIG JUMP
               </p>
-              <p className="mobile-hint">LEFT THUMB TO MOVE · SWIPE TO LOOK</p>
+              <p className="mobile-hint">
+                LEFT THUMB TO MOVE · SWIPE TO LOOK
+                <br />
+                TAP JUMP · TAP AGAIN FOR A BIG JUMP
+              </p>
             </>
           )}
         </div>
@@ -406,6 +412,14 @@ export default function Backrooms() {
             <dd>RUN</dd>
           </div>
           <div>
+            <dt>SPACE</dt>
+            <dd>JUMP ONTO LOW OBJECTS</dd>
+          </div>
+          <div>
+            <dt>SPACE AGAIN</dt>
+            <dd>BIG JUMP WHILE AIRBORNE</dd>
+          </div>
+          <div>
             <dt>{stats.gamepad ? "Y / △" : "F"}</dt>
             <dd>LIGHT</dd>
           </div>
@@ -532,6 +546,18 @@ function TouchControls({
         <span style={{ transform: `translate(${offset.x}px,${offset.y}px)` }} />
       </div>
       <div className="touch-right">
+        <button
+          onPointerDown={(e) => {
+            e.preventDefault();
+            engine.current?.jump();
+          }}
+          onClick={(e) => {
+            if (e.detail === 0) engine.current?.jump();
+          }}
+          aria-label="Jump; tap again in the air for a big jump"
+        >
+          Jump
+        </button>
         <button
           onClick={() => engine.current?.toggleFlashlight()}
           aria-label="Toggle flashlight"

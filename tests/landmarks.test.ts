@@ -190,7 +190,7 @@ test("full-sized pools have continuous dry decks and coping that stops the capsu
   const position = new Vector3(basin.x - 1.1, 1.66, basin.z + basin.length / 2);
   const motor = await CharacterMotor.create(position);
   try {
-    motor.addSection("0,0", data, section.colliders);
+    motor.addSection("0,0", data, section.colliders, section.shapedColliders);
     for (let i = 0; i < 120; i++) motor.move(0.04, 0, 1 / 60, position);
     assert.ok(
       position.x < basin.x - 0.35,
