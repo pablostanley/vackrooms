@@ -54,6 +54,8 @@ Every tape starts in an office, with a landmark reachable along a route of at mo
 
 Press E while facing a nearby CRT, or tap its contextual hint. The camera frames the screen and its plastic bezel; walking, noclipping, and world mutations pause while browsing. The live site starts at https://vgpu.sh/. Home, Reload, and an HTTPS address bar work inside the period browser shell.
 
+The power switch on the lower-right bezel turns the monitor off and on. Off hides the website and disables its controls; the computer keeps the page running so switching back on resumes the current page. Power state survives nearby page-cache replacement and is released when its section leaves the resident world.
+
 Computer mode requests fullscreen so native Escape returns to the camera even after clicking or typing inside the cross-origin site. On browsers or embedded previews that deny fullscreen, use BACK TO CAMERA or the browser window's × button. The page remains mounted when leaving and re-entering nearby; it resets after distance or section eviction. Some embedded app browsers also block third-party iframes; verify live site navigation in a normal browser.
 
 Sites that send frame-blocking headers cannot run inside the monitor; Open in tab is available for the last entered address. The shell cannot read cross-origin navigation: the address bar, Reload, and Open in tab refer to the last address entered, while links within the site navigate normally. No page proxy or frame-protection bypass is used. Websites require a network connection; the procedural world does not.
