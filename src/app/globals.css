@@ -662,8 +662,13 @@ button:disabled {
   cursor: pointer;
   text-shadow: none;
 }
-.crt-browser button:active {
+.crt-browser button:active:not(:disabled) {
   border-color: #6b6d60 #eeecdb #eeecdb #6b6d60;
+}
+.crt-browser button:disabled {
+  color: #858577;
+  text-shadow: 1px 1px #eeecdb;
+  cursor: default;
 }
 .crt-browser button:focus-visible,
 .crt-browser input:focus-visible {
@@ -742,4 +747,75 @@ button:disabled {
   flex-direction: row;
   justify-content: center;
   gap: 0.6em;
+}
+.crt-browser[data-crt-effect="vgpu"] .crt-glass {
+  /* The WGSL map supplies the scanlines, vignette, tint, and reflected light. */
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  mix-blend-mode: multiply;
+  box-shadow: inset 0 0 4px 2px #11180f80;
+}
+.crt-picture {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* This control sits on the modeled lower bezel, outside the screen clipping. */
+.crt-power-control {
+  width: 110px;
+  height: 88px;
+  padding: 20px 19px;
+  border: 0;
+  background: transparent;
+  color: #34372c;
+  font-family: var(--font-geist), sans-serif;
+  text-shadow: none;
+  cursor: pointer;
+  backface-visibility: hidden;
+}
+.crt-power-control span {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 48px;
+  border: 3px solid;
+  border-color: #e0dcc0 #6f705b #6f705b #e0dcc0;
+  border-radius: 8px;
+  background: #b5b599;
+  box-shadow: 0 2px 3px #34352670;
+  font-size: 35px;
+  line-height: 1;
+}
+.crt-power-control::before {
+  content: "";
+  position: absolute;
+  left: -24px;
+  top: 37px;
+  width: 24px;
+  height: 14px;
+  border: 2px solid #7f8462;
+  border-radius: 2px;
+  background: #40472e;
+}
+.crt-power-control.is-powered::before {
+  background: #cadf7c;
+  box-shadow: 0 0 9px #d4e28d80;
+}
+.crt-power-control:active span {
+  border-color: #6f705b #e0dcc0 #e0dcc0 #6f705b;
+  box-shadow: none;
+}
+.crt-power-control:focus-visible {
+  outline: none;
+}
+.crt-power-control:focus-visible span {
+  outline: 3px dotted #34372c;
+  outline-offset: 4px;
+}
+.is-screen-flat .crt-power-control {
+  left: var(--power-x);
+  top: var(--power-y);
+  transform: translate(-50%, -50%) scale(var(--screen-scale)) !important;
 }
