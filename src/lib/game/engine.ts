@@ -12,6 +12,7 @@ import { EntityModel } from "./entity-model";
 import { Stalker } from "./stalker";
 import { ComputerScreens } from "./computer-screens";
 import { computerFocus, type ComputerStation } from "./computers";
+import { ShadowCache } from "./shadow-cache";
 import { connectedGamepads, GamepadInput, PAD, type GamepadFrame } from "./gamepad";
 import type { GameSettings } from "./settings";
 
@@ -60,6 +61,9 @@ export class BackroomsEngine {
   private chunks = new Map<string, ChunkData>();
   private sections = new Map<string, Section>();
   private lights: THREE.SpotLight[] = [];
+  private shadows: ShadowCache;
+  private streamedX = NaN;
+  private streamedZ = NaN;
   private audio: BackroomsAudio;
   private audioForward = new THREE.Vector3();
   private audioUp = new THREE.Vector3();
@@ -139,6 +143,7 @@ export class BackroomsEngine {
       this.scene.add(light, light.target);
       this.lights.push(light);
     }
+    this.shadows = new ShadowCache(this.lights);
     this.scene.add(this.flashlight, this.flashlight.target, this.entity);
     this.camera.rotation.order = "YXZ";
     this.stream();
@@ -189,7 +194,7 @@ export class BackroomsEngine {
       this.camera.rotation.set(this.pitch, this.yaw, 0);
       renderer.render(0, this.settings.tape, 0);
       this.callbacks.ready(renderer.backend);
-      this.frameId = requestAnimationFrame(this.tick);
+      if (!document.hidden) this.frameId = requestAnimationFrame(this.tick);
     } catch (error) {
       console.error(error);
       if (this.alive)
@@ -280,7 +285,14 @@ export class BackroomsEngine {
     document.addEventListener(
       "visibilitychange",
       () => {
-        if (document.hidden) this.pause();
+        if (document.hidden) {
+          this.pause();
+          cancelAnimationFrame(this.frameId);
+          this.frameId = 0;
+          this.lastTime = 0;
+        } else if (this.alive && this.renderer && !this.frameId) {
+          this.frameId = requestAnimationFrame(this.tick);
+        }
       },
       { signal },
     );
@@ -363,6 +375,7 @@ export class BackroomsEngine {
   start(lock = true) {
     if (!this.renderer || !this.alive) return;
     this.active = true;
+    this.lastTime = 0;
     this.tapeBurst = 0.65;
     if (this.controls) this.controls.enabled = true;
     this.hasStarted = true;
@@ -529,6 +542,9 @@ export class BackroomsEngine {
   private stream() {
     const cx = Math.floor(this.position.x / SPAN),
       cz = Math.floor(this.position.z / SPAN);
+    if (cx === this.streamedX && cz === this.streamedZ) return;
+    this.streamedX = cx;
+    this.streamedZ = cz;
     for (let z = cz - 1; z <= cz + 1; z++)
       for (let x = cx - 1; x <= cx + 1; x++) {
         const key = `${x},${z}`;
@@ -550,6 +566,9 @@ export class BackroomsEngine {
         this.navigation.removeSection(key);
         this.chunks.delete(key);
       }
+    this.shadows.invalidate();
+    this.lastLights = -10;
+    this.lastScreens = -1;
   }
   private prepareWater(section: Section) {
     if (this.renderer)
@@ -567,10 +586,7 @@ export class BackroomsEngine {
     this.lights.forEach((light, i) => {
       const p = candidates[i];
       light.visible = !!p;
-      if (p) {
-        light.position.copy(p);
-        light.target.position.set(p.x, 0, p.z);
-      }
+      if (p) this.shadows.place(light, p);
     });
   }
   private walk(dt: number) {
@@ -591,11 +607,12 @@ export class BackroomsEngine {
     const speed = running ? 4.1 : 2.35;
     const dx = (x * Math.cos(this.yaw) + z * Math.sin(this.yaw)) * speed * dt,
       dz = (-x * Math.sin(this.yaw) + z * Math.cos(this.yaw)) * speed * dt;
-    const previous = this.position.clone();
+    const previousX = this.position.x,
+      previousZ = this.position.z;
     this.motor?.move(dx, dz, dt, this.position);
     const moved = Math.hypot(
-      this.position.x - previous.x,
-      this.position.z - previous.z,
+      this.position.x - previousX,
+      this.position.z - previousZ,
     );
     this.playerSpeed = moved / Math.max(dt, 0.001);
     this.distance += moved;
@@ -667,6 +684,7 @@ export class BackroomsEngine {
     for (const section of this.sections.values()) section.dispose();
     this.sections.clear();
     this.chunks.clear();
+    this.streamedX = this.streamedZ = NaN;
     this.navigation.clear();
     this.motor?.clearSections();
     this.position.set(CELL * 2.5, 1.66, CELL * 4.5);
@@ -721,6 +739,8 @@ export class BackroomsEngine {
       this.navigation.addSection(key, revised, section.colliders);
       this.motor?.addSection(key, revised, section.colliders);
       this.scene.add(section.group);
+      this.shadows.invalidate();
+      this.lastScreens = -1;
       this.lastLights = -10;
       return;
     }
@@ -766,6 +786,16 @@ export class BackroomsEngine {
   }
   private tick = (now: number) => {
     if (!this.alive) return;
+    this.frameId = 0;
+    if (document.hidden) {
+      this.lastTime = 0;
+      return;
+    }
+    // Standby keeps the VHS preview at tape cadence, without a full-rate scene.
+    if (!this.active && this.lastTime && now - this.lastTime < 1000 / 30 - 1) {
+      this.frameId = requestAnimationFrame(this.tick);
+      return;
+    }
     const dt = Math.min((now - (this.lastTime || now)) / 1000, 0.045);
     this.lastTime = now;
     this.elapsed += dt;
@@ -828,12 +858,15 @@ export class BackroomsEngine {
           24 * heightCompensation * (1 + jitter) * (i < 8 ? 1 : 0.6);
       }
       this.flashlight.position.copy(this.camera.position);
-      const target = new THREE.Vector3(0, 0, -1)
+      this.flashlight.target.position
+        .set(0, 0, -1)
         .applyQuaternion(this.camera.quaternion)
         .multiplyScalar(8)
         .add(this.camera.position);
-      this.flashlight.target.position.copy(target);
       this.flashlight.intensity = this.flashOn ? 22 : 0;
+      this.shadows.update(
+        this.active && !this.focusedComputer && this.entity.visible,
+      );
       this.stress = Math.max(0, this.stress - dt * 0.4);
       const tapeDamage = this.settings.reducedMotion
         ? Math.min(0.18, this.settings.tape)

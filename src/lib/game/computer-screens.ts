@@ -14,6 +14,7 @@ import type { Section } from "./world";
 import { ComputerCrt } from "./computer-crt";
 import { attachComputerNavigation } from "./computer-navigation";
 import { ComputerPower } from "./computer-power";
+import { ScreenVisibility } from "./screen-visibility";
 
 interface LiveScreen {
   station: ComputerStation;
@@ -32,7 +33,7 @@ export class ComputerScreens {
   private exitButton = document.createElement("button");
   private screens = new Map<string, LiveScreen>();
   private poweredOff = new Set<string>();
-  private raycaster = new THREE.Raycaster();
+  private visibility = new ScreenVisibility();
   private active: ComputerStation | null = null;
   private crt: ComputerCrt;
   nearest: ComputerStation | null = null;
@@ -248,30 +249,6 @@ export class ComputerScreens {
     };
   }
 
-  private unobstructed(
-    station: ComputerStation,
-    camera: THREE.PerspectiveCamera,
-    meshes: THREE.Object3D[],
-  ) {
-    // Test the entire glass opening so DOM never shines through walls or props.
-    for (const [x, y] of [
-      [0, 0],
-      [-0.49, -0.49],
-      [-0.49, 0.49],
-      [0.49, -0.49],
-      [0.49, 0.49],
-    ]) {
-      const target = new THREE.Vector3(x * station.width, y * station.height, 0)
-        .applyQuaternion(station.quaternion)
-        .add(station.position);
-      const delta = target.sub(camera.position);
-      this.raycaster.set(camera.position, delta.clone().normalize());
-      this.raycaster.far = delta.length() - 0.025;
-      if (this.raycaster.intersectObjects(meshes, false).length) return false;
-    }
-    return true;
-  }
-
   update(
     camera: THREE.PerspectiveCamera,
     sections: Iterable<Section>,
@@ -304,20 +281,15 @@ export class ComputerScreens {
           a.position.distanceToSquared(camera.position) -
           b.position.distanceToSquared(camera.position),
       );
-    const meshes: THREE.Object3D[] = [];
-    for (const section of resident) {
-      section.group.updateMatrixWorld();
-      for (const object of section.group.children) {
-        if (
-          object instanceof THREE.Mesh &&
-          !(object.material as THREE.Material).transparent
-        )
-          meshes.push(object);
+    const visible: ComputerStation[] = [];
+    if (candidates.length) {
+      const meshes = resident.flatMap((section) => section.occluders);
+      for (const station of candidates) {
+        if (this.visibility.unobstructed(station, camera.position, meshes))
+          visible.push(station);
+        if (visible.length === MAX_LIVE_SCREENS) break;
       }
     }
-    const visible = candidates
-      .filter((station) => this.unobstructed(station, camera, meshes))
-      .slice(0, MAX_LIVE_SCREENS);
     this.nearest =
       playing && !this.active
         ? (visible.find((station) => canUseComputer(station, camera)) ?? null)
