@@ -13,7 +13,13 @@ import {
 import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
 import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
-import { FOOTSTEP_RECORDINGS, footstepRecording, RpgRecordings } from "./rpg-recordings";
+import {
+  CREAK_RECORDINGS,
+  FOOTSTEP_RECORDINGS,
+  RPG_RECORDINGS,
+  footstepRecording,
+  RpgRecordings,
+} from "./rpg-recordings";
 
 interface SpatialVoice {
   position: SoundPosition;
@@ -209,7 +215,7 @@ export class BackroomsAudio {
         this.suspendTimer = null;
         if (!this.active && !this.disposed)
           void this.ctx?.suspend().catch(() => {});
-      }, 400);
+      }, 600); // Let the recorded flashlight click finish while paused.
   }
 
   playInterface(kind: InterfaceSound = "click") {
@@ -218,6 +224,22 @@ export class BackroomsAudio {
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
     this.suspendTimer = null;
     this.interfaceAudio!.play(kind);
+    void this.ctx!.resume().then(() => this.suspendWhenIdle()).catch(() => {});
+  }
+
+  playFlashlight() {
+    if (this.disposed || !this.volume) return;
+    if (!this.ctx) this.initialize();
+    if (this.suspendTimer) clearTimeout(this.suspendTimer);
+    this.suspendTimer = null;
+    const buffer = this.recordings?.get("flashlight");
+    if (buffer) {
+      this.interfaceAudio!.playBuffer(buffer, RPG_RECORDINGS.flashlight.gain);
+    } else {
+      // Keep the first switch responsive while the recording decodes; no late click.
+      this.interfaceAudio!.play("click", RPG_RECORDINGS.flashlight.gain);
+      void this.recordings!.preload();
+    }
     void this.ctx!.resume().then(() => this.suspendWhenIdle()).catch(() => {});
   }
 
@@ -515,10 +537,14 @@ export class BackroomsAudio {
 
   private buildingNoise(position: SoundPosition, kind: "duct" | "settle") {
     if (!this.ctx || !this.noise || this.transients.size >= 12) return;
+    if (kind === "settle") {
+      this.creak(position);
+      return;
+    }
     const ctx = this.ctx,
       now = ctx.currentTime;
     const voice = this.spatial(
-      { ...position, y: kind === "duct" ? 2.6 : 0.8 },
+      { ...position, y: 2.6 },
       0.7,
       3,
     );
@@ -527,15 +553,12 @@ export class BackroomsAudio {
       gain = ctx.createGain();
     source.buffer = this.noise;
     source.loop = true;
-    source.playbackRate.value = kind === "duct" ? 0.65 : 1.15;
+    source.playbackRate.value = 0.65;
     filter.type = "lowpass";
-    filter.frequency.value = kind === "duct" ? 950 : 1500;
-    const duration = kind === "duct" ? 2.8 : 0.45;
+    filter.frequency.value = 950;
+    const duration = 2.8;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(
-      kind === "duct" ? 0.23 : 0.32,
-      now + (kind === "duct" ? 0.8 : 0.018),
-    );
+    gain.gain.linearRampToValueAtTime(0.23, now + 0.8);
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
     source.connect(filter).connect(gain).connect(voice.input);
     voice.sources.push(source);
@@ -543,6 +566,28 @@ export class BackroomsAudio {
     this.track(voice);
     source.start(now, this.rng());
     source.stop(now + duration + 0.05);
+  }
+
+  private creak(position: SoundPosition) {
+    const recording = CREAK_RECORDINGS[Math.floor(this.rng() * CREAK_RECORDINGS.length)];
+    const buffer = this.recordings?.get(recording);
+    if (!buffer) return;
+    const ctx = this.ctx!, profile = RPG_RECORDINGS[recording];
+    // Keep the source anchored in the room; spatial() applies distance and walls
+    // to both the direct sound and its quiet reflections as the listener moves.
+    const voice = this.spatial({ ...position, y: 2.4 }, 0.45, 4.5);
+    voice.input.gain.value = profile.gain;
+    const source = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
+    source.buffer = buffer;
+    source.playbackRate.value = 0.9 + this.rng() * 0.15;
+    filter.type = "lowpass";
+    filter.frequency.value = profile.cutoff;
+    filter.Q.value = 0.5;
+    source.connect(filter).connect(voice.input);
+    voice.sources.push(source);
+    voice.nodes.push(filter);
+    this.track(voice);
+    source.start();
   }
 
   private track(voice: SpatialVoice) {

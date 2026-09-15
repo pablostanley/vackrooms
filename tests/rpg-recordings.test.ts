@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { FOOTSTEP_RECORDINGS, footstepRecording, RpgRecordings } from "../src/lib/game/rpg-recordings";
+import { FOOTSTEP_RECORDINGS, RPG_RECORDINGS, footstepRecording, RpgRecordings } from "../src/lib/game/rpg-recordings";
+
+const recordingCount = Object.keys(RPG_RECORDINGS).length;
 
 test("recorded footsteps follow surfaces, with water taking precedence over running", () => {
   assert.equal(FOOTSTEP_RECORDINGS[footstepRecording("carpet", false)].file, "footstep00");
@@ -15,7 +17,7 @@ test("recorded footsteps follow surfaces, with water taking precedence over runn
 });
 
 test("every selected recording ships as a real Ogg asset", () => {
-  for (const { file } of Object.values(FOOTSTEP_RECORDINGS)) {
+  for (const { file } of Object.values(RPG_RECORDINGS)) {
     const bytes = readFileSync(new URL(`../public/audio/kenney-rpg/${file}.ogg`, import.meta.url));
     assert.equal(bytes.subarray(0, 4).toString(), "OggS");
     assert.ok(bytes.length > 1000 && bytes.length < 50000);
@@ -33,8 +35,9 @@ test("simultaneous preloads share requests and keep decoded recordings cached", 
   assert.ok(normal);
   await recordings.preload();
   assert.equal(recordings.get("normal"), normal);
-  assert.equal(fetch.mock.callCount(), 4);
-  assert.equal(decodes, 4);
+  assert.equal(fetch.mock.callCount(), recordingCount);
+  assert.equal(decodes, recordingCount);
+  assert.ok(recordings.get("flashlight") && recordings.get("creak1"));
   recordings.dispose();
   assert.equal(recordings.get("normal"), undefined);
 });
@@ -52,7 +55,7 @@ test("failed recordings stay silent and can retry without reloading successful f
   fail = false;
   await recordings.preload();
   assert.ok(recordings.get("water"));
-  assert.equal(fetch.mock.callCount(), 5);
+  assert.equal(fetch.mock.callCount(), recordingCount + 1);
   recordings.dispose();
 });
 
@@ -73,5 +76,5 @@ test("disposal aborts loading and late decoding never repopulates the cache", as
   assert.ok(signals.every((signal) => signal.aborted));
   assert.equal(recordings.get("normal"), undefined);
   await recordings.preload();
-  assert.equal(signals.length, 4);
+  assert.equal(signals.length, recordingCount);
 });

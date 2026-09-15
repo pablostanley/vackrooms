@@ -10,6 +10,9 @@ license is included in `kenney-rpg/License.txt`.
 - `footstep04.ogg`: pool decks and food-court hard floors.
 - `footstep05.ogg`: steps inside water, including running.
 - `footstep08.ogg`: running on dry floors and heavier creature footsteps.
+- `creak1.ogg`, `creak2.ogg`, `creak3.ogg`: quiet, fixed-position building settling,
+  using the existing sparse event schedule, wall filtering, distance falloff, and room echo.
+- `metalClick.ogg`: quiet flashlight switch, shared by mouse, touch, keyboard, and gamepad.
 
 Playback balances each recording's level and applies subtle seeded pitch variation,
 surface filtering, and the existing spatial/room effects. Original files stay intact.

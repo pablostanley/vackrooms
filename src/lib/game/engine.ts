@@ -225,7 +225,7 @@ export class BackroomsEngine {
           ? event.target.closest("button")
           : null;
         if (!button || button.disabled || button.closest("[inert]")) return;
-        if (button.classList.contains("crt-power-control")) return;
+        if (button.classList.contains("crt-power-control") || button.dataset.sound === "flashlight") return;
         this.audio.playInterface();
       },
       { capture: true, signal },
@@ -498,6 +498,7 @@ export class BackroomsEngine {
   }
   toggleFlashlight() {
     this.flashOn = !this.flashOn;
+    this.audio.playFlashlight();
   }
   private pollGamepad(dt: number) {
     const input = this.gamepad.read(connectedGamepads(), !document.hidden && document.hasFocus());

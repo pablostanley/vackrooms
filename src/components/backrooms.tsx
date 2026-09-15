@@ -175,6 +175,7 @@ export default function Backrooms() {
           <nav className="hud-actions" aria-label="Camcorder controls">
             <button
               onClick={() => engine.current?.toggleFlashlight()}
+              data-sound="flashlight"
               disabled={!ready || !!error}
               aria-label={
                 stats.flashlight ? "Turn flashlight off" : "Turn flashlight on"
@@ -560,6 +561,7 @@ function TouchControls({
         </button>
         <button
           onClick={() => engine.current?.toggleFlashlight()}
+          data-sound="flashlight"
           aria-label="Toggle flashlight"
         >
           Light

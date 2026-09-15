@@ -183,4 +183,19 @@ test("rapid interface clicks cap voices, reuse their buffer, and clean up", () =
   assert.equal(audio.sources.filter((source) => !source.disconnected).length, 8);
   sounds.dispose();
   assert.ok(audio.sources.every((source) => source.disconnected && !source.onended));
+  assert.ok(audio.levels.every((level) => level.disconnected));
+});
+
+test("recorded interface sounds share the voice cap and release their gain on completion", () => {
+  const audio = audioDouble();
+  const sounds = new InterfaceAudio(audio.ctx, {} as AudioNode);
+  const recording = { duration: 0.45 } as AudioBuffer;
+  for (let i = 0; i < 9; i++) sounds.playBuffer(recording, 0.14);
+  assert.equal(audio.buffers(), 0, "reuse the already decoded recording");
+  assert.ok(audio.sources.every((source) => source.buffer === recording));
+  assert.equal(audio.sources.filter((source) => !source.disconnected).length, 8);
+  audio.sources.at(-1)!.onended!();
+  assert.ok(audio.sources.at(-1)!.disconnected && audio.levels.at(-1)!.disconnected);
+  sounds.dispose();
+  assert.ok(audio.levels.every((level) => level.disconnected));
 });
