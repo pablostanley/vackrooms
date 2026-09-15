@@ -4,6 +4,7 @@ import { pass, uniform, uv, vec2, vec3, max } from "three/tsl";
 import { tslExports } from "vgpu/three";
 import tapeModule from "@/shaders/tape.wgsl";
 import { createPoolWater } from "./pool-water";
+import { RenderResolution } from "./render-resolution";
 
 type WarpInputs = { uv: Node; seconds: Node; damage: Node; anomaly: Node };
 type GradeInputs = WarpInputs & { color: Node };
@@ -12,6 +13,7 @@ export interface GameRenderer {
   backend: "WebGPU · vgpu" | "WebGL";
   waterMaterial: THREE.Material;
   resize: (w: number, h: number) => void;
+  recordFrame: (milliseconds: number, playing: boolean) => void;
   render: (time: number, damage: number, stress: number) => void;
   dispose: () => void;
 }
@@ -20,7 +22,12 @@ export async function createRenderer(
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
 ): Promise<GameRenderer> {
-  if (navigator.gpu) {
+  const resolution = new RenderResolution();
+  let width = 1,
+    height = 1;
+  const forceWebGL = process.env.NODE_ENV === "development" &&
+    new URLSearchParams(location.search).get("renderer") === "webgl";
+  if (navigator.gpu && !forceWebGL) {
     let renderer: WebGPURenderer | undefined;
     try {
       const adapter = await navigator.gpu.requestAdapter();
@@ -30,7 +37,6 @@ export async function createRenderer(
           powerPreference: "high-performance",
         });
         await renderer.init();
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.0;
         renderer.shadowMap.enabled = true;
@@ -89,12 +95,24 @@ export async function createRenderer(
         });
         const gpuRenderer = renderer;
         const water = createPoolWater(true);
+        const resize = () => {
+          gpuRenderer.setPixelRatio(
+            resolution.pixelRatio(width, height, window.devicePixelRatio),
+          );
+          gpuRenderer.setSize(width, height);
+        };
         return {
           canvas: renderer.domElement,
           backend: "WebGPU · vgpu",
           waterMaterial: water.material,
           resize: (w, h) => {
-            gpuRenderer.setSize(w, h);
+            width = w;
+            height = h;
+            resolution.resetSampling();
+            resize();
+          },
+          recordFrame: (milliseconds, playing) => {
+            if (resolution.recordFrame(milliseconds, playing)) resize();
           },
           render: (t, d, s) => {
             water.update(t);
@@ -125,7 +143,6 @@ export async function createRenderer(
     powerPreference: "high-performance",
   });
   const water = createPoolWater(false);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
@@ -161,16 +178,27 @@ export async function createRenderer(
   });
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   postScene.add(quad);
+  const resize = () => {
+    const ratio = resolution.pixelRatio(width, height, window.devicePixelRatio);
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(width, height);
+    target.setSize(
+      Math.max(1, Math.floor(width * ratio)),
+      Math.max(1, Math.floor(height * ratio)),
+    );
+  };
   return {
     canvas: renderer.domElement,
     backend: "WebGL",
     waterMaterial: water.material,
     resize: (w, h) => {
-      renderer.setSize(w, h);
-      target.setSize(
-        Math.floor(w * renderer.getPixelRatio()),
-        Math.floor(h * renderer.getPixelRatio()),
-      );
+      width = w;
+      height = h;
+      resolution.resetSampling();
+      resize();
+    },
+    recordFrame: (milliseconds, playing) => {
+      if (resolution.recordFrame(milliseconds, playing)) resize();
     },
     render: (t, d, s) => {
       water.update(t);

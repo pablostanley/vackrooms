@@ -65,7 +65,8 @@ Stick input has a radial dead zone and uses the saved look sensitivity. Disconne
 - `src/lib/game/furniture-layout.ts`: solid attachment anchors keep every stacked chair leg embedded in the seat below. Arbitrarily rotated wall/ceiling props intersect the architecture, with reserved walking lanes through each room.
 - `src/lib/game/world.ts`: batched architecture, ceiling panels, wallpaper, furniture, faded service areas, and unstable walls. A 3×3 window of sections streams around the player and disposes sections left behind.
 - Static section meshes bake their transforms and bounds once. Computer visibility reuses the section's opaque meshes, checks all five glass samples, and stops at the first obstruction or the two-screen limit.
-- `src/lib/game/shadow-cache.ts`: fluorescent shadow maps refresh when fixtures move, sections change, or the creature animates. Flickering light intensity reuses the depth maps, including one final refresh to clear a departing creature. Gameplay renders at the display rate, standby at 30 fps, and hidden tabs stop rendering until visible again. Section streaming runs only when the player crosses a section boundary.
+- `src/lib/game/shadow-cache.ts`: fixtures keep their shadow maps when distance ranks swap. Moving creatures refresh only lights whose shadow view intersects their full animated bounds, including one final refresh to clear a departing silhouette. World changes still invalidate the maps. Gameplay renders at the display rate, standby at 30 fps, and hidden tabs stop rendering until visible again. Section streaming runs only when the player crosses a section boundary.
+- `src/lib/game/render-resolution.ts`: WebGPU/vgpu and WebGL start at high resolution (up to 2× pixel density and a 4K pixel budget). After a one-second warmup, gameplay below 50 fps over two seconds lowers the render scale through 85%, 70%, 50%, and 35%. Pauses, computer browsing, and isolated long gaps reset sampling; three consecutive frames over 250 ms also lower the scale. The lower scale stays for the session to avoid oscillation; reload starts high again. The HTML HUD and computer screens retain their native resolution.
 - `src/lib/game/engine.ts`: Three.js PointerLockControls, camera feedback, streaming, unseen room changes, noclipping, and the stalking encounter controller.
 - `src/lib/game/stalker.ts`: fixed-step, tape-seeded isolation, stalking, pursuit, search, and retreat. The first opportunity comes after 75–135 active seconds; later encounters have 105–210 seconds of isolation and skipped opportunities. Early eye contact freezes the creature for its 18–32 second stalking grace period, after which it can walk under your gaze. Running draws attention and faster pursuit; losing sight and going quiet sends it to the last perceived position. Some encounters remain sightings. Spawns and departures stay outside visible sightlines.
 - `src/lib/game/entity-navigation.ts`: bounded A* routes over resident walls, furniture bounds, and dry pool decks, with body clearance and cached grid samples invalidated by streaming or mutations. Visibility tests head, chest, shoulders, and legs against the actual camera frustum and height-aware wall/furniture segments.
@@ -111,6 +112,8 @@ npx vercel@latest deploy --yes
 ```
 
 ## Validation
+
+In development, add `?renderer=webgl` (or `&renderer=webgl` after a tape seed) to exercise the fallback on a WebGPU-capable browser. This override is ignored in production.
 
 ```sh
 npm test
