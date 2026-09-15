@@ -828,3 +828,21 @@ button:disabled {
   top: var(--power-y);
   transform: translate(-50%, -50%) scale(var(--screen-scale)) !important;
 }
+.encounter-preview {
+  pointer-events: auto;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-shadow: inherit;
+}
+.escape-hint {
+  z-index: 8;
+  pointer-events: auto;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

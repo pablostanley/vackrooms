@@ -89,6 +89,12 @@ export default function Backrooms() {
             },
             stats: setStats,
             message: announce,
+            tape: (next) => {
+              setSeed(next);
+              const url = new URL(location.href);
+              url.searchParams.set("tape", String(next));
+              history.replaceState(null, "", url);
+            },
             error: setError,
           },
           initial,
@@ -283,7 +289,7 @@ export default function Backrooms() {
           </button>
         </div>
       )}
-      {playing && !stats.browsing && (
+      {playing && !stats.browsing && !stats.attacking && (
         <>
           <span className="reticle" aria-hidden="true" />
           {stats.nearComputer && (
@@ -307,6 +313,13 @@ export default function Backrooms() {
           <TouchControls engine={engine} portal={stats.nearPortal} />
         </>
       )}
+      {playing && stats.canEscape && (
+        <button className="portal-hint escape-hint" onPointerDown={(e) => { e.preventDefault(); engine.current?.jump(); }}
+          onClick={(e) => { if (e.detail === 0) engine.current?.jump(); }}>
+          <span className="desktop-hint">{stats.gamepad ? "A/×" : "SPACE"} · JUMP FREE</span>
+          <span className="mobile-hint">TAP · JUMP FREE</span>
+        </button>
+      )}
       <p
         className={`subtitles ${message && playing ? "visible" : ""}`}
         role="status"
@@ -316,7 +329,11 @@ export default function Backrooms() {
       </p>
       <div className="camera-bottom camera-osd">
         <span>JUN. 18 1994</span>
-        <span>16BIT</span>
+        {stats.encounter ? (
+          <button className="encounter-preview" onClick={() => engine.current?.previewEncounter()}>
+            {stats.encounter} · REPLAY ENCOUNTER
+          </button>
+        ) : <span>16BIT</span>}
       </div>
       <canvas className="camera-grain" ref={tapeOverlay} aria-hidden="true" />
       <dialog

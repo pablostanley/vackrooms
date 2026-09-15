@@ -12,6 +12,7 @@ import {
 } from "./acoustics";
 import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
+import { EntityAudio } from "./entity-audio";
 import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
 import {
   CREAK_RECORDINGS,
@@ -50,6 +51,7 @@ export class BackroomsAudio {
   private lastWaterRecording = -1;
   private recordings: RpgRecordings | null = null;
   private dialup: ComputerDialup | null = null;
+  private entityAudio: EntityAudio | null = null;
   private interfaceAudio: InterfaceAudio | null = null;
   private interfaceLevel: GainNode | null = null;
   private rooms = new Map<RoomSound, RoomBus>();
@@ -102,6 +104,7 @@ export class BackroomsAudio {
     this.mix.knee.value = 12;
     this.mix.ratio.value = 4;
     this.mix.connect(this.master);
+    this.entityAudio = new EntityAudio(ctx, this.mix, this.seed);
     // Menus remain audible while the room ambience is paused.
     this.interfaceLevel = ctx.createGain();
     this.interfaceLevel.gain.value = this.volume * 0.7;
@@ -251,7 +254,13 @@ export class BackroomsAudio {
   }
 
   /** Called after a tape descent so no source or echo is carried to the new floor. */
-  resetSpace(time: number) {
+  resetSpace(time: number, seed?: number) {
+    if (seed !== undefined) {
+      this.seed = seed;
+      this.schedule = new BuildingSoundSchedule(seed);
+      this.rng = random(seed ^ 0x6a09e667);
+    }
+    this.entityAudio?.reset();
     this.stopComputer();
     this.entityWasPresent = false;
     this.pending = null;
@@ -279,6 +288,10 @@ export class BackroomsAudio {
 
   stopComputer() {
     this.dialup?.stop();
+  }
+
+  entityThreat(proximity: number, squeeze: number, time: number, blackout: number) {
+    if (this.active) this.entityAudio?.update(proximity, squeeze, time, blackout);
   }
 
   update(
@@ -643,6 +656,8 @@ export class BackroomsAudio {
     this.interfaceAudio = null;
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
     this.resetSpace(0);
+    this.entityAudio?.dispose();
+    this.entityAudio = null;
     for (const source of this.loops) {
       source.stop();
       source.disconnect();
