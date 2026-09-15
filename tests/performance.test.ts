@@ -154,6 +154,7 @@ test("screen visibility checks the corners and stops after an obstruction", () =
   const station: ComputerStation = {
     id: "test",
     kind: "computerDesk",
+    homeUrl: "https://vgpu.sh/",
     position: new THREE.Vector3(0, 0, 0),
     normal: new THREE.Vector3(0, 0, 1),
     quaternion: new THREE.Quaternion(),
