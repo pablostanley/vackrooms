@@ -624,7 +624,7 @@ export function buildSection(
   // A separate random stream keeps desks reproducible without changing the maze.
   const computerRng = random(data.seed + 93011);
   // Rotate home sites independently of furniture placement, without repeats
-  // among a section's three computers. Regenerated sections keep their sites.
+  // among a section's computers. Regenerated sections keep their sites.
   const homeOffset = hash(data.x, data.z, data.seed + 93013) % COMPUTER_HOMES.length;
   const placeComputer = (cx: number, cz: number, kind: ComputerKind) => {
     if (furnished.has(cz * CHUNK + cx) || lighting.cells.has(cz * CHUNK + cx))
