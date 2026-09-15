@@ -2,6 +2,7 @@ import { Vector3 } from "three";
 import { stepLength } from "./entity-gait";
 import { CELL, random } from "./maze";
 import { wallsBetween } from "./acoustics";
+import { CRUSH_DURATION, watchedSpeedLimit } from "./encounter-effects";
 import {
   EntityNavigation,
   groundDistance,
@@ -14,6 +15,9 @@ export type StalkerPhase =
   | "stalking"
   | "pursuing"
   | "searching"
+  | "grabbing"
+  | "staggered"
+  | "dead"
   | "retreating";
 export interface StalkerInput {
   view: EntityView;
@@ -91,6 +95,35 @@ export class Stalker {
   }
   get present() {
     return this.phase !== "isolated";
+  }
+  get attacking() {
+    return this.phase === "grabbing" || this.phase === "dead";
+  }
+  get attackTime() {
+    return this.phase === "dead" ? CRUSH_DURATION : this.phase === "grabbing" ? this.phaseAge : 0;
+  }
+  /** A real player jump breaks the hold and buys enough time to run. */
+  escape() {
+    if (this.phase !== "grabbing") return false;
+    this.speed = 0;
+    this.change("staggered");
+    return true;
+  }
+  /** Explicit staging used by the development encounter preview and simulations. */
+  stage(position: GroundPoint, player: GroundPoint, pursuit = false) {
+    this.reset();
+    this.position.set(position.x, 0, position.z);
+    this.previousPosition.copy(this.position);
+    this.heading = Math.atan2(player.x - position.x, player.z - position.z);
+    this.grace = 55;
+    this.age = pursuit ? 200 : 0;
+    this.lifetime = 420;
+    this.glimpseOnly = false;
+    this.attention = this.gait = this.previousGait = this.stuck = 0;
+    this.lastKnown = { x: player.x, z: player.z };
+    this.lastSensed = this.time;
+    this.nextSense = 0;
+    this.change(pursuit ? "pursuing" : "stalking");
   }
   reset() {
     this.phase = "isolated";
@@ -196,11 +229,11 @@ export class Stalker {
       this.position.set(point.x, 0, point.z);
       this.heading = Math.atan2(route[0].x - point.x, route[0].z - point.z);
       this.age = this.attention = this.gait = this.speed = this.stuck = 0;
-      this.grace = 18 + this.rng() * 14;
+      this.grace = 48 + this.rng() * 18;
       this.glimpseOnly = this.rng() < 0.3;
       this.lifetime = this.glimpseOnly
         ? 28 + this.rng() * 18
-        : 65 + this.rng() * 25;
+        : 220 + this.rng() * 35;
       this.side = this.rng() < 0.5 ? -1 : 1;
       this.lastKnown = { x: input.view.position.x, z: input.view.position.z };
       this.lastSensed = this.time;
@@ -280,6 +313,18 @@ export class Stalker {
     }
     this.age += STEP;
     this.phaseAge += STEP;
+    if (this.phase === "dead") return false;
+    if (this.phase === "staggered") {
+      if (this.phaseAge >= 2) this.change("pursuing");
+      return false;
+    }
+    if (this.phase === "grabbing") {
+      if (this.phaseAge >= CRUSH_DURATION) {
+        this.change("dead");
+        return true;
+      }
+      return false;
+    }
     // Gaze is immediate; hearing and memory can use the slower perception cadence.
     this.observed = this.nav.visible(this.position, input.view);
     if (this.time >= this.nextSense) {
@@ -309,7 +354,7 @@ export class Stalker {
         Math.min(8, this.attention + stimulus * STEP),
       );
       if (
-        this.age >= this.grace &&
+        this.age >= this.grace + 18 &&
         !this.glimpseOnly &&
         this.attention > 4.5 &&
         sensed
@@ -319,7 +364,7 @@ export class Stalker {
         this.change("retreating");
     } else if (this.phase === "pursuing") {
       if (unseenFor > 4.5) this.change("searching");
-      else if (this.phaseAge > 32) this.change("retreating");
+      else if (this.phaseAge > 150) this.change("retreating");
     } else if (this.phase === "searching") {
       if (sensed) this.change("pursuing");
       else if (this.phaseAge > 13) this.change("retreating");
@@ -372,13 +417,11 @@ export class Stalker {
     )
       desired = 0;
     if (!this.path.length) desired = 0;
-    // The opening encounter teaches a rule, then quietly breaks it: watching
-    // stops the early stalk, but loses its protection after the grace interval.
-    const frozen =
-      this.phase === "stalking" && this.age < this.grace && this.observed;
-    if (frozen) {
-      desired = 0;
-      this.speed = 0;
+    // Apply gaze to pursuit too. A phase change must never silently bypass it.
+    if (this.observed) {
+      const limit = watchedSpeedLimit(this.age, this.grace);
+      desired = Math.min(desired, limit);
+      this.speed = Math.min(this.speed, limit);
     }
     this.speed += Math.max(
       -2.8 * STEP,
@@ -427,14 +470,20 @@ export class Stalker {
     )
       this.change("retreating");
     // Contact needs a fresh, unobstructed body ray and capsule route: no grabs through desks/walls.
-    return (
-      this.phase === "pursuing" &&
+    if (
+      (this.phase === "pursuing" || this.phase === "stalking") &&
       groundDistance(input.view.position, this.position) < 1.05 &&
+      input.view.position.y < 2.7 && input.view.position.y > 0.4 &&
       this.nav.sight(
         { x: this.position.x, y: 1.45, z: this.position.z },
         input.view.position,
       ) &&
       this.nav.clearSegment(this.position, input.view.position)
-    );
+    ) {
+      this.heading = Math.atan2(input.view.position.x - this.position.x, input.view.position.z - this.position.z);
+      this.speed = 0;
+      this.change("grabbing");
+    }
+    return false;
   }
 }

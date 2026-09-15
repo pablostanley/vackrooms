@@ -19,6 +19,12 @@ export class EntityModel extends THREE.Group {
     hand: THREE.Group;
   }[] = [];
   private motion = 0;
+  private reach = 0;
+  private down = new THREE.Vector3(0, -1, 0);
+  private upper = new THREE.Vector3();
+  private lower = new THREE.Vector3();
+  private inverse = new THREE.Quaternion();
+  private armPose = new THREE.Quaternion();
   constructor(material: THREE.Material) {
     super();
     const mesh = (parent: THREE.Group, geometry: THREE.BufferGeometry) => {
@@ -113,6 +119,8 @@ export class EntityModel extends THREE.Group {
         elbow = new THREE.Group(),
         hand = new THREE.Group();
       shoulder.position.x = side * 0.24;
+      shoulder.name = side < 0 ? "left-shoulder" : "right-shoulder";
+      hand.name = side < 0 ? "left-hand" : "right-hand";
       shoulder.rotation.z = side * 0.075;
       skin(shoulder, 0.65, 0.04, side * 0.016);
       elbow.position.y = -0.65;
@@ -134,8 +142,9 @@ export class EntityModel extends THREE.Group {
     this.visible = false;
     this.animate(0, false, 0, 1);
   }
-  animate(gait: number, moving: boolean, speed: number, dt: number) {
+  animate(gait: number, moving: boolean, speed: number, dt: number, reach = 0, squeeze = 0, struggle = 0) {
     this.motion += ((moving ? 1 : 0) - this.motion) * Math.min(1, dt * 8);
+    this.reach += (reach - this.reach) * Math.min(1, dt * 4);
     const rush = gaitUrgency(speed);
     // Rise over the supporting foot instead of walking in a permanent crouch.
     const stance = ((((gait + Math.PI / 2) / Math.PI) % 1) + 1) % 1;
@@ -153,15 +162,31 @@ export class EntityModel extends THREE.Group {
       const arm = this.arms[i],
         lag = Math.sin(phase - 0.22);
       arm.shoulder.rotation.x = -lag * (0.25 + rush * 0.32) * this.motion;
+      arm.shoulder.rotation.y = 0;
+      arm.shoulder.rotation.z = (i ? 1 : -1) * 0.075;
+      arm.elbow.rotation.set(0, 0, 0);
       arm.elbow.rotation.x =
         -0.13 - rush * 0.6 - Math.max(0, -lag) * 0.13 * this.motion;
       arm.hand.rotation.x = 0.06 + Math.sin(phase - 0.5) * 0.09 * this.motion;
+      if (this.reach > 0.001) {
+        const side = i ? 1 : -1;
+        // Open elbows and forward palms become an enclosing, inward forearm arc.
+        this.upper.set(side * (0.62 - squeeze * 0.05), -0.3 - squeeze * 0.15, 0.66 - squeeze * 0.2).normalize();
+        this.armPose.setFromUnitVectors(this.down, this.upper);
+        arm.shoulder.quaternion.slerp(this.armPose, this.reach);
+        this.lower.set(side * (0.08 - squeeze * 0.98), -0.27, 0.9 - squeeze * 0.45).normalize();
+        this.inverse.copy(arm.shoulder.quaternion).invert();
+        this.lower.applyQuaternion(this.inverse);
+        this.armPose.setFromUnitVectors(this.down, this.lower);
+        arm.elbow.quaternion.slerp(this.armPose, this.reach);
+        arm.hand.rotation.x = -0.22 - squeeze * 0.65;
+      }
     });
-    this.chest.rotation.x = 0.035 + rush * 0.16;
+    this.chest.rotation.x = 0.035 + rush * 0.16 + squeeze * 0.22 + Math.abs(struggle) * 0.09;
     this.chest.rotation.y = Math.sin(gait - 0.25) * 0.045 * this.motion;
-    this.chest.rotation.z = -Math.sin(gait) * 0.028 * this.motion;
+    this.chest.rotation.z = -Math.sin(gait) * 0.028 * this.motion + struggle * 0.075;
     this.head.rotation.z =
-      -0.09 - Math.sin(gait * 0.5 - 0.5) * 0.025 * this.motion;
-    this.head.rotation.x = -rush * 0.1;
+      -0.09 - Math.sin(gait * 0.5 - 0.5) * 0.025 * this.motion - struggle * 0.09;
+    this.head.rotation.x = -rush * 0.1 + this.reach * 0.18 + squeeze * 0.12;
   }
 }

@@ -5,6 +5,8 @@ export class TapeOverlay {
   private lastFrame = -1;
   private lastDamage = -1;
   private lastAnomaly = -1;
+  private lastRed = -1;
+  private lastBlack = -1;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.context = canvas.getContext("2d");
@@ -40,7 +42,7 @@ export class TapeOverlay {
     this.lastFrame = -1;
   }
 
-  render(time: number, damage: number, anomaly: number, steady: boolean) {
+  render(time: number, damage: number, anomaly: number, steady: boolean, red = 0, blackout = 0) {
     const context = this.context;
     if (!context || !this.patterns.length) return;
     const frame = steady ? 0 : Math.floor(time * 30);
@@ -48,15 +50,16 @@ export class TapeOverlay {
     if (
       grainFrame === this.lastFrame &&
       damage === this.lastDamage &&
-      anomaly === this.lastAnomaly
+      anomaly === this.lastAnomaly && red === this.lastRed && blackout === this.lastBlack
     )
       return;
     this.lastFrame = grainFrame;
     this.lastDamage = damage;
     this.lastAnomaly = anomaly;
+    this.lastRed = red;
+    this.lastBlack = blackout;
     const { width, height } = this.canvas;
     context.clearRect(0, 0, width, height);
-    if (!damage) return;
     context.globalAlpha = damage * (0.32 + anomaly * 0.7);
     context.fillStyle = this.patterns[grainFrame % this.patterns.length];
     context.save();
@@ -85,6 +88,20 @@ export class TapeOverlay {
         context.globalAlpha = damage * strength * 0.15;
         context.fillRect(0, row + 4, width, 1);
       }
+    }
+    // Attack feedback remains legible even with tape wear turned off.
+    if (red > 0) {
+      const vignette = context.createRadialGradient(width / 2, height / 2, height * 0.15, width / 2, height / 2, width * 0.65);
+      vignette.addColorStop(0, "rgba(112, 0, 0, 0.65)");
+      vignette.addColorStop(1, "rgba(92, 0, 0, 1)");
+      context.globalAlpha = red;
+      context.fillStyle = vignette;
+      context.fillRect(0, 0, width, height);
+    }
+    if (blackout > 0) {
+      context.globalAlpha = blackout;
+      context.fillStyle = "#080705";
+      context.fillRect(0, 0, width, height);
     }
     context.globalAlpha = 1;
   }

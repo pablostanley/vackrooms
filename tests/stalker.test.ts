@@ -15,6 +15,7 @@ import {
 import { buildSection } from "../src/lib/game/world";
 import { headlessMaterials } from "./helpers/materials";
 import { EncounterSchedule, Stalker } from "../src/lib/game/stalker";
+import { CRUSH_DURATION, crushEnvelope, nextLifeSeed } from "../src/lib/game/encounter-effects";
 import {
   CELL,
   CHUNK,
@@ -203,68 +204,127 @@ function encounter(seed: number) {
   return { nav, stalker, input };
 }
 
-test("watching freezes the early stalk, then stops protecting against movement and pursuit", () => {
-  let pursuits = 0;
-  for (const seed of [1, 2, 3, 4]) {
-    const { stalker, input } = encounter(seed);
-    const start = stalker.position.clone();
-    let steps = 0,
-      pursuedAt = 0,
-      maxSpeed = 0;
-    input.playerSpeed = 4.1;
-    input.view.forward = new Vector3()
-      .subVectors(stalker.position.clone().setY(1.66), input.view.position)
-      .normalize();
-    for (let i = 0; i < 150; i++) stalker.update(0.1, input, () => steps++);
-    assert.deepEqual(
-      stalker.position,
-      start,
-      "looking at it stops all movement during the opening",
-    );
-    assert.equal(steps, 0, "a frozen creature makes no footsteps");
-    for (let time = 15; time < 57; time += 0.1) {
-      input.view.forward = new Vector3()
-        .subVectors(stalker.position.clone().setY(1.66), input.view.position)
-        .normalize();
-      const caught = stalker.update(0.1, input, () => steps++);
-      if (stalker.phase === "pursuing") {
-        if (!pursuedAt) pursuedAt = time;
-        maxSpeed = Math.max(maxSpeed, stalker.speed);
-      }
-      if (caught) break;
-    }
-    assert.ok(
-      stalker.position.distanceTo(start) > 1,
-      "moves even while observed",
-    );
-    assert.ok(steps > 0, "actual movement produces spatial footfalls");
-    if (pursuedAt) {
-      pursuits++;
-      assert.ok(
-        pursuedAt >= 17.9,
-        `first stalking interval lasted ${pursuedAt}`,
-      );
-      assert.ok(
-        maxSpeed > 4.1,
-        "sustained running eventually draws a faster pursuit",
-      );
-    }
+test("contact grabs, holds still through the squeeze, and emits death exactly once at every frame rate", () => {
+  for (const fps of [30, 60, 144]) {
+    const stalker = new Stalker(1, openWorld());
+    const input = { view: view(), playerSpeed: 0 };
+    stalker.stage({ x: 22, z: 21.05 }, input.view.position, true);
+    for (let i = 0; i < Math.ceil(fps / 15); i++) stalker.update(1 / fps, input, () => {});
+    assert.equal(stalker.phase, "grabbing");
+    const contact = stalker.position.clone();
+    let deaths = 0;
+    for (let i = 0; i < fps * 3; i++) deaths += Number(stalker.update(1 / fps, input, () => assert.fail("footfall while held")));
+    assert.equal(deaths, 0, "contact does not instantly kill");
+    for (let i = 0; i < fps * 2; i++) deaths += Number(stalker.update(1 / fps, input, () => assert.fail("footfall while dead")));
+    assert.equal(deaths, 1);
+    assert.equal(stalker.phase, "dead");
+    assert.deepEqual(stalker.position, contact);
+    assert.equal(stalker.attackTime, CRUSH_DURATION);
+    stalker.reset();
+    assert.equal(stalker.attacking, false);
+    assert.equal(stalker.attackTime, 0);
   }
-  assert.ok(pursuits > 0 && pursuits < 4, "some encounters stay sightings");
+});
+
+test("nearby walls, desks, and a player above reach prevent a grab", () => {
+  for (const barrier of [box(21, 21.5, 2, 0.025), box(21, 21.5, 2, 0.025, 1.1), null]) {
+    const nav = openWorld();
+    nav.addSection("0,0", openChunk(), barrier ? [barrier] : []);
+    const stalker = new Stalker(1, nav);
+    const input = { view: view(), playerSpeed: 0 };
+    if (!barrier) input.view.position.y = 3.4;
+    stalker.stage({ x: 22, z: 21.05 }, input.view.position, true);
+    for (let i = 0; i < 3; i++) stalker.update(1 / 30, input, () => {});
+    assert.equal(stalker.attacking, false);
+  }
+});
+
+test("jump escape cancels death and gives two seconds without an immediate regrab", () => {
+  for (const heldFor of [0.2, 2, 3.6]) {
+    const stalker = new Stalker(1, openWorld());
+    const input = { view: view(), playerSpeed: 0 };
+    assert.equal(stalker.escape(), false);
+    stalker.stage({ x: 22, z: 21.05 }, input.view.position, true);
+    stalker.update(1 / 30, input, () => {});
+    for (let i = 0; i < heldFor * 30; i++) stalker.update(1 / 30, input, () => {});
+    assert.equal(stalker.escape(), true);
+    assert.equal(stalker.phase, "staggered");
+    assert.equal(stalker.attacking, false);
+    assert.equal(stalker.attackTime, 0);
+    const contact = stalker.position.clone();
+    for (let i = 0; i < 59; i++) {
+      assert.equal(stalker.update(1 / 30, input, () => assert.fail("staggered footstep")), false);
+      assert.equal(stalker.phase, "staggered");
+    }
+    assert.deepEqual(stalker.position, contact);
+    input.view.position = { x: 22, y: 1.66, z: 30 };
+    for (let i = 0; i < 10; i++) stalker.update(1 / 30, input, () => {});
+    assert.equal(stalker.phase, "pursuing");
+  }
+});
+
+test("crushing feedback is bounded and steady mode removes pulses and shake", () => {
+  for (let t = 0; t <= CRUSH_DURATION; t += 1 / 144) {
+    const effect = crushEnvelope(t), steady = crushEnvelope(t, true);
+    assert.ok(effect.shake >= 0 && effect.shake <= 0.65);
+    assert.ok(effect.red >= 0 && effect.red <= 0.46);
+    assert.equal(steady.shake, 0);
+    assert.ok(effect.blackout >= 0 && effect.blackout <= 1);
+  }
+  assert.equal(crushEnvelope(CRUSH_DURATION).blackout, 1);
+  assert.equal(crushEnvelope(2.9, true).red, crushEnvelope(3.1, true).red);
+  for (const seed of [0, 1, 199307, 999999999]) {
+    assert.notEqual(nextLifeSeed(seed), seed);
+    assert.equal(nextLifeSeed(seed), nextLifeSeed(seed));
+    assert.ok(nextLifeSeed(seed) >= 100000 && nextLifeSeed(seed) < 1000000);
+  }
+});
+
+test("arms extend ahead, then forearms fold inward around the player", () => {
+  const material = new MeshBasicMaterial(), model = new EntityModel(material);
+  const hands = () => ["left", "right"].map(side => model.getObjectByName(`${side}-hand`)!.getWorldPosition(new Vector3()));
+  model.animate(0, false, 0, 1, 1, 0);
+  model.updateMatrixWorld(true);
+  const open = hands();
+  assert.ok(open.every(hand => hand.z > 0.9));
+  assert.ok(open[1].x - open[0].x > 1);
+  model.animate(0, false, 0, 1, 1, 1);
+  model.updateMatrixWorld(true);
+  const closed = hands();
+  assert.ok(closed[1].x - closed[0].x < (open[1].x - open[0].x) * 0.55);
+  model.traverse(n => { if ("geometry" in n) (n.geometry as { dispose(): void }).dispose(); });
+  material.dispose();
+});
+
+test("watching holds for a minute and erodes through sparse steps even after pursuit starts", () => {
+  const stalker = new Stalker(1, openWorld());
+  const input = { view: view(22, 22), playerSpeed: 4.1 };
+  stalker.stage({ x: 22, z: 10 }, input.view.position);
+  const start = stalker.position.clone();
+  let steps = 0;
+  for (let i = 0; i < 540; i++) stalker.update(0.1, input, () => steps++);
+  assert.deepEqual(stalker.position, start);
+  assert.equal(steps, 0);
+  let movingTicks = 0, frozenTicks = 0;
+  for (let i = 0; i < 330; i++) {
+    stalker.update(0.1, input, () => steps++);
+    if (stalker.speed > 0) movingTicks++;
+    else frozenTicks++;
+    assert.ok(stalker.speed <= 0.42, "phase changes cannot bypass the gaze limit");
+  }
+  assert.equal(stalker.phase, "pursuing");
+  assert.ok(movingTicks > 0 && frozenTicks > movingTicks * 5, "small steps separated by long holds");
+  assert.ok(stalker.position.distanceTo(start) < 1.5);
+  for (let i = 0; i < 1300 && !stalker.attacking; i++) stalker.update(0.1, input, () => steps++);
+  assert.ok(stalker.attacking, "gaze eventually loses protection");
+  assert.ok(steps > 0);
 });
 
 test("losing sight and going quiet sends it to the last known position, then into isolation", () => {
-  const chase = [1, 2, 3, 4]
-    .map((seed) => {
-      const result = encounter(seed);
-      result.input.playerSpeed = 4.1;
-      for (let i = 0; i < 400 && result.stalker.phase !== "pursuing"; i++)
-        result.stalker.update(0.1, result.input, () => {});
-      return result;
-    })
-    .find((result) => result.stalker.phase === "pursuing");
-  assert.ok(chase);
-  const { nav, stalker, input } = chase;
+  const nav = openWorld(), stalker = new Stalker(2, nav);
+  const input = { view: view(), playerSpeed: 4.1 };
+  stalker.stage({ x: 22, z: 10 }, input.view.position, true);
+  stalker.update(0.1, input, () => {});
   // Visibility geometry is tested above; here isolate the loss-of-contact behavior.
   nav.sight = () => false;
   const lastKnown = { ...input.view.position };
