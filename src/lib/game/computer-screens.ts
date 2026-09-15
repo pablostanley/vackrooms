@@ -6,7 +6,6 @@ import {
 import {
   browserAddress,
   canUseComputer,
-  COMPUTER_HOME,
   MAX_LIVE_SCREENS,
   type ComputerStation,
 } from "./computers";
@@ -123,7 +122,7 @@ export class ComputerScreens {
     address.setAttribute("aria-label", "Website address");
     address.spellcheck = false;
     address.autocomplete = "off";
-    address.value = COMPUTER_HOME;
+    address.value = station.homeUrl;
     const iframe = document.createElement("iframe");
     iframe.title = "Website on the CRT monitor";
     iframe.referrerPolicy = "no-referrer";
@@ -135,7 +134,7 @@ export class ComputerScreens {
     const status = document.createElement("div");
     status.className = "crt-status";
     status.textContent = "Connecting…";
-    let requested = COMPUTER_HOME;
+    let requested = station.homeUrl;
     let loadTimer: ReturnType<typeof setTimeout> | undefined;
     const navigate = (value: string) => {
       const url = browserAddress(value);
@@ -172,7 +171,7 @@ export class ComputerScreens {
         address.value = url;
       },
     );
-    button("⌂ Home", () => navigate(COMPUTER_HOME));
+    button("⌂ Home", () => navigate(station.homeUrl));
     button("↻ Reload", () => {
       // Reassigning src also recovers from sites which refuse to be framed.
       navigate(requested);
@@ -231,7 +230,7 @@ export class ComputerScreens {
     );
     power.setActive(this.active?.id === station.id);
     this.scene.add(power.object);
-    navigate(COMPUTER_HOME);
+    navigate(station.homeUrl);
     return {
       station,
       object,

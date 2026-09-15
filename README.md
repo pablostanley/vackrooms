@@ -84,7 +84,7 @@ Every tape starts in an office, with a landmark reachable along a route of at mo
 
 ## Computer browsing
 
-Press E while facing a nearby CRT, or tap its contextual hint. The camera frames the screen and its plastic bezel; walking, noclipping, and world mutations pause while browsing. The live site starts at https://vgpu.sh/. Home, Reload, and an HTTPS address bar work inside the period browser shell.
+Press E while facing a nearby CRT, or tap its contextual hint. The camera frames the screen and its plastic bezel; walking, noclipping, and world mutations pause while browsing. Computers start at one of four sites: [vgpu](https://vgpu.sh/), [Buttsss](https://buttsss.com/), [Long Doge Challenge](https://longdogechallenge.com/), or [Checkbox Race](https://checkboxrace.com/). Each section's three computers have different home sites, assigned deterministically by tape and section. Home returns to that computer's assigned site, including after its page is evicted and recreated. Reload and an HTTPS address bar work inside the period browser shell.
 
 The power switch on the lower-right bezel turns the monitor off and on. Off hides the website and disables its controls; the computer keeps the page running so switching back on resumes the current page. Power state survives nearby page-cache replacement and is released when its section leaves the resident world.
 

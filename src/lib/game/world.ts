@@ -10,6 +10,7 @@ import {
   E,
   S,
   random,
+  hash,
   inLandmark,
   ceilingAt,
   poolBounds,
@@ -23,7 +24,7 @@ import {
   computerScreen,
   type ComputerKind,
 } from "./computer-models";
-import type { ComputerStation } from "./computers";
+import { COMPUTER_HOMES, type ComputerStation } from "./computers";
 import {
   createFurniture,
   type FurnitureKind,
@@ -549,6 +550,9 @@ export function buildSection(
     }
   // A separate random stream keeps desks reproducible without changing the maze.
   const computerRng = random(data.seed + 93011);
+  // Rotate home sites independently of furniture placement, without repeats
+  // among a section's three computers. Regenerated sections keep their sites.
+  const homeOffset = hash(data.x, data.z, data.seed + 93013) % COMPUTER_HOMES.length;
   const placeComputer = (cx: number, cz: number, kind: ComputerKind) => {
     if (furnished.has(cz * CHUNK + cx)) return false;
     const bits = data.cells[cz * CHUNK + cx];
@@ -593,6 +597,8 @@ export function buildSection(
       computers.push({
         id: `${data.x},${data.z}:${data.seed}:${cx},${cz}`,
         kind,
+        homeUrl:
+          COMPUTER_HOMES[(homeOffset + computers.length) % COMPUTER_HOMES.length],
         position: screen.position
           .applyMatrix4(pose)
           .add(new THREE.Vector3(ox, 0, oz)),

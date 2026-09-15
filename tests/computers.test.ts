@@ -10,6 +10,7 @@ import {
   browserAddress,
   canUseComputer,
   computerFocus,
+  COMPUTER_HOMES,
 } from "../src/lib/game/computers";
 import { buildSection } from "../src/lib/game/world";
 import { generateChunk, CELL, canStand } from "../src/lib/game/maze";
@@ -18,6 +19,7 @@ import { headlessMaterials } from "./helpers/materials";
 test("computers reproduce by tape with three distinct grounded models per section", () => {
   const mats = headlessMaterials();
   const snapshots = [];
+  const homeSites = new Set<string>();
   try {
     for (const seed of [1, 199307, 882731])
       for (const [x, z, depth] of [
@@ -33,10 +35,12 @@ test("computers reproduce by tape with three distinct grounded models per sectio
             s.computers.map((c) => ({
               id: c.id,
               kind: c.kind,
+              homeUrl: c.homeUrl,
               position: c.position.toArray(),
               rotation: c.quaternion.toArray(),
             }));
           assert.equal(section.computers.length, 3);
+          assert.equal(new Set(section.computers.map((c) => c.homeUrl)).size, 3);
           assert.deepEqual(
             new Set(section.computers.map((c) => c.kind)),
             new Set(computerKinds),
@@ -44,6 +48,9 @@ test("computers reproduce by tape with three distinct grounded models per sectio
           assert.deepEqual(snapshot(section), snapshot(repeat));
           snapshots.push(snapshot(section));
           for (const station of section.computers) {
+            assert.ok(COMPUTER_HOMES.some((url) => url === station.homeUrl));
+            assert.equal(browserAddress(station.homeUrl), station.homeUrl);
+            homeSites.add(station.homeUrl);
             const approach = station.position
               .clone()
               .addScaledVector(station.normal, 1.1);
@@ -71,6 +78,7 @@ test("computers reproduce by tape with three distinct grounded models per sectio
         }
       }
     assert.notDeepEqual(snapshots[0], snapshots[3]);
+    assert.equal(homeSites.size, 4);
     for (const kind of computerKinds) {
       const model = createComputerModel(kind, mats);
       assert.ok(Math.abs(model.bounds.min.y) < 0.00001);

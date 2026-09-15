@@ -4,6 +4,7 @@ import type { ComputerKind } from "./computer-models";
 export interface ComputerStation {
   id: string;
   kind: ComputerKind;
+  homeUrl: string;
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
   normal: THREE.Vector3;
@@ -11,7 +12,12 @@ export interface ComputerStation {
   height: number;
 }
 
-export const COMPUTER_HOME = "https://vgpu.sh/";
+export const COMPUTER_HOMES = [
+  "https://vgpu.sh/",
+  "https://buttsss.com/",
+  "https://longdogechallenge.com/",
+  "https://checkboxrace.com/",
+] as const;
 export const MAX_LIVE_SCREENS = 2;
 
 /** Never execute address-bar scripts or navigate the surrounding game. */
