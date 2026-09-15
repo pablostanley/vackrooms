@@ -26,7 +26,8 @@ test("Space jumps immediately; a second press boosts once and landing rearms it"
   try {
     const floor = position.y;
     motor.jump();
-    motor.move(0, 0, DT, position);
+    assert.equal(motor.move(0, 0, 0, position), 0, "no sound before physics advances");
+    assert.equal(motor.move(0, 0, DT, position), 1, "accepted takeoff emits one cue");
     assert.ok(position.y > floor + 0.07);
     assert.equal(motor.grounded, false);
     let singlePeak = position.y;
@@ -37,12 +38,12 @@ test("Space jumps immediately; a second press boosts once and landing rearms it"
     assert.ok(singlePeak - floor > 0.8 && singlePeak - floor < 0.95);
     assert.ok(motor.grounded && Math.abs(position.y - floor) < 0.01);
     motor.jump();
-    motor.move(0, 0, DT, position);
+    assert.equal(motor.move(0, 0, DT, position), 1);
     motor.jump();
     let doublePeak = position.y;
     for (let i = 0; i < 100; i++) {
       if (i === 10) motor.jump(); // An extra press must not create a third jump.
-      motor.move(0, 0, DT, position);
+      assert.equal(motor.move(0, 0, DT, position), i === 0 ? 2 : 0, "boost cues once; ignored presses stay silent");
       doublePeak = Math.max(doublePeak, position.y);
     }
     assert.ok(doublePeak - floor > 2 && doublePeak - floor < 2.4);
@@ -60,7 +61,7 @@ test("two taps in one frame survive, with consistent height at 30/60/144Hz", asy
       motor.jump();
       let peak = floor;
       for (let i = 0; i < hz * 2; i++) {
-        motor.move(0, 0, 1 / hz, position);
+        assert.equal(motor.move(0, 0, 1 / hz, position), i === 0 ? 2 : 0);
         peak = Math.max(peak, position.y);
       }
       peaks.push(peak - floor);
@@ -102,7 +103,12 @@ test("landing buffers a late press and clearing input cancels it", async () => {
       assert.equal(motor.grounded, false);
       motor.jump();
       if (cancel) motor.clearJumpInput();
-      for (let i = 0; i < 10; i++) motor.move(0, 0, DT, position);
+      const cues: number[] = [];
+      for (let i = 0; i < 10; i++) {
+        const cue = motor.move(0, 0, DT, position);
+        if (cue) cues.push(cue);
+      }
+      assert.deepEqual(cues, cancel ? [] : [1], "buffered input cues only on accepted takeoff");
       assert.equal(position.y > floor + 0.3, !cancel);
     } finally { motor.dispose(); }
   }

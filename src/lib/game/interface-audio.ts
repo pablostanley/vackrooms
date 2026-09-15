@@ -33,11 +33,11 @@ export function interfaceSamples(kind: InterfaceSound, sampleRate: number) {
 
 export class InterfaceAudio {
   private buffers = new Map<InterfaceSound, AudioBuffer>();
-  private sources = new Set<AudioBufferSourceNode>();
+  private sources = new Map<AudioBufferSourceNode, GainNode>();
 
   constructor(private ctx: BaseAudioContext, private output: AudioNode) {}
 
-  play(kind: InterfaceSound) {
+  play(kind: InterfaceSound, volume = 1) {
     let buffer = this.buffers.get(kind);
     if (!buffer) {
       const samples = interfaceSamples(kind, this.ctx.sampleRate);
@@ -45,13 +45,19 @@ export class InterfaceAudio {
       buffer.getChannelData(0).set(samples);
       this.buffers.set(kind, buffer);
     }
+    this.playBuffer(buffer, volume);
+  }
+
+  playBuffer(buffer: AudioBuffer, volume = 1) {
     // Keep rapid clicking bounded, including while audio access is pending.
-    if (this.sources.size >= 8) this.release(this.sources.values().next().value!);
+    if (this.sources.size >= 8) this.release(this.sources.keys().next().value!);
     const source = this.ctx.createBufferSource();
+    const level = this.ctx.createGain();
+    level.gain.value = volume;
     source.buffer = buffer;
-    source.connect(this.output);
+    source.connect(level).connect(this.output);
     source.onended = () => this.release(source);
-    this.sources.add(source);
+    this.sources.set(source, level);
     source.start();
   }
 
@@ -59,11 +65,12 @@ export class InterfaceAudio {
     source.onended = null;
     source.stop();
     source.disconnect();
+    this.sources.get(source)?.disconnect();
     this.sources.delete(source);
   }
 
   dispose() {
-    for (const source of this.sources) this.release(source);
+    for (const source of this.sources.keys()) this.release(source);
     this.buffers.clear();
   }
 }

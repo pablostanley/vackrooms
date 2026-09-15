@@ -1,6 +1,7 @@
 import {
   BuildingSoundSchedule,
-  hardFloorAt,
+  footstepSurfaceAt,
+  POOL_WATER_Y,
   ROOM_SOUNDS,
   roomSoundAt,
   transmission,
@@ -12,6 +13,14 @@ import {
 import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
 import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
+import {
+  CREAK_RECORDINGS,
+  FOOTSTEP_RECORDINGS,
+  RPG_RECORDINGS,
+  footstepRecording,
+  nextWaterRecording,
+  RpgRecordings,
+} from "./rpg-recordings";
 
 interface SpatialVoice {
   position: SoundPosition;
@@ -38,6 +47,8 @@ export class BackroomsAudio {
   private mix: DynamicsCompressorNode | null = null;
   private reflections: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private lastWaterRecording = -1;
+  private recordings: RpgRecordings | null = null;
   private dialup: ComputerDialup | null = null;
   private interfaceAudio: InterfaceAudio | null = null;
   private interfaceLevel: GainNode | null = null;
@@ -69,6 +80,7 @@ export class BackroomsAudio {
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
     this.suspendTimer = null;
     if (!this.ctx) this.initialize();
+    void this.recordings!.preload();
     this.active = true;
     await this.ctx!.resume();
     // Pause/unmount may happen while the browser is granting audio access.
@@ -80,6 +92,8 @@ export class BackroomsAudio {
   private initialize() {
     const ctx = new AudioContext();
     this.ctx = ctx;
+    this.recordings = new RpgRecordings(ctx);
+    void this.recordings.preload();
     this.master = ctx.createGain();
     this.master.gain.value = 0;
     this.master.connect(ctx.destination);
@@ -203,7 +217,7 @@ export class BackroomsAudio {
         this.suspendTimer = null;
         if (!this.active && !this.disposed)
           void this.ctx?.suspend().catch(() => {});
-      }, 400);
+      }, 600); // Let the recorded flashlight click finish while paused.
   }
 
   playInterface(kind: InterfaceSound = "click") {
@@ -212,6 +226,22 @@ export class BackroomsAudio {
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
     this.suspendTimer = null;
     this.interfaceAudio!.play(kind);
+    void this.ctx!.resume().then(() => this.suspendWhenIdle()).catch(() => {});
+  }
+
+  playFlashlight() {
+    if (this.disposed || !this.volume) return;
+    if (!this.ctx) this.initialize();
+    if (this.suspendTimer) clearTimeout(this.suspendTimer);
+    this.suspendTimer = null;
+    const buffer = this.recordings?.get("flashlight");
+    if (buffer) {
+      this.interfaceAudio!.playBuffer(buffer, RPG_RECORDINGS.flashlight.gain);
+    } else {
+      // Keep the first switch responsive while the recording decodes; no late click.
+      this.interfaceAudio!.play("click", RPG_RECORDINGS.flashlight.gain);
+      void this.recordings!.preload();
+    }
     void this.ctx!.resume().then(() => this.suspendWhenIdle()).catch(() => {});
   }
 
@@ -448,13 +478,14 @@ export class BackroomsAudio {
     }
   }
 
-  step(running: boolean, side: number) {
+  step(running: boolean, side: number, position = this.listener) {
     if (!this.active || !this.ctx || !this.noise || !this.volume) return;
     this.footstep(
       {
-        x: this.listener.x - this.forward.z * side * 0.14,
-        y: 0.12,
-        z: this.listener.z + this.forward.x * side * 0.14,
+        x: position.x - this.forward.z * side * 0.14,
+        // CharacterMotor's standing eye height; use the unbobbed player position.
+        y: position.y - 1.66,
+        z: position.z + this.forward.x * side * 0.14,
       },
       running,
       false,
@@ -464,11 +495,35 @@ export class BackroomsAudio {
   entityStep(position: SoundPosition, pursuing: boolean) {
     if (!this.active || !this.ctx || !this.noise || !this.volume) return;
     this.footstep(
-      { x: position.x, y: 0.12, z: position.z },
+      { x: position.x, y: 0, z: position.z },
       pursuing,
       true,
       true,
     );
+  }
+
+  jump(position: SoundPosition, boosted: boolean) {
+    if (!this.active || !this.ctx || !this.volume || this.transients.size >= 12) return;
+    const buffer = this.recordings?.get("jump");
+    if (!buffer) return;
+    const voice = this.spatial({ ...position, y: position.y - 0.5 }, 0.12, 1.7);
+    voice.input.gain.value = RPG_RECORDINGS.jump.gain;
+    const source = this.ctx.createBufferSource(), filter = this.ctx.createBiquadFilter();
+    source.buffer = buffer;
+    source.playbackRate.value = boosted ? 1.1 : 1;
+    filter.type = "lowpass";
+    filter.frequency.value = RPG_RECORDINGS.jump.cutoff;
+    filter.Q.value = 0.5;
+    source.connect(filter).connect(voice.input);
+    voice.sources.push(source);
+    voice.nodes.push(filter);
+    this.track(voice);
+    source.start();
+  }
+
+  enterWater(position: SoundPosition) {
+    if (!this.active || !this.ctx || !this.volume || this.transients.size >= 12) return;
+    this.footstep({ ...position, y: POOL_WATER_Y }, false, false);
   }
 
   private footstep(
@@ -477,47 +532,44 @@ export class BackroomsAudio {
     distant: boolean,
     entity = false,
   ) {
-    if (!this.ctx || !this.noise || this.transients.size >= 12) return;
+    if (!this.ctx || this.transients.size >= 12) return;
     const ctx = this.ctx,
       now = ctx.currentTime;
-    const hard = hardFloorAt(this.chunks, position);
-    const voice = this.spatial(position, 1, distant ? 3 : 1.7);
-    const source = ctx.createBufferSource(),
-      filter = ctx.createBiquadFilter(),
-      gain = ctx.createGain();
-    source.buffer = this.noise;
-    source.playbackRate.value = (entity ? 0.6 : 0.85) + this.rng() * 0.3;
-    filter.type = "lowpass";
-    filter.frequency.value = entity ? (hard ? 1700 : 540) : hard ? 2400 : 720;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(running ? 0.48 : 0.3, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(
-      0.001,
-      now + (entity ? 0.3 : hard ? 0.19 : 0.14),
+    const surface = footstepSurfaceAt(this.chunks, position);
+    if (surface === "water") this.lastWaterRecording = nextWaterRecording(this.lastWaterRecording, this.rng);
+    const recording = footstepRecording(surface, running, entity, this.lastWaterRecording);
+    const buffer = this.recordings?.get(recording);
+    if (!buffer) return;
+    const profile = FOOTSTEP_RECORDINGS[recording];
+    const voice = this.spatial(
+      { ...position, y: surface === "water" ? POOL_WATER_Y : position.y + 0.12 },
+      surface === "carpet" ? 0.55 : 1.1,
+      distant ? 3 : 1.7,
     );
-    source.connect(filter).connect(gain).connect(voice.input);
-    const thud = ctx.createOscillator(),
-      low = ctx.createGain();
-    thud.frequency.setValueAtTime(entity ? 67 : hard ? 115 : 82, now);
-    thud.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-    low.gain.setValueAtTime(running ? 0.08 : 0.045, now);
-    low.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
-    thud.connect(low).connect(voice.input);
-    voice.sources.push(source, thud);
-    voice.nodes.push(filter, gain, low);
+    voice.input.gain.value = profile.gain * (surface === "water" && running ? 1.1 : 1);
+    const source = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
+    source.buffer = buffer;
+    source.playbackRate.value = (entity ? 0.72 : 0.96) + this.rng() * 0.08;
+    filter.type = "lowpass";
+    filter.frequency.value = entity ? 1100 : profile.cutoff;
+    filter.Q.value = 0.5;
+    source.connect(filter).connect(voice.input);
+    voice.sources.push(source);
+    voice.nodes.push(filter);
     this.track(voice);
-    source.start(now, this.rng());
-    source.stop(now + (entity ? 0.34 : 0.24));
-    thud.start(now);
-    thud.stop(now + 0.15);
+    source.start(now);
   }
 
   private buildingNoise(position: SoundPosition, kind: "duct" | "settle") {
     if (!this.ctx || !this.noise || this.transients.size >= 12) return;
+    if (kind === "settle") {
+      this.creak(position);
+      return;
+    }
     const ctx = this.ctx,
       now = ctx.currentTime;
     const voice = this.spatial(
-      { ...position, y: kind === "duct" ? 2.6 : 0.8 },
+      { ...position, y: 2.6 },
       0.7,
       3,
     );
@@ -526,15 +578,12 @@ export class BackroomsAudio {
       gain = ctx.createGain();
     source.buffer = this.noise;
     source.loop = true;
-    source.playbackRate.value = kind === "duct" ? 0.65 : 1.15;
+    source.playbackRate.value = 0.65;
     filter.type = "lowpass";
-    filter.frequency.value = kind === "duct" ? 950 : 1500;
-    const duration = kind === "duct" ? 2.8 : 0.45;
+    filter.frequency.value = 950;
+    const duration = 2.8;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(
-      kind === "duct" ? 0.23 : 0.32,
-      now + (kind === "duct" ? 0.8 : 0.018),
-    );
+    gain.gain.linearRampToValueAtTime(0.23, now + 0.8);
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
     source.connect(filter).connect(gain).connect(voice.input);
     voice.sources.push(source);
@@ -542,6 +591,28 @@ export class BackroomsAudio {
     this.track(voice);
     source.start(now, this.rng());
     source.stop(now + duration + 0.05);
+  }
+
+  private creak(position: SoundPosition) {
+    const recording = CREAK_RECORDINGS[Math.floor(this.rng() * CREAK_RECORDINGS.length)];
+    const buffer = this.recordings?.get(recording);
+    if (!buffer) return;
+    const ctx = this.ctx!, profile = RPG_RECORDINGS[recording];
+    // Keep the source anchored in the room; spatial() applies distance and walls
+    // to both the direct sound and its quiet reflections as the listener moves.
+    const voice = this.spatial({ ...position, y: 2.4 }, 0.45, 4.5);
+    voice.input.gain.value = profile.gain;
+    const source = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
+    source.buffer = buffer;
+    source.playbackRate.value = 0.9 + this.rng() * 0.15;
+    filter.type = "lowpass";
+    filter.frequency.value = profile.cutoff;
+    filter.Q.value = 0.5;
+    source.connect(filter).connect(voice.input);
+    voice.sources.push(source);
+    voice.nodes.push(filter);
+    this.track(voice);
+    source.start();
   }
 
   private track(voice: SpatialVoice) {
@@ -579,6 +650,8 @@ export class BackroomsAudio {
     this.loops = [];
     this.rooms.clear();
     this.noise = null;
+    this.recordings?.dispose();
+    this.recordings = null;
     if (this.ctx) void this.ctx.close().catch(() => {});
   }
 }
