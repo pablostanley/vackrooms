@@ -41,7 +41,10 @@ test("computers reproduce by tape with one or two distinct grounded models per s
               position: c.position.toArray(),
               rotation: c.quaternion.toArray(),
             }));
-          assert.equal(new Set(section.computers.map((c) => c.homeUrl)).size, section.computers.length);
+          assert.equal(
+            new Set(section.computers.map((c) => c.homeUrl)).size,
+            section.computers.length,
+          );
           assert.ok(
             section.computers.length >= 1 && section.computers.length <= 2,
           );

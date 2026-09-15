@@ -74,54 +74,143 @@ export function planRoomLighting(data: ChunkData): RoomLighting {
   return plan;
 }
 
-/** Ambient bounce fades only through open edges; direct light still casts shadows. */
-export function roomAmbient(
-  data: ChunkData,
-  plan: RoomLighting,
-  x: number,
-  z: number,
-) {
-  const cx = Math.min(CHUNK - 1, Math.max(0, Math.floor(x / CELL)));
-  const cz = Math.min(CHUNK - 1, Math.max(0, Math.floor(z / CELL)));
-  const at = cz * CHUNK + cx;
-  if (!plan.cells.has(at)) return 1;
-  let ambient = 0.004;
-  for (const { bit, dx, dz } of directions) {
-    const next = at + dx + dz * CHUNK;
-    if (!(data.cells[at] & bit) || plan.cells.has(next)) continue;
-    const distance =
-      dx < 0
-        ? x - cx * CELL
-        : dx > 0
-          ? (cx + 1) * CELL - x
-          : dz < 0
-            ? z - cz * CELL
-            : (cz + 1) * CELL - z;
-    ambient = Math.max(ambient, Math.exp(-distance * 1.8));
+/** Bake a smooth falloff along open paths, including bends and later cells. */
+export function createRoomAmbientSampler(data: ChunkData, plan: RoomLighting) {
+  const subdivisions = 12;
+  const size = CHUNK * subdivisions;
+  const step = CELL / subdivisions;
+  const unit = step / 10;
+  const distances = new Float32Array(size * size).fill(Infinity);
+  const dark: number[] = [];
+  const cellAt = (x: number, z: number) =>
+    Math.floor(z / subdivisions) * CHUNK + Math.floor(x / subdivisions);
+  const inside = (x: number, z: number) =>
+    x >= 0 && z >= 0 && x < size && z < size;
+  const openEdge = (ax: number, az: number, bx: number, bz: number) => {
+    const a = cellAt(ax, az),
+      b = cellAt(bx, bz);
+    if (a === b) return true;
+    const direction = directions.find(
+      ({ dx, dz }) => b - a === dx + dz * CHUNK,
+    )!;
+    return (
+      !!(data.cells[a] & direction.bit) &&
+      !!(data.cells[b] & direction.opposite)
+    );
+  };
+  const connected = (ax: number, az: number, bx: number, bz: number) => {
+    if (!inside(bx, bz)) return false;
+    if (ax === bx || az === bz) return openEdge(ax, az, bx, bz);
+    // Both routes around a corner must be open; never cut diagonally through walls.
+    return (
+      openEdge(ax, az, bx, az) &&
+      openEdge(ax, az, ax, bz) &&
+      openEdge(bx, az, bx, bz) &&
+      openEdge(ax, bz, bx, bz)
+    );
+  };
+  const offsets = [
+    [-1, 0, 10],
+    [1, 0, 10],
+    [0, -1, 10],
+    [0, 1, 10],
+    [-1, -1, 14],
+    [1, -1, 14],
+    [-1, 1, 14],
+    [1, 1, 14],
+  ];
+  for (let z = 0; z < size; z++)
+    for (let x = 0; x < size; x++) {
+      const at = z * size + x;
+      if (plan.cells.has(cellAt(x, z))) dark.push(at);
+      else distances[at] = 0;
+    }
+  // Integer distance buckets keep the bounded, eight-cell bake inexpensive.
+  const buckets: number[][] = Array.from(
+    { length: Math.ceil(24 / unit) },
+    () => [],
+  );
+  const offer = (at: number, distance: number) => {
+    if (distance >= distances[at] || distance >= buckets.length) return;
+    distances[at] = distance;
+    buckets[distance].push(at);
+  };
+  for (const at of dark) {
+    const x = at % size,
+      z = Math.floor(at / size);
+    for (const [dx, dz, cost] of offsets) {
+      const nx = x + dx,
+        nz = z + dz;
+      if (connected(x, z, nx, nz) && !plan.cells.has(cellAt(nx, nz)))
+        offer(at, cost / 2);
+    }
   }
-  return ambient;
+  const bounce = (cell: number, distance: number) => {
+    const x = (cell % CHUNK) * subdivisions + subdivisions / 2;
+    const z = Math.floor(cell / CHUNK) * subdivisions + subdivisions / 2;
+    offer(z * size + x, Math.round(distance / unit));
+  };
+  // Dim indirect fill from the remaining lights lifts walls and ceilings above
+  // black. Their actual shadowed spotlights still provide the direct light.
+  for (const cell of plan.fixtures) bounce(cell, 6.2);
+  if (plan.lampCell !== null) bounce(plan.lampCell, 8);
+  for (let distance = 0; distance < buckets.length; distance++)
+    for (const at of buckets[distance]) {
+      if (distances[at] !== distance) continue;
+      const x = at % size,
+        z = Math.floor(at / size);
+      for (const [dx, dz, cost] of offsets) {
+        const nx = x + dx,
+          nz = z + dz;
+        if (connected(x, z, nx, nz)) offer(nz * size + nx, distance + cost);
+      }
+    }
+  const ambient = distances.map(
+    (distance) => 0.025 + 0.975 * Math.exp(-0.5 * ((distance * unit) / 4) ** 2),
+  );
+  return (x: number, z: number) => {
+    const gx = THREE.MathUtils.clamp(x / step, 0, size - 0.0001);
+    const gz = THREE.MathUtils.clamp(z / step, 0, size - 0.0001);
+    const cx = Math.floor(gx),
+      cz = Math.floor(gz);
+    const x0 = Math.floor(gx - 0.5),
+      z0 = Math.floor(gz - 0.5);
+    const tx = gx - 0.5 - x0,
+      tz = gz - 0.5 - z0;
+    const read = (px: number, pz: number) =>
+      connected(cx, cz, px, pz)
+        ? ambient[pz * size + px]
+        : ambient[cz * size + cx];
+    // Interpolate across open edges, with no texture sampling through a partition.
+    return THREE.MathUtils.lerp(
+      THREE.MathUtils.lerp(read(x0, z0), read(x0 + 1, z0), tx),
+      THREE.MathUtils.lerp(read(x0, z0 + 1), read(x0 + 1, z0 + 1), tx),
+      tz,
+    );
+  };
 }
 
 /** A section-owned ambient mask, shared by its material batches on both renderers. */
 export function createRoomAmbientMap(data: ChunkData, plan: RoomLighting) {
   // Texels narrower than the wall thickness keep filtering from bleeding the
   // bright side of a partition onto its dark face.
-  const size = CHUNK * 48;
-  const pixels = new Uint8Array(size * size * 4);
-  for (let z = 0; z < size; z++)
-    for (let x = 0; x < size; x++) {
-      const value = Math.round(
-        roomAmbient(
-          data,
-          plan,
-          ((x + 0.5) / size) * SPAN,
-          ((z + 0.5) / size) * SPAN,
-        ) * 255,
-      );
-      const at = (z * size + x) * 4;
-      pixels[at] = pixels[at + 1] = pixels[at + 2] = value;
-      pixels[at + 3] = 255;
-    }
+  const texelsPerCell = 48;
+  const size = CHUNK * texelsPerCell;
+  const sample = createRoomAmbientSampler(data, plan);
+  const pixels = new Uint8Array(size * size * 4).fill(255);
+  // Most of the section is unchanged. Sample only the few affected cells.
+  for (const cell of plan.cells) {
+    const x0 = (cell % CHUNK) * texelsPerCell;
+    const z0 = Math.floor(cell / CHUNK) * texelsPerCell;
+    for (let z = z0; z < z0 + texelsPerCell; z++)
+      for (let x = x0; x < x0 + texelsPerCell; x++) {
+        const value = Math.round(
+          sample(((x + 0.5) / size) * SPAN, ((z + 0.5) / size) * SPAN) * 255,
+        );
+        const at = (z * size + x) * 4;
+        pixels[at] = pixels[at + 1] = pixels[at + 2] = value;
+      }
+  }
   const texture = new THREE.DataTexture(pixels, size, size);
   texture.channel = 1;
   texture.magFilter = texture.minFilter = THREE.LinearFilter;

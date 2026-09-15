@@ -8,7 +8,10 @@ import {
   generateChunk,
   inLandmark,
 } from "../src/lib/game/maze";
-import { planRoomLighting, roomAmbient } from "../src/lib/game/room-lighting";
+import {
+  planRoomLighting,
+  createRoomAmbientSampler,
+} from "../src/lib/game/room-lighting";
 import { buildSection } from "../src/lib/game/world";
 import { headlessMaterials } from "./helpers/materials";
 
@@ -59,23 +62,78 @@ test("dark pockets are seeded, connected, rare, and leave landmarks and the open
   );
 });
 
-test("ambient spill fades from open doorways and cannot cross a closed wall", () => {
+test("ambient spill fades gradually through connected cells and around bends without seams", () => {
   const data = generateChunk(0, 0, 8);
+  data.cells.fill(0);
+  const cells = [5 * CHUNK + 5, 5 * CHUNK + 6, 5 * CHUNK + 7, 6 * CHUNK + 7];
+  const connect = (a: number, b: number, bit: number, opposite: number) => {
+    data.cells[a] |= bit;
+    data.cells[b] |= opposite;
+  };
+  connect(cells[0] - 1, cells[0], 2, 8);
+  connect(cells[0], cells[1], 2, 8);
+  connect(cells[1], cells[2], 2, 8);
+  connect(cells[2], cells[3], 4, 1);
+  const plan = {
+    cells: new Set(cells),
+    mode: "dark" as const,
+    fixtures: new Set<number>(),
+    lampCell: null,
+  };
+  const sample = createRoomAmbientSampler(data, plan);
+  const entrance = (distance: number) =>
+    sample(5 * CELL + distance, 5.5 * CELL);
+  assert.ok(entrance(0.05) > 0.99);
+  assert.ok(
+    entrance(1.5) > 0.8,
+    "doorway light does not immediately collapse to black",
+  );
+  assert.ok(entrance(3.5) > 0.5 && entrance(3.5) < 0.85);
+  assert.ok(
+    entrance(7) > 0.15 && entrance(7) < entrance(3.5),
+    "spill reaches the next room",
+  );
+  assert.ok(
+    sample(7.5 * CELL, 6.1 * CELL) > 0.03,
+    "bounce turns into the last connected room",
+  );
+  assert.ok(sample(7.5 * CELL, 6.9 * CELL) < 0.06, "deep recesses stay dark");
+  for (const edge of [0, CELL, CELL * 2])
+    assert.ok(
+      Math.abs(entrance(edge - 0.001) - entrance(edge + 0.001)) < 0.001,
+      "no step at open cell boundaries",
+    );
+  assert.equal(sample(3 * CELL, 3 * CELL), 1);
+
+  data.cells.fill(0);
+  const sealed = createRoomAmbientSampler(data, plan);
+  assert.ok(
+    sealed(5 * CELL + 0.09, 5.5 * CELL) < 0.026,
+    "bright neighboring rooms cannot fill through closed walls",
+  );
+});
+
+test("working lamps and fluorescents provide dim indirect fill inside an enclosed room", () => {
+  const data = generateChunk(0, 0, 8);
+  data.cells.fill(0);
   const at = 5 * CHUNK + 5;
   const plan = {
     cells: new Set([at]),
     mode: "dark" as const,
     fixtures: new Set<number>(),
-    lampCell: null,
+    lampCell: null as number | null,
   };
-  data.cells[at] = 1; // Only north is open to a lit neighbor.
-  const sample = (x: number, z: number) =>
-    roomAmbient(data, plan, 5 * CELL + x, 5 * CELL + z);
-  assert.ok(sample(CELL / 2, 0.05) > 0.9);
-  assert.ok(sample(CELL / 2, 1.5) < 0.1);
-  assert.ok(sample(CELL / 2, 3.5) < 0.01);
-  assert.ok(sample(0.05, CELL / 2) < 0.02, "west wall admits no bounce");
-  assert.equal(roomAmbient(data, plan, 3 * CELL, 3 * CELL), 1);
+  const x = 5.5 * CELL,
+    z = 5.5 * CELL;
+  const dark = createRoomAmbientSampler(data, plan)(x, z);
+  plan.lampCell = at;
+  const lamp = createRoomAmbientSampler(data, plan)(x, z);
+  plan.lampCell = null;
+  plan.fixtures.add(at);
+  const fluorescent = createRoomAmbientSampler(data, plan)(x, z);
+  assert.ok(dark > 0.02 && dark < 0.03);
+  assert.ok(lamp > dark * 3 && lamp < 0.2);
+  assert.ok(fluorescent > lamp && fluorescent < 0.4);
 });
 
 test("outages remove actual fixtures, lamps illuminate from the shade, and section lighting releases its resources", () => {
