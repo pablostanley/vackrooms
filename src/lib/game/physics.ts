@@ -213,15 +213,20 @@ export class CharacterMotor {
     this.world.step();
   }
   move(dx: number, dz: number, dt: number, position: Vector3) {
-    if (dt <= 0) return;
+    if (dt <= 0) return 0;
+    let jumped: 0 | 1 | 2 = 0;
     // Bound sweeps at low frame rates without dropping input or elapsed time.
     const steps = Math.ceil(dt / (1 / 120));
-    for (let i = 0; i < steps; i++)
-      this.step(dx / steps, dz / steps, dt / steps);
+    for (let i = 0; i < steps; i++) {
+      const accepted = this.step(dx / steps, dz / steps, dt / steps);
+      if (accepted) jumped = accepted;
+    }
     const next = this.body.translation();
     position.set(next.x, next.y + EYE_OFFSET, next.z);
+    return jumped;
   }
   private step(dx: number, dz: number, dt: number) {
+    let jumped: 0 | 1 | 2 = 0;
     if (this.onGround) this.timeSinceGround = 0;
     else this.timeSinceGround += dt;
     while (this.jumpPresses > 0 && this.jumpBuffer > 0) {
@@ -231,9 +236,11 @@ export class CharacterMotor {
       ) {
         this.fallSpeed = JUMP_SPEED;
         this.jumps = 1;
+        jumped = 1;
       } else if (this.jumps < 2 && this.timeSinceGround !== Infinity) {
         this.fallSpeed = DOUBLE_JUMP_SPEED;
         this.jumps = 2;
+        jumped = 2;
       } else break;
       this.onGround = false;
       this.timeSinceGround = Math.max(this.timeSinceGround, COYOTE_TIME);
@@ -279,6 +286,7 @@ export class CharacterMotor {
         }
       }
     }
+    return jumped;
   }
   dispose() {
     this.world.removeCharacterController(this.controller);

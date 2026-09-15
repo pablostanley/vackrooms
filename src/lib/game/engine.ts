@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { CharacterMotor } from "./physics";
 import { BackroomsAudio } from "./audio";
+import { footstepSurfaceAt } from "./acoustics";
 import { CELL, generateChunk, SPAN, type ChunkData } from "./maze";
 import { createMaterials } from "./materials";
 import { createRenderer, type GameRenderer } from "./renderer";
@@ -618,8 +619,19 @@ export class BackroomsEngine {
     const dx = (x * Math.cos(this.yaw) + z * Math.sin(this.yaw)) * speed * dt,
       dz = (-x * Math.sin(this.yaw) + z * Math.cos(this.yaw)) * speed * dt;
     const previousX = this.position.x,
+      previousY = this.position.y,
       previousZ = this.position.z;
-    this.motor?.move(dx, dz, dt, this.position);
+    const jumped = this.motor?.move(dx, dz, dt, this.position);
+    if (jumped) this.audio.jump(this.position, jumped === 2);
+    const inWater = footstepSurfaceAt(this.chunks, {
+      x: this.position.x, y: this.position.y - 1.66, z: this.position.z,
+    }) === "water";
+    if (inWater && footstepSurfaceAt(this.chunks, {
+      x: previousX, y: previousY - 1.66, z: previousZ,
+    }) !== "water") {
+      this.audio.enterWater(this.position);
+      this.stepDistance = 0;
+    }
     const moved = Math.hypot(
       this.position.x - previousX,
       this.position.z - previousZ,

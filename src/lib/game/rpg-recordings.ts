@@ -1,27 +1,47 @@
 import type { FootstepSurface } from "./acoustics";
 
+const kenney = (file: string, gain: number, cutoff: number) => ({
+  src: `/audio/kenney-rpg/${file}.ogg`, gain, cutoff,
+});
+const water = (step: string) => ({ src: `/audio/water/${step}.ogg`, gain: 0.18, cutoff: 6500 });
+export const WATER_RECORDINGS = ["water", "water2", "water3", "water4", "water5", "water6"] as const;
+
 export const FOOTSTEP_RECORDINGS = {
-  normal: { file: "footstep00", gain: 0.1, cutoff: 2200 },
-  hard: { file: "footstep04", gain: 0.18, cutoff: 4200 },
-  water: { file: "footstep05", gain: 0.2, cutoff: 5000 },
-  heavy: { file: "footstep08", gain: 0.11, cutoff: 3200 },
+  normal: kenney("footstep00", 0.1, 2200),
+  hard: kenney("footstep04", 0.18, 4200),
+  heavy: kenney("footstep08", 0.11, 3200),
+  water: water("step01"),
+  water2: water("step02"),
+  water3: water("step03"),
+  water4: water("step04"),
+  water5: water("step05"),
+  water6: water("step06"),
 } as const;
 export const CREAK_RECORDINGS = ["creak1", "creak2", "creak3"] as const;
 export const RPG_RECORDINGS = {
   ...FOOTSTEP_RECORDINGS,
-  creak1: { file: "creak1", gain: 0.18, cutoff: 1800 },
-  creak2: { file: "creak2", gain: 0.18, cutoff: 1800 },
-  creak3: { file: "creak3", gain: 0.11, cutoff: 1800 },
-  flashlight: { file: "metalClick", gain: 0.14, cutoff: 3500 },
+  creak1: kenney("creak1", 0.18, 1800),
+  creak2: kenney("creak2", 0.18, 1800),
+  creak3: kenney("creak3", 0.11, 1800),
+  flashlight: kenney("metalClick", 0.14, 3500),
+  jump: kenney("cloth4", 0.32, 2800),
 } as const;
 export type RecordedSound = keyof typeof RPG_RECORDINGS;
+
+/** Random variation without playing the same splash twice consecutively. */
+export function nextWaterRecording(previous: number, rng: () => number) {
+  const count = WATER_RECORDINGS.length;
+  return previous < 0 ? Math.floor(rng() * count)
+    : (previous + 1 + Math.floor(rng() * (count - 1))) % count;
+}
 
 export function footstepRecording(
   surface: FootstepSurface,
   running: boolean,
   entity = false,
+  waterIndex = 0,
 ): keyof typeof FOOTSTEP_RECORDINGS {
-  if (surface === "water") return "water";
+  if (surface === "water") return WATER_RECORDINGS[waterIndex];
   if (running || entity) return "heavy";
   return surface === "hard" ? "hard" : "normal";
 }
@@ -46,7 +66,7 @@ export class RpgRecordings {
         if (this.buffers.has(kind)) return;
         const pending = this.loading.get(kind);
         if (pending) return pending;
-        const request = fetch(`/audio/kenney-rpg/${RPG_RECORDINGS[kind].file}.ogg`, {
+        const request = fetch(RPG_RECORDINGS[kind].src, {
           signal: this.controller.signal,
         })
           .then((response) => {

@@ -18,6 +18,7 @@ import {
   FOOTSTEP_RECORDINGS,
   RPG_RECORDINGS,
   footstepRecording,
+  nextWaterRecording,
   RpgRecordings,
 } from "./rpg-recordings";
 
@@ -46,6 +47,7 @@ export class BackroomsAudio {
   private mix: DynamicsCompressorNode | null = null;
   private reflections: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private lastWaterRecording = -1;
   private recordings: RpgRecordings | null = null;
   private dialup: ComputerDialup | null = null;
   private interfaceAudio: InterfaceAudio | null = null;
@@ -500,6 +502,30 @@ export class BackroomsAudio {
     );
   }
 
+  jump(position: SoundPosition, boosted: boolean) {
+    if (!this.active || !this.ctx || !this.volume || this.transients.size >= 12) return;
+    const buffer = this.recordings?.get("jump");
+    if (!buffer) return;
+    const voice = this.spatial({ ...position, y: position.y - 0.5 }, 0.12, 1.7);
+    voice.input.gain.value = RPG_RECORDINGS.jump.gain;
+    const source = this.ctx.createBufferSource(), filter = this.ctx.createBiquadFilter();
+    source.buffer = buffer;
+    source.playbackRate.value = boosted ? 1.1 : 1;
+    filter.type = "lowpass";
+    filter.frequency.value = RPG_RECORDINGS.jump.cutoff;
+    filter.Q.value = 0.5;
+    source.connect(filter).connect(voice.input);
+    voice.sources.push(source);
+    voice.nodes.push(filter);
+    this.track(voice);
+    source.start();
+  }
+
+  enterWater(position: SoundPosition) {
+    if (!this.active || !this.ctx || !this.volume || this.transients.size >= 12) return;
+    this.footstep({ ...position, y: POOL_WATER_Y }, false, false);
+  }
+
   private footstep(
     position: SoundPosition,
     running: boolean,
@@ -510,7 +536,8 @@ export class BackroomsAudio {
     const ctx = this.ctx,
       now = ctx.currentTime;
     const surface = footstepSurfaceAt(this.chunks, position);
-    const recording = footstepRecording(surface, running, entity);
+    if (surface === "water") this.lastWaterRecording = nextWaterRecording(this.lastWaterRecording, this.rng);
+    const recording = footstepRecording(surface, running, entity, this.lastWaterRecording);
     const buffer = this.recordings?.get(recording);
     if (!buffer) return;
     const profile = FOOTSTEP_RECORDINGS[recording];
@@ -519,10 +546,8 @@ export class BackroomsAudio {
       surface === "carpet" ? 0.55 : 1.1,
       distant ? 3 : 1.7,
     );
-    // Balance the recordings' different peaks before both dry sound and echo.
-    voice.input.gain.value = profile.gain * (surface === "water" && running ? 1.2 : 1);
-    const source = ctx.createBufferSource(),
-      filter = ctx.createBiquadFilter();
+    voice.input.gain.value = profile.gain * (surface === "water" && running ? 1.1 : 1);
+    const source = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
     source.buffer = buffer;
     source.playbackRate.value = (entity ? 0.72 : 0.96) + this.rng() * 0.08;
     filter.type = "lowpass";
