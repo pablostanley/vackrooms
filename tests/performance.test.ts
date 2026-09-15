@@ -7,6 +7,8 @@ import { buildSection } from "../src/lib/game/world";
 import { generateChunk } from "../src/lib/game/maze";
 import type { ComputerStation } from "../src/lib/game/computers";
 import { headlessMaterials } from "./helpers/materials";
+import { RenderResolution } from "../src/lib/game/render-resolution";
+import { EntityModel } from "../src/lib/game/entity-model";
 
 test("cached shadows refresh for fixture/world changes and clear departed casters", () => {
   const lights = [new THREE.SpotLight(), new THREE.SpotLight()];
@@ -23,7 +25,7 @@ test("cached shadows refresh for fixture/world changes and clear departed caster
   finishRender();
   for (let frame = 0; frame < 120; frame++) {
     lights[0].intensity = 24 + Math.sin(frame);
-    cache.update(false);
+    cache.update(null);
     assert.ok(
       lights.every((light) => !light.shadow.needsUpdate),
       "flicker reuses shadow depth",
@@ -42,7 +44,10 @@ test("cached shadows refresh for fixture/world changes and clear departed caster
     "streaming/descent invalidates every map",
   );
   finishRender();
-  for (const moving of [true, true, false]) {
+  const caster = new THREE.Sphere(new THREE.Vector3(4, 1.4, 8), 2.2);
+  cache.place(lights[1], new THREE.Vector3(5, 3, 8));
+  finishRender();
+  for (const moving of [caster, caster, null]) {
     cache.update(moving);
     assert.ok(
       lights.every((light) => light.shadow.needsUpdate),
@@ -50,9 +55,126 @@ test("cached shadows refresh for fixture/world changes and clear departed caster
     );
     finishRender();
   }
-  cache.update(false);
+  cache.update(null);
   assert.ok(lights.every((light) => !light.shadow.needsUpdate));
   lights.forEach((light) => light.dispose());
+});
+
+test("fixture rank changes retain shadow maps and only new fixtures replace slots", () => {
+  const lights = [new THREE.SpotLight(), new THREE.SpotLight(), new THREE.SpotLight()];
+  const cache = new ShadowCache(lights);
+  const fixtures = [0, 4, 8, 12].map((x) => ({ position: new THREE.Vector3(x, 3, 4) }));
+  cache.assign(fixtures);
+  const positions = lights.map((light) => light.position.clone());
+  lights.forEach((light) => { light.shadow.needsUpdate = false; });
+  const reordered = cache.assign([fixtures[2], fixtures[0], fixtures[1], fixtures[3]]);
+  assert.deepEqual(reordered, fixtures.slice(0, 3));
+  assert.ok(lights.every((light, i) => light.position.equals(positions[i]) && !light.shadow.needsUpdate));
+  const replaced = cache.assign([fixtures[3], fixtures[1], fixtures[2], fixtures[0]]);
+  assert.deepEqual(replaced, [fixtures[3], fixtures[1], fixtures[2]]);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [true, false, false]);
+  assert.equal(cache.assign([]).filter(Boolean).length, 0);
+  lights.forEach((light) => light.dispose());
+});
+
+test("moving casters refresh only intersecting lights and clear departed shadows once", () => {
+  const lights = [0, 40, 80].map(() => new THREE.SpotLight("white", 24, 16, 1.32));
+  const cache = new ShadowCache(lights);
+  lights.forEach((light, i) => cache.place(light, new THREE.Vector3(i * 40, 3, 0)));
+  const finishRender = () => lights.forEach((light) => { light.shadow.needsUpdate = false; });
+  const caster = new THREE.Sphere(new THREE.Vector3(0, 1.4, 0), 2.2);
+  finishRender();
+  cache.update(caster);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [true, false, false]);
+  finishRender();
+  caster.center.x = 40;
+  cache.update(caster);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [true, true, false]);
+  finishRender();
+  cache.update(caster);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [false, true, false]);
+  finishRender();
+  cache.update(null);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [false, true, false]);
+  finishRender();
+  cache.update(null);
+  assert.ok(lights.every((light) => !light.shadow.needsUpdate));
+  cache.invalidate();
+  assert.ok(lights.every((light) => light.shadow.needsUpdate), "world changes still refresh all maps");
+  lights.forEach((light) => light.dispose());
+});
+
+test("the shadow-culling sphere encloses the creature through walking and reaching poses", () => {
+  const material = new THREE.MeshBasicMaterial();
+  const entity = new EntityModel(material);
+  const vertex = new THREE.Vector3();
+  const center = new THREE.Vector3(0, 1.4, 0);
+  for (const reach of [0, 1]) {
+    for (let frame = 0; frame < 24; frame++) {
+      entity.animate(frame * Math.PI / 6, true, 4, 1, reach, frame / 24, 0.1);
+      entity.updateMatrixWorld(true);
+      entity.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const positions = object.geometry.getAttribute("position");
+        for (let i = 0; i < positions.count; i++) {
+          vertex.fromBufferAttribute(positions, i).applyMatrix4(object.matrixWorld);
+          assert.ok(vertex.distanceTo(center) <= 2.2, "animated tissue remains inside the shadow bound");
+        }
+      });
+    }
+  }
+  entity.traverse((object) => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
+  material.dispose();
+});
+
+test("render resolution starts at high detail with a bounded 4K pixel workload", () => {
+  const resolution = new RenderResolution();
+  assert.equal(resolution.pixelRatio(1280, 720, 2), 2);
+  assert.equal(resolution.pixelRatio(390, 844, 3), 2);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 1);
+  for (const [width, height] of [[3840, 2160], [2560, 1440], [5120, 1440], [1440, 2560]]) {
+    const ratio = resolution.pixelRatio(width, height, 2);
+    assert.ok(width * height * ratio * ratio <= 3840 * 2160 + 0.01);
+    assert.ok(ratio > 0);
+  }
+});
+
+test("resolution ignores standby and isolated hitches, then steps down on sustained slow gameplay", () => {
+  const resolution = new RenderResolution();
+  const sample = (frames: number, milliseconds: number, playing = true) => {
+    let changes = 0;
+    for (let i = 0; i < frames; i++) changes += Number(resolution.recordFrame(milliseconds, playing));
+    return changes;
+  };
+  assert.equal(sample(300, 1000 / 30, false), 0, "standby is intentionally capped");
+  assert.equal(sample(480, 1000 / 120), 0, "high-refresh gameplay retains detail");
+  assert.equal(sample(1, 2000), 0, "background and streaming gaps reset sampling");
+  assert.equal(sample(120, 1000 / 60), 0);
+  assert.equal(sample(1, 100), 0, "one slow frame does not resize");
+  assert.equal(sample(240, 1000 / 60), 0);
+  resolution.resetSampling();
+  assert.equal(sample(100, 1000 / 30), 1);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 0.85);
+  assert.equal(sample(600, 1000 / 60), 0, "recovery does not cause resolution oscillation");
+  resolution.resetSampling();
+  assert.equal(sample(100, 1000 / 30), 1);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 0.7);
+  assert.equal(sample(600, 1000 / 20), 2);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 0.35);
+  assert.equal(sample(600, 1000 / 20), 0, "minimum scale is bounded");
+});
+
+test("sustained severe frame stalls can recover without treating an isolated gap as low performance", () => {
+  const resolution = new RenderResolution();
+  assert.equal(resolution.recordFrame(1000, true), false);
+  assert.equal(resolution.recordFrame(16, true), false);
+  assert.equal(resolution.recordFrame(300, true), false);
+  assert.equal(resolution.recordFrame(300, true), false);
+  assert.equal(resolution.recordFrame(300, true), true);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 0.85);
+  for (let i = 0; i < 10; i++) {
+    assert.equal(resolution.recordFrame(1000, false), false, "paused frames never lower resolution");
+  }
 });
 
 function referenceVisibility(

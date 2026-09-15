@@ -79,6 +79,8 @@ export class BackroomsEngine {
     metalness: 0,
   });
   private entity = new EntityModel(this.entityMaterial);
+  // Includes the full height, gait, and extended arms of the animated creature.
+  private entityShadowBounds = new THREE.Sphere(new THREE.Vector3(), 2.2);
   private navigation = new EntityNavigation();
   private stalker: Stalker;
   private playerSpeed = 0;
@@ -618,13 +620,14 @@ export class BackroomsEngine {
           a.position.distanceToSquared(this.position) -
           b.position.distanceToSquared(this.position),
       );
+    const assigned = this.shadows.assign(candidates);
     this.lights.forEach((light, i) => {
-      const p = candidates[i];
+      const p = assigned[i];
       light.visible = !!p;
       if (p) {
         light.userData.lamp = p.lamp;
+        light.userData.strength = candidates.indexOf(p) < 8 ? 1 : 0.6;
         light.color.set(p.lamp ? "#ffdc97" : "#fff1bd");
-        this.shadows.place(light, p.position);
       }
     });
   }
@@ -960,7 +963,8 @@ export class BackroomsEngine {
       this.frameId = requestAnimationFrame(this.tick);
       return;
     }
-    const dt = Math.min((now - (this.lastTime || now)) / 1000, 0.045);
+    const frameMs = now - (this.lastTime || now);
+    const dt = Math.min(frameMs / 1000, 0.045);
     this.lastTime = now;
     this.elapsed += dt;
     try {
@@ -1029,7 +1033,7 @@ export class BackroomsEngine {
         );
         light.intensity = light.userData.lamp
           ? 9
-          : 24 * heightCompensation * (1 + jitter) * (i < 8 ? 1 : 0.6);
+          : 24 * heightCompensation * (1 + jitter) * light.userData.strength;
       }
       this.flashlight.position.copy(this.camera.position);
       this.flashlight.target.position
@@ -1038,8 +1042,11 @@ export class BackroomsEngine {
         .multiplyScalar(8)
         .add(this.camera.position);
       this.flashlight.intensity = this.flashOn ? 22 : 0;
+      this.entityShadowBounds.center.copy(this.entity.position).y += 1.4;
       this.shadows.update(
-        this.active && !this.focusedComputer && this.entity.visible,
+        this.active && !this.focusedComputer && this.entity.visible
+          ? this.entityShadowBounds
+          : null,
       );
       this.stress = Math.max(0, this.stress - dt * 0.4);
       const tapeDamage = this.settings.reducedMotion
@@ -1064,6 +1071,7 @@ export class BackroomsEngine {
       }
       // Keep the DOM and mesh projections aligned; the separate VHS overlay stays.
       const hasScreen = this.computerScreens?.visible;
+      this.renderer?.recordFrame(frameMs, this.active && !this.focusedComputer);
       this.renderer?.render(
         this.settings.reducedMotion ? 0 : this.elapsed,
         hasScreen ? 0 : tapeDamage,
