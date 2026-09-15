@@ -13,7 +13,7 @@ import {
 import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
 import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
-import { splashSamples } from "./footstep-splash";
+import { FOOTSTEP_RECORDINGS, footstepRecording, RpgRecordings } from "./rpg-recordings";
 
 interface SpatialVoice {
   position: SoundPosition;
@@ -40,7 +40,7 @@ export class BackroomsAudio {
   private mix: DynamicsCompressorNode | null = null;
   private reflections: GainNode | null = null;
   private noise: AudioBuffer | null = null;
-  private splash: AudioBuffer | null = null;
+  private recordings: RpgRecordings | null = null;
   private dialup: ComputerDialup | null = null;
   private interfaceAudio: InterfaceAudio | null = null;
   private interfaceLevel: GainNode | null = null;
@@ -72,6 +72,7 @@ export class BackroomsAudio {
     if (this.suspendTimer) clearTimeout(this.suspendTimer);
     this.suspendTimer = null;
     if (!this.ctx) this.initialize();
+    void this.recordings!.preload();
     this.active = true;
     await this.ctx!.resume();
     // Pause/unmount may happen while the browser is granting audio access.
@@ -83,6 +84,8 @@ export class BackroomsAudio {
   private initialize() {
     const ctx = new AudioContext();
     this.ctx = ctx;
+    this.recordings = new RpgRecordings(ctx);
+    void this.recordings.preload();
     this.master = ctx.createGain();
     this.master.gain.value = 0;
     this.master.connect(ctx.destination);
@@ -127,9 +130,6 @@ export class BackroomsAudio {
       samples[i] = brown * 3.5;
     }
     this.noise = buffer;
-    const splash = splashSamples(ctx.sampleRate, this.seed);
-    this.splash = ctx.createBuffer(1, splash.length, ctx.sampleRate);
-    this.splash.getChannelData(0).set(splash);
     // A quiet air bed joins the localized fixtures without masking their direction.
     const air = ctx.createBufferSource(),
       filter = ctx.createBiquadFilter(),
@@ -484,59 +484,33 @@ export class BackroomsAudio {
     distant: boolean,
     entity = false,
   ) {
-    if (!this.ctx || !this.noise || this.transients.size >= 12) return;
+    if (!this.ctx || this.transients.size >= 12) return;
     const ctx = this.ctx,
       now = ctx.currentTime;
     const surface = footstepSurfaceAt(this.chunks, position);
-    const hard = surface === "hard";
+    const recording = footstepRecording(surface, running, entity);
+    const buffer = this.recordings?.get(recording);
+    if (!buffer) return;
+    const profile = FOOTSTEP_RECORDINGS[recording];
     const voice = this.spatial(
       { ...position, y: surface === "water" ? POOL_WATER_Y : position.y + 0.12 },
       surface === "carpet" ? 0.55 : 1.1,
       distant ? 3 : 1.7,
     );
-    // A restrained footstep mix, including the low impact and room reflections.
-    voice.input.gain.value = 0.6;
-    if (surface === "water" && this.splash) {
-      const source = ctx.createBufferSource(), gain = ctx.createGain();
-      source.buffer = this.splash;
-      source.playbackRate.value = 0.85 + this.rng() * 0.3;
-      gain.gain.value = running ? 0.6 : 0.42;
-      source.connect(gain).connect(voice.input);
-      voice.sources.push(source);
-      voice.nodes.push(gain);
-      this.track(voice);
-      source.start(now);
-      return;
-    }
+    // Balance the recordings' different peaks before both dry sound and echo.
+    voice.input.gain.value = profile.gain * (surface === "water" && running ? 1.2 : 1);
     const source = ctx.createBufferSource(),
-      filter = ctx.createBiquadFilter(),
-      gain = ctx.createGain();
-    source.buffer = this.noise;
-    source.playbackRate.value = (entity ? 0.6 : 0.85) + this.rng() * 0.3;
+      filter = ctx.createBiquadFilter();
+    source.buffer = buffer;
+    source.playbackRate.value = (entity ? 0.72 : 0.96) + this.rng() * 0.08;
     filter.type = "lowpass";
-    filter.frequency.value = entity ? (hard ? 1700 : 540) : hard ? 2800 : 600;
-    const level = entity ? 0.3 : hard ? 0.34 : 0.22;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(level * (running ? 1.35 : 1), now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(
-      0.001,
-      now + (entity ? 0.3 : hard ? 0.19 : 0.14),
-    );
-    source.connect(filter).connect(gain).connect(voice.input);
-    const thud = ctx.createOscillator(),
-      low = ctx.createGain();
-    thud.frequency.setValueAtTime(entity ? 67 : hard ? 115 : 82, now);
-    thud.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-    low.gain.setValueAtTime((hard || entity ? 0.05 : 0.035) * (running ? 1.35 : 1), now);
-    low.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
-    thud.connect(low).connect(voice.input);
-    voice.sources.push(source, thud);
-    voice.nodes.push(filter, gain, low);
+    filter.frequency.value = entity ? 1100 : profile.cutoff;
+    filter.Q.value = 0.5;
+    source.connect(filter).connect(voice.input);
+    voice.sources.push(source);
+    voice.nodes.push(filter);
     this.track(voice);
-    source.start(now, this.rng());
-    source.stop(now + (entity ? 0.34 : 0.24));
-    thud.start(now);
-    thud.stop(now + 0.15);
+    source.start(now);
   }
 
   private buildingNoise(position: SoundPosition, kind: "duct" | "settle") {
@@ -606,7 +580,8 @@ export class BackroomsAudio {
     this.loops = [];
     this.rooms.clear();
     this.noise = null;
-    this.splash = null;
+    this.recordings?.dispose();
+    this.recordings = null;
     if (this.ctx) void this.ctx.close().catch(() => {});
   }
 }
