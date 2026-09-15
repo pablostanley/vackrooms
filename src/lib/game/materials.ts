@@ -160,6 +160,7 @@ export function createMaterials() {
     color: "#b2ad78",
     roughness: 0.8,
   });
+  const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe0a0", toneMapped: false });
   const shadow = new THREE.MeshBasicMaterial({
     map: ao,
     transparent: true,
@@ -212,6 +213,7 @@ export function createMaterials() {
     trim,
     fixtures,
     luminous,
+    lampGlow,
     deadLight,
     shadow,
     wood,
@@ -241,6 +243,7 @@ export function createMaterials() {
         trim,
         fixtures,
         luminous,
+        lampGlow,
         deadLight,
         shadow,
         wood,

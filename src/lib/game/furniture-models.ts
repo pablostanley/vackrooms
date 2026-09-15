@@ -6,8 +6,19 @@ import {
   type ComputerKind,
 } from "./computer-models";
 
+export const chairKinds = [
+  "chair",
+  "officeChair",
+  "foldingChair",
+  "plasticChair",
+] as const;
+export type ChairKind = (typeof chairKinds)[number];
+export function isChairKind(kind: FurnitureKind): kind is ChairKind {
+  return (chairKinds as readonly string[]).includes(kind);
+}
+
 export type FurnitureKind =
-  | "chair"
+  | ChairKind
   | "sofa"
   | "table"
   | "lamp"
@@ -29,6 +40,7 @@ type Point = [number, number, number];
 export function createFurniture(
   kind: FurnitureKind,
   mats: Materials,
+  lampOn = false,
 ): FurnitureModel {
   if (isComputerKind(kind)) return createComputerModel(kind, mats);
   const parts: FurnitureModel["parts"] = [];
@@ -149,6 +161,83 @@ export function createFurniture(
       anchor.set(0, 0.46, 0);
       break;
     }
+    case "officeChair": {
+      // A low upholstered swivel chair on a five-spoke caster base.
+      cylinder(0.045, 0.065, 0.39, [0, 0.265, 0], mats.metal);
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * Math.PI * 2) / 5;
+        const x = Math.cos(angle) * 0.31,
+          z = Math.sin(angle) * 0.31;
+        strut([0, 0.15, 0], [x, 0.075, z], 0.028, mats.metal);
+        cylinder(0.045, 0.045, 0.055, [x, 0.045, z], mats.metal, [
+          Math.PI / 2,
+          0,
+          angle,
+        ]);
+      }
+      cushion([0.55, 0.12, 0.53], [0, 0.49, 0], mats.upholstery, 0.04);
+      box([0.06, 0.4, 0.05], [0, 0.67, 0.24], mats.metal);
+      cushion(
+        [0.51, 0.38, 0.11],
+        [0, 0.85, 0.25],
+        mats.upholstery,
+        0.045,
+        [0.08, 0, 0],
+      );
+      for (const x of [-0.32, 0.32]) {
+        strut([x, 0.48, 0.12], [x, 0.7, 0.12], 0.023, mats.metal);
+        cushion([0.07, 0.055, 0.34], [x, 0.72, 0], mats.fabric, 0.02);
+      }
+      anchor.set(0, 0.49, 0);
+      break;
+    }
+    case "foldingChair": {
+      for (const x of [-0.23, 0.23]) {
+        strut([x, 0.025, -0.28], [x, 0.88, 0.2], 0.025, mats.metal);
+        strut([x, 0.025, 0.29], [x, 0.48, -0.18], 0.025, mats.metal);
+        box([0.065, 0.05, 0.085], [x, 0.025, -0.28], mats.metal);
+        box([0.065, 0.05, 0.085], [x, 0.025, 0.29], mats.metal);
+      }
+      strut([-0.23, 0.17, 0.22], [0.23, 0.17, 0.22], 0.019, mats.metal);
+      cushion([0.5, 0.065, 0.47], [0, 0.46, -0.015], mats.fadedRed, 0.025);
+      cushion(
+        [0.47, 0.25, 0.055],
+        [0, 0.76, 0.16],
+        mats.fadedRed,
+        0.025,
+        [0.12, 0, 0],
+      );
+      anchor.set(0, 0.46, 0);
+      break;
+    }
+    case "plasticChair": {
+      for (const x of [-1, 1])
+        for (const z of [-1, 1])
+          strut(
+            [x * 0.255, 0.04, z * 0.255],
+            [x * 0.18, 0.44, z * 0.18],
+            0.04,
+            mats.enamel,
+          );
+      cushion([0.55, 0.09, 0.53], [0, 0.46, 0], mats.enamel, 0.035);
+      for (const x of [-0.22, 0.22])
+        cushion(
+          [0.09, 0.45, 0.07],
+          [x, 0.72, 0.24],
+          mats.enamel,
+          0.025,
+          [0.09, 0, 0],
+        );
+      cushion(
+        [0.51, 0.25, 0.07],
+        [0, 0.85, 0.25],
+        mats.enamel,
+        0.03,
+        [0.09, 0, 0],
+      );
+      anchor.set(0, 0.46, 0);
+      break;
+    }
     case "sofa": {
       for (const x of [-0.83, 0.83]) {
         for (const z of [-0.33, 0.33]) {
@@ -191,8 +280,13 @@ export function createFurniture(
       cylinder(0.29, 0.32, 0.07, [0, 0.035, 0], mats.metal);
       cylinder(0.035, 0.035, 1.46, [0, 0.78, 0], mats.wood);
       cylinder(0.065, 0.045, 0.12, [0, 1.49, 0], mats.metal);
-      // A closed, cream shade deliberately stays unlit in the empty offices.
-      cylinder(0.2, 0.43, 0.48, [0, 1.68, 0], mats.cream);
+      cylinder(
+        0.2,
+        0.43,
+        0.48,
+        [0, 1.68, 0],
+        lampOn ? mats.lampGlow : mats.cream,
+      );
       cylinder(0.21, 0.21, 0.025, [0, 1.922, 0], mats.upholstery);
       cylinder(0.435, 0.435, 0.025, [0, 1.443, 0], mats.upholstery);
       ellipsoid([0.09, 0.11, 0.09], [0, 1.975, 0], mats.wood);

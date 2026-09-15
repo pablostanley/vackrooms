@@ -16,10 +16,12 @@ import { buildSection } from "../src/lib/game/world";
 import { generateChunk, CELL, canStand } from "../src/lib/game/maze";
 import { headlessMaterials } from "./helpers/materials";
 
-test("computers reproduce by tape with three distinct grounded models per section", () => {
+test("computers reproduce by tape with one or two distinct grounded models per section", () => {
   const mats = headlessMaterials();
   const snapshots = [];
   const homeSites = new Set<string>();
+  const seenKinds = new Set<string>();
+  let computerTotal = 0;
   try {
     for (const seed of [1, 199307, 882731])
       for (const [x, z, depth] of [
@@ -39,12 +41,19 @@ test("computers reproduce by tape with three distinct grounded models per sectio
               position: c.position.toArray(),
               rotation: c.quaternion.toArray(),
             }));
-          assert.equal(section.computers.length, 3);
-          assert.equal(new Set(section.computers.map((c) => c.homeUrl)).size, 3);
-          assert.deepEqual(
-            new Set(section.computers.map((c) => c.kind)),
-            new Set(computerKinds),
+          assert.equal(
+            new Set(section.computers.map((c) => c.homeUrl)).size,
+            section.computers.length,
           );
+          assert.ok(
+            section.computers.length >= 1 && section.computers.length <= 2,
+          );
+          assert.equal(
+            new Set(section.computers.map((c) => c.kind)).size,
+            section.computers.length,
+          );
+          section.computers.forEach((c) => seenKinds.add(c.kind));
+          computerTotal += section.computers.length;
           assert.deepEqual(snapshot(section), snapshot(repeat));
           snapshots.push(snapshot(section));
           for (const station of section.computers) {
@@ -79,6 +88,11 @@ test("computers reproduce by tape with three distinct grounded models per sectio
       }
     assert.notDeepEqual(snapshots[0], snapshots[3]);
     assert.equal(homeSites.size, 4);
+    assert.deepEqual(seenKinds, new Set(computerKinds));
+    assert.ok(
+      computerTotal >= 11 && computerTotal <= 16,
+      "sampled sections have about half the old 27 computers",
+    );
     for (const kind of computerKinds) {
       const model = createComputerModel(kind, mats);
       assert.ok(Math.abs(model.bounds.min.y) < 0.00001);
