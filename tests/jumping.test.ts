@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Box3, Vector3 } from "three";
 import { CharacterMotor } from "../src/lib/game/physics";
-import { CHUNK, generateChunk, poolBounds } from "../src/lib/game/maze";
+import { CHUNK, SPAN, generateChunk, poolBounds } from "../src/lib/game/maze";
 import { buildSection } from "../src/lib/game/world";
 import { headlessMaterials } from "./helpers/materials";
 
@@ -159,7 +159,7 @@ test("the opening chair supports its seat and allows walking off", async () => {
   } finally { motor.dispose(); section.dispose(); mats.dispose(); }
 });
 
-test("jump onto pool coping, enter the basin, then double jump back to the dry deck", async () => {
+test("dry pool decks and coping keep normal jumps; one press escapes the basin", async () => {
   const data = generateChunk(0, 0, 2), basin = poolBounds(data.landmark)!;
   const mats = headlessMaterials(), section = buildSection(data, mats, 0);
   const position = new Vector3(basin.x - 0.8, 1.66, basin.z + basin.length / 2);
@@ -167,16 +167,71 @@ test("jump onto pool coping, enter the basin, then double jump back to the dry d
   try {
     motor.addSection("0,0", data, section.colliders, section.shapedColliders);
     for (let i = 0; i < 5; i++) motor.move(0, 0, DT, position);
+    const checkNormalJump = () => {
+      const floor = position.y;
+      let peak = floor;
+      motor.jump();
+      for (let i = 0; i < 90; i++) {
+        motor.move(0, 0, DT, position);
+        peak = Math.max(peak, position.y);
+      }
+      assert.ok(peak - floor > 0.8 && peak - floor < 0.95, `normal dry takeoff: ${peak - floor}`);
+      assert.ok(motor.grounded);
+    };
+    checkNormalJump();
     motor.jump();
     for (let i = 0; i < 22; i++) motor.move(0.8 / 22, 0, DT, position);
     for (let i = 0; i < 60; i++) motor.move(0, 0, DT, position);
     assert.ok(motor.grounded && position.y > 2.05 && position.y < 2.15, `on coping: ${position.y}`);
+    checkNormalJump();
     for (let i = 0; i < 35; i++) motor.move(0.035, 0, DT, position);
     for (let i = 0; i < 60; i++) motor.move(0, 0, DT, position);
     assert.ok(motor.grounded && position.y < 0.3, "landed in the basin");
-    motor.jump(); motor.jump();
+    motor.jump();
     for (let i = 0; i < 85; i++) motor.move(-0.04, 0, DT, position);
     assert.ok(position.x < basin.x - 0.4, "escaped the raised rim");
     assert.ok(motor.grounded && position.y > 1.6 && position.y < 1.7);
   } finally { motor.dispose(); section.dispose(); mats.dispose(); }
 });
+
+for (const taps of [1, 2]) {
+  test(`${taps} jump press(es) escape when already pushing into every pool edge and corner`, async () => {
+    const mats = headlessMaterials();
+    try {
+      for (const hz of [30, 60, 144]) {
+        const data = generateChunk(0, 0, 2);
+        // Exercise world-space bounds in a streamed section away from the origin.
+        data.x = -2;
+        data.z = 1;
+        const basin = poolBounds(data.landmark)!;
+        const section = buildSection(data, mats, 0);
+        try {
+          for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+            const centerX = data.x * SPAN + basin.x + basin.width / 2;
+            const centerZ = data.z * SPAN + basin.z + basin.length / 2;
+            const position = new Vector3(
+              centerX + dx * (basin.width / 2 - 0.65),
+              1.66,
+              centerZ + dz * (basin.length / 2 - 0.65),
+            );
+            const motor = await CharacterMotor.create(position);
+            const step = 2.35 / hz / Math.hypot(dx, dz);
+            const label = `${hz}Hz toward ${dx},${dz} with ${taps} tap(s)`;
+            try {
+              motor.addSection("-2,1", data, section.colliders, section.shapedColliders);
+              for (let i = 0; i < hz; i++) motor.move(dx * step, dz * step, 1 / hz, position);
+              assert.ok(motor.grounded && position.y < 0.3, `on basin floor: ${label}`);
+              for (let i = 0; i < taps; i++) motor.jump();
+              assert.equal(motor.move(dx * step, dz * step, 1 / hz, position), taps);
+              for (let i = 0; i < hz * 2; i++) motor.move(dx * step, dz * step, 1 / hz, position);
+              const outsideX = Math.abs(position.x - centerX) > basin.width / 2 + 0.4;
+              const outsideZ = Math.abs(position.z - centerZ) > basin.length / 2 + 0.4;
+              assert.ok(outsideX || outsideZ, `escaped rim: ${label}, ${position.toArray()}`);
+              assert.ok(motor.grounded && position.y > 1.6 && position.y < 1.7, `landed on dry deck: ${label}`);
+            } finally { motor.dispose(); }
+          }
+        } finally { section.dispose(); }
+      }
+    } finally { mats.dispose(); }
+  });
+}

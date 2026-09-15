@@ -123,8 +123,8 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: Builder) {
       mats.tileFloor,
       -Math.PI / 2,
     );
-    // Coping blocks accidental walking entry but can be jumped onto. A double
-    // jump clears the 1.84m rise back out of the basin; the deck stays connected.
+    // Coping blocks accidental walking entry but can be jumped onto. The motor
+    // gives basin takeoffs enough lift to clear the 1.84m rise with one press.
     for (const side of [-1, 1]) {
       solid(
         0.36,

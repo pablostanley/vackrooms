@@ -10,6 +10,7 @@ import {
   ceilingAt,
   poolBounds,
   type ChunkData,
+  type PoolBounds,
 } from "./maze";
 
 let initialization: Promise<void> | undefined;
@@ -17,8 +18,9 @@ const BODY_HEIGHT = 0.89;
 const EYE_OFFSET = 0.77;
 const GRAVITY = 18;
 const JUMP_SPEED = 5.6;
-// Clears the 1.84m rise from the pool floor to its coping, even on a quick tap.
 const DOUBLE_JUMP_SPEED = 8.8;
+// Gives one press enough height and airtime to clear the 1.84m pool rim.
+const POOL_JUMP_SPEED = 9.6;
 const COYOTE_TIME = 0.1;
 const JUMP_BUFFER = 0.12;
 
@@ -34,7 +36,10 @@ export class CharacterMotor {
   private controller = this.world.createCharacterController(0.015);
   private body: RAPIER.RigidBody;
   private capsule: RAPIER.Collider;
-  private sections = new Map<string, RAPIER.Collider[]>();
+  private sections = new Map<string, {
+    colliders: RAPIER.Collider[];
+    basin: PoolBounds | null;
+  }>();
   private fallSpeed = 0;
   private onGround = false;
   private timeSinceGround = Infinity;
@@ -184,11 +189,14 @@ export class CharacterMotor {
         if (!shape) throw new Error("Invalid convex furniture collider");
         colliders.push(this.world.createCollider(shape));
       }
-    this.sections.set(key, colliders);
+    this.sections.set(key, {
+      colliders,
+      basin: basin ? { ...basin, x: ox + basin.x, z: oz + basin.z } : null,
+    });
     this.world.step();
   }
   removeSection(key: string) {
-    for (const collider of this.sections.get(key) ?? [])
+    for (const collider of this.sections.get(key)?.colliders ?? [])
       this.world.removeCollider(collider, true);
     this.sections.delete(key);
   }
@@ -225,6 +233,20 @@ export class CharacterMotor {
     position.set(next.x, next.y + EYE_OFFSET, next.z);
     return jumped;
   }
+  private takeoffSpeed() {
+    const position = this.body.translation();
+    // Dry decks and the top of the coping retain the ordinary jump height.
+    if (position.y < BODY_HEIGHT - 0.1) {
+      for (const { basin } of this.sections.values()) {
+        if (
+          basin &&
+          position.x >= basin.x && position.x <= basin.x + basin.width &&
+          position.z >= basin.z && position.z <= basin.z + basin.length
+        ) return POOL_JUMP_SPEED;
+      }
+    }
+    return JUMP_SPEED;
+  }
   private step(dx: number, dz: number, dt: number) {
     let jumped: 0 | 1 | 2 = 0;
     if (this.onGround) this.timeSinceGround = 0;
@@ -234,11 +256,12 @@ export class CharacterMotor {
         this.onGround ||
         (this.jumps === 0 && this.timeSinceGround <= COYOTE_TIME)
       ) {
-        this.fallSpeed = JUMP_SPEED;
+        this.fallSpeed = this.takeoffSpeed();
         this.jumps = 1;
         jumped = 1;
       } else if (this.jumps < 2 && this.timeSinceGround !== Infinity) {
-        this.fallSpeed = DOUBLE_JUMP_SPEED;
+        // A quick second tap must not reduce the stronger pool takeoff.
+        this.fallSpeed = Math.max(this.fallSpeed, DOUBLE_JUMP_SPEED);
         this.jumps = 2;
         jumped = 2;
       } else break;
