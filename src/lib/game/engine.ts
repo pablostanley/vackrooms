@@ -609,16 +609,23 @@ export class BackroomsEngine {
   }
   private updateLights() {
     const candidates = [...this.sections.values()]
-      .flatMap((s) => s.lights)
+      .flatMap((s) => [
+        ...s.lights.map((position) => ({ position, lamp: false })),
+        ...s.lampLights.map((position) => ({ position, lamp: true })),
+      ])
       .sort(
         (a, b) =>
-          a.distanceToSquared(this.position) -
-          b.distanceToSquared(this.position),
+          a.position.distanceToSquared(this.position) -
+          b.position.distanceToSquared(this.position),
       );
     this.lights.forEach((light, i) => {
       const p = candidates[i];
       light.visible = !!p;
-      if (p) this.shadows.place(light, p);
+      if (p) {
+        light.userData.lamp = p.lamp;
+        light.color.set(p.lamp ? "#ffdc97" : "#fff1bd");
+        this.shadows.place(light, p.position);
+      }
     });
   }
   private walk(dt: number) {
@@ -1020,8 +1027,9 @@ export class BackroomsEngine {
           3.2,
           Math.pow(light.position.y / 3, 1.5),
         );
-        light.intensity =
-          24 * heightCompensation * (1 + jitter) * (i < 8 ? 1 : 0.6);
+        light.intensity = light.userData.lamp
+          ? 9
+          : 24 * heightCompensation * (1 + jitter) * (i < 8 ? 1 : 0.6);
       }
       this.flashlight.position.copy(this.camera.position);
       this.flashlight.target.position

@@ -13,7 +13,11 @@ import {
   type ChunkData,
 } from "../src/lib/game/maze";
 import { headlessMaterials } from "./helpers/materials";
-import type { FurnitureKind } from "../src/lib/game/furniture-models";
+import {
+  chairKinds,
+  isChairKind,
+  type FurnitureKind,
+} from "../src/lib/game/furniture-models";
 import { isComputerKind } from "../src/lib/game/computer-models";
 
 interface Placement {
@@ -25,6 +29,49 @@ interface Placement {
 function placements(section: Section): Placement[] {
   return section.group.userData.furniture;
 }
+
+test("all chair silhouettes appear as singles, pairs, and occasional clipped pieces or stacks", () => {
+  const mats = headlessMaterials();
+  const kinds = new Set<FurnitureKind>();
+  const arrangements = new Set<string>();
+  let small = 0,
+    stacks = 0;
+  try {
+    for (const seed of [1, 2, 3, 8, 199307, 882731]) {
+      const section = buildSection(generateChunk(-1, 0, seed, 2), mats, 2);
+      try {
+        const cells = new Map<string, Placement[]>();
+        for (const prop of placements(section).filter((p) =>
+          isChairKind(p.kind),
+        )) {
+          kinds.add(prop.kind);
+          arrangements.add(prop.attachment);
+          const center = prop.bounds.getCenter(new THREE.Vector3());
+          const key = `${Math.floor(center.x / CELL)},${Math.floor(center.z / CELL)}`;
+          const group = cells.get(key) ?? [];
+          group.push(prop);
+          cells.set(key, group);
+        }
+        for (const group of cells.values()) {
+          if (group.some((p) => p.attachment === "chair")) stacks++;
+          else if (group.every((p) => p.attachment === "floor")) {
+            if (group.length === 1) arrangements.add("single");
+            if (group.length === 2) arrangements.add("pair");
+            small++;
+          }
+        }
+      } finally {
+        section.dispose();
+      }
+    }
+    assert.deepEqual(kinds, new Set(chairKinds));
+    for (const arrangement of ["single", "pair", "chair", "wall", "ceiling"])
+      assert.ok(arrangements.has(arrangement), arrangement);
+    assert.ok(small > stacks * 2, "singles and pairs dominate stacks");
+  } finally {
+    mats.dispose();
+  }
+});
 
 /** The walking network is checked independently of the placement predicate. */
 function passageZones(data: ChunkData) {
@@ -76,11 +123,12 @@ test("origin rooms vary a small furniture selection across tape seeds", () => {
           const present = new Set(
             placements(section)
               .map((placement) => placement.kind)
-              .filter((kind) => kind !== "chair" && !isComputerKind(kind)),
+              .filter((kind) => !isChairKind(kind) && !isComputerKind(kind)),
           );
           assert.ok(
-            present.size >= 2 && present.size <= 3,
-            `tape ${seed}, depth ${depth} has two or three new furniture kinds`,
+            present.size >= 2 &&
+              present.size <= (section.lampLights.length ? 4 : 3),
+            `tape ${seed}, depth ${depth} has a small prop selection plus an occasional room lamp`,
           );
           present.forEach((kind) => seenKinds.add(kind));
           selections.add([...present].sort().join(","));

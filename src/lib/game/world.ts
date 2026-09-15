@@ -17,6 +17,7 @@ import {
   type ChunkData,
 } from "./maze";
 import { buildLandmark } from "./landmarks";
+import { createRoomAmbientMap, planRoomLighting } from "./room-lighting";
 import type { Materials } from "./materials";
 import type { ShapedObstacle } from "./physics";
 import {
@@ -27,6 +28,9 @@ import {
 import { COMPUTER_HOMES, type ComputerStation } from "./computers";
 import {
   createFurniture,
+  chairKinds,
+  isChairKind,
+  type ChairKind,
   type FurnitureKind,
   type FurnitureModel,
 } from "./furniture-models";
@@ -44,6 +48,7 @@ export interface Portal {
 export interface Section {
   group: THREE.Group;
   lights: THREE.Vector3[];
+  lampLights: THREE.Vector3[];
   portals: Portal[];
   colliders: THREE.Box3[];
   shapedColliders: ShapedObstacle[];
@@ -68,9 +73,13 @@ export function buildSection(
     water: THREE.Mesh[] = [];
   const shapedColliders: ShapedObstacle[] = [];
   const computers: ComputerStation[] = [];
+  const lampLights: THREE.Vector3[] = [];
+  const lighting = planRoomLighting(data);
+  group.userData.lighting = lighting;
   const theme = mats.forTheme(data.theme);
   const furnitureRng = random(data.seed + 3403);
-  const models = new Map<FurnitureKind, FurnitureModel>();
+  const chairRng = random(data.seed + 39217);
+  const models = new Map<string, FurnitureModel>();
   const furnished = new Set<number>();
   const propRecords: {
     kind: FurnitureKind;
@@ -185,16 +194,24 @@ export function buildSection(
       );
     }
   }
-  function model(kind: FurnitureKind) {
-    if (!models.has(kind)) models.set(kind, createFurniture(kind, mats));
-    return models.get(kind)!;
+  function model(kind: FurnitureKind, lampOn = false) {
+    const key = `${kind}:${lampOn}`;
+    if (!models.has(key)) models.set(key, createFurniture(kind, mats, lampOn));
+    return models.get(key)!;
   }
   function furniture(
     kind: FurnitureKind,
     pose: THREE.Matrix4,
     attachment = "floor",
+    lampOn = false,
   ) {
-    const source = model(kind);
+    const source = model(kind, lampOn);
+    if (lampOn)
+      lampLights.push(
+        new THREE.Vector3(0, 1.4, 0)
+          .applyMatrix4(pose)
+          .add(new THREE.Vector3(ox, 0, oz)),
+      );
     const parts: Float32Array[] = [];
     for (const part of source.parts) {
       const geometry = part.geometry
@@ -220,7 +237,7 @@ export function buildSection(
       // Seats need their real solid parts: a whole-chair/sofa box fills the air
       // above the cushion and makes players stand on an invisible platform.
       const solids =
-        kind === "chair" || kind === "sofa"
+        isChairKind(kind) || kind === "sofa"
           ? source.parts.map(({ geometry }) =>
               geometry.boundingBox!.clone().applyMatrix4(pose),
             )
@@ -229,12 +246,17 @@ export function buildSection(
         colliders.push(solid.translate(new THREE.Vector3(ox, 0, oz)));
     }
   }
-  function chair(x: number, z: number, angle: number) {
+  function chair(
+    x: number,
+    z: number,
+    angle: number,
+    kind: ChairKind = "chair",
+  ) {
     furniture(
-      "chair",
+      kind,
       anchorPose(
         new THREE.Vector3(),
-        new THREE.Vector3(x, 0, z),
+        new THREE.Vector3(x, -model(kind).bounds.min.y, z),
         new THREE.Euler(0, angle, 0),
       ),
     );
@@ -244,8 +266,9 @@ export function buildSection(
     cx: number,
     cz: number,
     mode: "floor" | "wall" | "ceiling",
+    lampOn = false,
   ) {
-    const source = model(kind),
+    const source = model(kind, lampOn),
       bits = data.cells[cz * CHUNK + cx];
     const x = (cx + 0.5) * CELL,
       z = (cz + 0.5) * CELL;
@@ -323,7 +346,12 @@ export function buildSection(
       }
       const bounds = source.bounds.clone().applyMatrix4(pose);
       if (leavesPassagesClear(bounds, cx, cz, bits)) {
-        furniture(kind, pose, mode === "wall" && !wallBit ? "floor" : mode);
+        furniture(
+          kind,
+          pose,
+          mode === "wall" && !wallBit ? "floor" : mode,
+          lampOn,
+        );
         furnished.add(cz * CHUNK + cx);
         return true;
       }
@@ -346,6 +374,23 @@ export function buildSection(
     );
   } else floor(0, 0, SPAN, SPAN);
   buildLandmark(data, mats, { box, plane, lights, colliders, water, group });
+  if (lighting.lampCell !== null) {
+    const at = lighting.lampCell;
+    // Place the only lamp before clutter so its pool of light stays readable.
+    if (
+      !scatterFurniture(
+        "lamp",
+        at % CHUNK,
+        Math.floor(at / CHUNK),
+        "floor",
+        true,
+      )
+    ) {
+      lighting.mode = "fluorescent";
+      lighting.fixtures.add(at);
+      lighting.lampCell = null;
+    }
+  }
   let madePortal = false;
   for (let cz = 0; cz < CHUNK; cz++)
     for (let cx = 0; cx < CHUNK; cx++) {
@@ -379,7 +424,12 @@ export function buildSection(
           z,
           theme.wall,
         );
-      const lit = rng() > 0.14 || (data.x === 0 && data.z === 0 && cx === 2);
+      const normallyLit =
+        rng() > 0.14 || (data.x === 0 && data.z === 0 && cx === 2);
+      const at = cz * CHUNK + cx;
+      const lit = lighting.cells.has(at)
+        ? lighting.fixtures.has(at)
+        : normallyLit;
       box(
         landmark ? 2.4 : 1.28,
         0.065,
@@ -403,7 +453,7 @@ export function buildSection(
       if (landmark) continue;
       const isSpawn = data.x === 0 && data.z === 0 && cx === 2 && cz >= 1;
       // Pillars break up open rooms without sealing a passage.
-      if (bits === 15 && rng() < 0.38 && !isSpawn) {
+      if (bits === 15 && rng() < 0.38 && !isSpawn && !furnished.has(at)) {
         box(0.57, HEIGHT, 0.57, x + 1.6, HEIGHT / 2, z + 1.6, theme.wall);
         box(0.62, 0.12, 0.62, x + 1.6, 0.06, z + 1.6, mats.trim);
         colliders.push(
@@ -413,26 +463,49 @@ export function buildSection(
           ),
         );
       }
-      if (!isSpawn && rng() < (data.theme === "archive" ? 0.4 : 0.1)) {
-        const yaw = rng() * Math.PI * 2;
-        const count =
-          data.theme === "archive" || rng() < 0.4
-            ? 4 + Math.floor(rng() * 3)
-            : 1;
-        const poses = chairStack(x + 1.4, z + 1.4, yaw, count, furnitureRng);
-        const pileBounds = new THREE.Box3();
-        for (const pose of poses)
-          pileBounds.union(model("chair").bounds.clone().applyMatrix4(pose));
-        if (leavesPassagesClear(pileBounds, cx, cz, bits)) {
-          poses.forEach((pose, index) =>
-            furniture("chair", pose, index ? "chair" : "floor"),
+      if (
+        !isSpawn &&
+        !furnished.has(at) &&
+        chairRng() < (data.theme === "archive" ? 0.3 : 0.1)
+      ) {
+        const yaw = chairRng() * Math.PI * 2;
+        const arrangement = chairRng();
+        const kind = chairKinds[Math.floor(chairRng() * chairKinds.length)];
+        if (arrangement < 0.14) {
+          if (
+            !scatterFurniture(
+              kind,
+              cx,
+              cz,
+              chairRng() < 0.8 ? "wall" : "ceiling",
+            )
+          )
+            scatterFurniture(kind, cx, cz, "floor");
+        } else if (arrangement < 0.29) {
+          // Only the wooden model has the seat/leg contract used by the piles.
+          const poses = chairStack(
+            x + 1.4,
+            z + 1.4,
+            yaw,
+            3 + Math.floor(chairRng() * 3),
+            chairRng,
           );
-        } else chair(x + 1.4, z + 1.4, yaw);
-        furnished.add(cz * CHUNK + cx);
-        if (depth > 1 && rng() < 0.35)
-          scatterFurniture("chair", cx, cz, "ceiling");
+          const pileBounds = new THREE.Box3();
+          for (const pose of poses)
+            pileBounds.union(model("chair").bounds.clone().applyMatrix4(pose));
+          if (leavesPassagesClear(pileBounds, cx, cz, bits))
+            poses.forEach((pose, index) =>
+              furniture("chair", pose, index ? "chair" : "floor"),
+            );
+          else chair(x + 1.4, z + 1.4, yaw, kind);
+        } else {
+          chair(x + 1.4, z + 1.4, yaw, kind);
+          if (arrangement < 0.57)
+            chair(x + 1.4, z - 1.4, yaw + 0.3 + chairRng() * 0.7, kind);
+        }
+        furnished.add(at);
       }
-      if (!isSpawn && rng() < 0.075 && !(bits & N)) {
+      if (!isSpawn && !furnished.has(at) && rng() < 0.075 && !(bits & N)) {
         box(1.1, 1.3, 0.48, x, 0.65, cz * CELL + 0.36, mats.metal);
         for (let i = 0; i < 4; i++) {
           box(
@@ -554,7 +627,8 @@ export function buildSection(
   // among a section's three computers. Regenerated sections keep their sites.
   const homeOffset = hash(data.x, data.z, data.seed + 93013) % COMPUTER_HOMES.length;
   const placeComputer = (cx: number, cz: number, kind: ComputerKind) => {
-    if (furnished.has(cz * CHUNK + cx)) return false;
+    if (furnished.has(cz * CHUNK + cx) || lighting.cells.has(cz * CHUNK + cx))
+      return false;
     const bits = data.cells[cz * CHUNK + cx];
     const source = model(kind);
     const sides = [W, N, E, S].filter((bit) => !(bits & bit));
@@ -612,7 +686,7 @@ export function buildSection(
     return false;
   };
   if (data.x === 0 && data.z === 0) {
-    // Put one within reach of the opening route, then scatter the other models.
+    // Retain a discoverable first terminal on the opening route.
     for (const cz of [4, 3, 2, 1]) {
       if (placeComputer(2, cz, computerKinds[Math.floor(computerRng() * 3)]))
         break;
@@ -622,8 +696,10 @@ export function buildSection(
     .map((cell) => ({ ...cell, order: computerRng() }))
     .sort((a, b) => a.order - b.order);
   const firstModel = Math.floor(computerRng() * 3);
+  // Previously three in every section; one or two now averages half as many.
+  const computerCount = random(data.seed + 93017)() < 0.5 ? 1 : 2;
   for (const { cx, cz } of computerCells) {
-    if (computers.length >= 3) break;
+    if (computers.length >= computerCount) break;
     const kind = [
       ...computerKinds.slice(firstModel),
       ...computerKinds.slice(0, firstModel),
@@ -673,12 +749,34 @@ export function buildSection(
     chair(CELL * 3.5 + 1.4, CELL * 2.5 + 1.4, 0.5);
   for (const source of models.values())
     source.parts.forEach((part) => part.geometry.dispose());
+  const ambientMap = lighting.cells.size
+    ? createRoomAmbientMap(data, lighting)
+    : null;
+  const ownedMaterials: THREE.Material[] = [];
   for (const [material, geometries] of batches) {
     const merged = mergeGeometries(geometries);
     if (merged) {
-      const mesh = new THREE.Mesh(merged, material);
+      let surface = material;
+      if (ambientMap && material instanceof THREE.MeshStandardMaterial) {
+        const local = material.clone();
+        local.aoMap = ambientMap;
+        local.emissiveMap = ambientMap;
+        const positions = merged.getAttribute("position");
+        const coordinates = new Float32Array(positions.count * 2);
+        for (let i = 0; i < positions.count; i++) {
+          coordinates[i * 2] = (positions.getX(i) - ox) / SPAN;
+          coordinates[i * 2 + 1] = (positions.getZ(i) - oz) / SPAN;
+        }
+        merged.setAttribute("uv1", new THREE.BufferAttribute(coordinates, 2));
+        ownedMaterials.push(local);
+        surface = local;
+      }
+      const mesh = new THREE.Mesh(merged, surface);
       mesh.receiveShadow = true;
-      mesh.castShadow = material !== mats.luminous && material !== mats.shadow;
+      mesh.castShadow =
+        material !== mats.luminous &&
+        material !== mats.lampGlow &&
+        material !== mats.shadow;
       group.add(mesh);
     }
     geometries.forEach((g) => g.dispose());
@@ -705,6 +803,7 @@ export function buildSection(
   return {
     group,
     lights,
+    lampLights,
     portals,
     colliders,
     shapedColliders,
@@ -712,6 +811,8 @@ export function buildSection(
     computers,
     occluders,
     dispose: () => {
+      ambientMap?.dispose();
+      ownedMaterials.forEach((material) => material.dispose());
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           obj.geometry.dispose();
