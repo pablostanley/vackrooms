@@ -15,9 +15,10 @@ import {
 import { buildSection } from "../src/lib/game/world";
 import { headlessMaterials } from "./helpers/materials";
 
-test("dark pockets are seeded, connected, rare, and leave landmarks and the opening bright", () => {
+test("dark pockets include hallway runs and stay seeded, connected, and uncommon", () => {
   const modes = new Set<string>();
   let darkCells = 0;
+  let hallways = 0;
   for (let seed = 1; seed <= 150; seed++) {
     const data = generateChunk((seed % 3) - 1, (seed % 5) - 2, seed, seed % 4);
     const original = data.cells.slice();
@@ -30,13 +31,30 @@ test("dark pockets are seeded, connected, rare, and leave landmarks and the open
     if (!plan.cells.size) continue;
     darkCells += plan.cells.size;
     modes.add(plan.mode);
+    const hallway = [...plan.cells].some((at) =>
+      inLandmark(data.landmark, at % CHUNK, Math.floor(at / CHUNK)),
+    );
+    if (hallway) {
+      hallways++;
+      assert.equal(data.landmark.kind, "corridor");
+      const cells = [...plan.cells].sort((a, b) => a - b);
+      assert.ok(cells.length >= 4 && cells.length <= 6);
+      assert.ok(
+        cells.every((at) => Math.floor(at / CHUNK) === data.landmark.z),
+      );
+      assert.equal(
+        cells.at(-1)! - cells[0],
+        cells.length - 1,
+        "a continuous hallway stretch",
+      );
+    }
     const queue = [[...plan.cells][0]];
     const seen = new Set(queue);
     for (const at of queue) {
       const x = at % CHUNK,
         z = Math.floor(at / CHUNK);
       assert.ok(x > 0 && x < CHUNK - 1 && z > 0 && z < CHUNK - 1);
-      assert.ok(!inLandmark(data.landmark, x, z));
+      assert.ok(hallway || !inLandmark(data.landmark, x, z));
       assert.ok(!(data.x === 0 && data.z === 0 && x <= 3 && z <= 4));
       for (const { bit, dx, dz } of directions) {
         const next = at + dx + dz * CHUNK;
@@ -54,8 +72,15 @@ test("dark pockets are seeded, connected, rare, and leave landmarks and the open
     if (plan.mode === "lamp") assert.ok(plan.cells.has(plan.lampCell!));
     else assert.equal(plan.lampCell, null);
   }
+  assert.ok(
+    hallways >= 3 && hallways <= 20,
+    "hallway outages recur without dominating",
+  );
   assert.deepEqual(modes, new Set(["fluorescent", "lamp", "dark"]));
-  assert.ok(darkCells / (150 * CHUNK * CHUNK) > 0.01);
+  assert.ok(
+    darkCells / (150 * CHUNK * CHUNK) > 0.03,
+    "a small increase over the previous 2.6% sample",
+  );
   assert.ok(
     darkCells / (150 * CHUNK * CHUNK) < 0.05,
     "at least 95% of the world retains normal lighting",

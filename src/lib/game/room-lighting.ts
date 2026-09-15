@@ -16,7 +16,7 @@ export interface RoomLighting {
   lampCell: number | null;
 }
 
-/** Small connected outages leave the landmark halls and opening route bright. */
+/** Small connected outages leave the large rooms and opening route bright. */
 export function planRoomLighting(data: ChunkData): RoomLighting {
   const rng = random(data.seed + 57163);
   const plan: RoomLighting = {
@@ -25,7 +25,7 @@ export function planRoomLighting(data: ChunkData): RoomLighting {
     fixtures: new Set(),
     lampCell: null,
   };
-  if (rng() > 0.72) return plan;
+  if (rng() > 0.86) return plan;
   const eligible = (at: number) => {
     const x = at % CHUNK,
       z = Math.floor(at / CHUNK);
@@ -59,6 +59,17 @@ export function planRoomLighting(data: ChunkData): RoomLighting {
     if (queue.length < 4) continue;
     plan.cells = new Set(queue.slice(0, limit));
     break;
+  }
+  // Sometimes the outage follows the long hallway itself. Keep bright stretches
+  // at both ends, including section gates, so the gradual spill frames the run.
+  const hallwayRng = random(data.seed + 57329);
+  if (data.landmark.kind === "corridor" && hallwayRng() < 0.35) {
+    const length = 4 + Math.floor(hallwayRng() * 3);
+    const first = data.x === 0 && data.z === 0 ? 4 : 1;
+    const start = first + Math.floor(hallwayRng() * (CHUNK - length - first));
+    plan.cells = new Set(
+      Array.from({ length }, (_, i) => data.landmark.z * CHUNK + start + i),
+    );
   }
   if (!plan.cells.size) return plan;
   const roll = rng();
