@@ -73,14 +73,15 @@ export function bakeSurface(surface: Surface, size = 512) {
         const leaf = Math.max(0, 1 - Math.abs(Math.abs(mx) - 0.34 * Math.cos(my * Math.PI / 2)) * 30)
           * Math.max(0, 1 - Math.abs(my));
         const paper = Math.sin(u * Math.PI * 192 + Math.sin(v * Math.PI * 8) * 0.45);
-        shade = macro * 6 + detail * 4 + grain * 3 - leaf * 6 + paper * 0.7;
+        // Keep broad paper areas clean; close-range emboss supplies the detail.
+        shade = macro * 2 + detail * 4 + grain * 3 - leaf * 6 + paper * 0.7;
         relief = detail * 0.16 + grain * 0.045 + paper * 0.035 + leaf * 0.16;
         rough = 0.89 + medium[i] * 0.08;
       } else if (surface === "carpet") {
         // Dense uneven loop pile with gentle changes in nap, without carpet tiles.
         const pile = fibers[i] - 0.5;
         const nap = (medium[i] - 0.5) * 0.6 + macro;
-        shade = nap * 8 + pile * 16 + detail * 7 + grain * 5;
+        shade = nap * 3 + pile * 12 + detail * 5 + grain * 4;
         relief = pile * 0.65 + detail * 0.3 + grain * 0.14;
         rough = 0.94 + medium[i] * 0.06;
       } else if (surface === "ceiling") {
@@ -93,7 +94,7 @@ export function bakeSurface(surface: Surface, size = 512) {
         relief = detail * 0.09 - pore * 0.32 - seam * 0.4;
         rough = 0.93 + medium[i] * 0.07;
       } else if (surface === "plaster") {
-        shade = macro * 7 + (medium[i] - 0.5) * 5 + detail * 2 + grain;
+        shade = macro * 2 + (medium[i] - 0.5) * 2 + detail * 2 + grain;
         relief = (medium[i] - 0.5) * 0.13 + detail * 0.1 + grain * 0.015;
         rough = 0.78 + broad[i] * 0.16 + detail * 0.04;
       } else {
