@@ -15,6 +15,7 @@ import { crushEnvelope, DEATH_HOLD, nextLifeSeed } from "./encounter-effects";
 import { ComputerScreens } from "./computer-screens";
 import { computerFocus, type ComputerStation } from "./computers";
 import { ShadowCache } from "./shadow-cache";
+import { fixturePhase, fixtureStrength } from "./fixture-lighting";
 import { connectedGamepads, GamepadInput, PAD, type GamepadFrame } from "./gamepad";
 import type { GameSettings } from "./settings";
 
@@ -141,10 +142,14 @@ export class BackroomsEngine {
     // Hide the outer edge of the bounded resident window, including along the
     // continuous corridor runs. The fluorescent haze has no visible end wall.
     this.scene.fog = new THREE.Fog("#9e9450", 32, SPAN - 1);
-    this.scene.add(new THREE.HemisphereLight("#fff3bc", "#897947", 1.05));
-    this.scene.add(new THREE.AmbientLight("#fff5c6", 0.42));
-    for (let i = 0; i < 12; i++) {
-      const light = new THREE.SpotLight("#fff1bd", 24, 16, 1.32, 0.8, 2);
+    // Ceiling panels dominate; warm carpet bounce still keeps the ceiling
+    // readable. Less uniform fill lets the architectural contact shading show.
+    this.scene.add(new THREE.HemisphereLight("#fff4cd", "#a39770", 1.15));
+    this.scene.add(new THREE.AmbientLight("#fff5d6", 0.3));
+    // Leave five texture slots for albedo, packed surface detail, the outage
+    // mask, Three's BRDF lookup, and contact AO on baseline 16-texture GPUs.
+    for (let i = 0; i < 11; i++) {
+      const light = new THREE.SpotLight("#fff2c9", 28, 16, 1.32, 0.85, 2);
       light.castShadow = true;
       light.shadow.mapSize.set(512, 512);
       light.shadow.camera.near = 0.15;
@@ -621,13 +626,19 @@ export class BackroomsEngine {
           b.position.distanceToSquared(this.position),
       );
     const assigned = this.shadows.assign(candidates);
+    const nextDistance =
+      candidates[this.lights.length]?.position.distanceTo(this.position) ?? 16;
     this.lights.forEach((light, i) => {
       const p = assigned[i];
       light.visible = !!p;
       if (p) {
         light.userData.lamp = p.lamp;
-        light.userData.strength = candidates.indexOf(p) < 8 ? 1 : 0.6;
-        light.color.set(p.lamp ? "#ffdc97" : "#fff1bd");
+        light.userData.strength = fixtureStrength(
+          p.position.distanceTo(this.position),
+          nextDistance,
+        );
+        light.userData.phase = fixturePhase(p.position.x, p.position.z);
+        light.color.set(p.lamp ? "#ffdc97" : "#fff2c9");
       }
     });
   }
@@ -1025,15 +1036,16 @@ export class BackroomsEngine {
         const light = this.lights[i];
         const jitter = this.settings.reducedMotion
           ? 0
-          : Math.sin(this.elapsed * 8 + i * 8.7) * 0.035;
+          : Math.sin(this.elapsed * 8 + (light.userData.phase ?? 0)) * 0.012;
         // Taller halls retain the same oppressive fluorescent brightness.
         const heightCompensation = Math.min(
           3.2,
           Math.pow(light.position.y / 3, 1.5),
         );
-        light.intensity = light.userData.lamp
+        const intensity = light.userData.lamp
           ? 9
-          : 24 * heightCompensation * (1 + jitter) * light.userData.strength;
+          : 28 * heightCompensation * (1 + jitter);
+        light.intensity = intensity * (light.userData.strength ?? 0);
       }
       this.flashlight.position.copy(this.camera.position);
       this.flashlight.target.position
