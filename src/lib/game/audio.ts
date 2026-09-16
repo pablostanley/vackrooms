@@ -4,7 +4,6 @@ import {
   POOL_WATER_Y,
   ROOM_SOUNDS,
   roomSoundAt,
-  transmission,
   wallsBetween,
   type BuildingSound,
   type RoomSound,
@@ -14,11 +13,14 @@ import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
 import { EntityAudio } from "./entity-audio";
 import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
+import { roomImpulse } from "./room-impulse";
+import { soundPath } from "./sound-path";
 import {
   CREAK_RECORDINGS,
   FOOTSTEP_RECORDINGS,
   RPG_RECORDINGS,
   footstepRecording,
+  footstepPerformance,
   nextWaterRecording,
   RpgRecordings,
 } from "./rpg-recordings";
@@ -123,7 +125,7 @@ export class BackroomsAudio {
       output.gain.value = name === "office" ? profile.wet : 0;
       filter.type = "lowpass";
       filter.frequency.value = profile.cutoff;
-      convolver.buffer = this.impulse(profile.decay);
+      convolver.buffer = this.impulse(name);
       this.reflections
         .connect(input)
         .connect(filter)
@@ -155,32 +157,16 @@ export class BackroomsAudio {
     this.loops.push(air);
   }
 
-  private impulse(decay: number) {
+  private impulse(room: RoomSound) {
     const ctx = this.ctx!;
+    const channels = roomImpulse(room, ctx.sampleRate, this.seed);
     const buffer = ctx.createBuffer(
       2,
-      Math.ceil(ctx.sampleRate * decay),
+      channels[0].length,
       ctx.sampleRate,
     );
-    const rng = random(this.seed + Math.round(decay * 1000));
-    for (let channel = 0; channel < 2; channel++) {
-      const samples = buffer.getChannelData(channel);
-      let smooth = 0;
-      for (let i = 0; i < samples.length; i++) {
-        const t = i / ctx.sampleRate;
-        smooth = smooth * 0.65 + (rng() * 2 - 1) * 0.35;
-        // No dry impulse; soft early reflections give way to a diffuse, damped tail.
-        if (t > 0.014)
-          samples[i] =
-            smooth *
-            Math.min(1, (t - 0.014) / 0.025) *
-            Math.exp((-6.9 * t) / decay);
-      }
-      for (const t of [0.019, 0.037, 0.061]) {
-        const index = Math.floor((t + channel * 0.003) * ctx.sampleRate);
-        samples[index] += 0.3 * Math.exp((-6.9 * t) / decay);
-      }
-    }
+    for (let channel = 0; channel < 2; channel++)
+      buffer.getChannelData(channel).set(channels[channel]);
     return buffer;
   }
 
@@ -394,16 +380,19 @@ export class BackroomsAudio {
   }
 
   private occlude(voice: SpatialVoice, immediate = false) {
-    const distance = Math.hypot(
-      voice.position.x - this.listener.x,
-      voice.position.y - this.listener.y,
-      voice.position.z - this.listener.z,
-    );
-    const path = transmission(
-      wallsBetween(this.chunks, this.listener, voice.position),
-      distance,
-    );
-    const gain = distance >= 32 ? 0 : path.gain;
+    const path = soundPath(this.chunks, this.listener, voice.position);
+    // The apparent source moves to the doorway, but attenuation must still use
+    // the full travelled distance, not the much closer doorway's distance.
+    const apparentDistance = Math.hypot(path.position.x - this.listener.x,
+      path.position.y - this.listener.y, path.position.z - this.listener.z);
+    const attenuation = (distance: number) => voice.pan.refDistance /
+      (voice.pan.refDistance + voice.pan.rolloffFactor * (Math.max(distance, voice.pan.refDistance) - voice.pan.refDistance));
+    const gain = path.gain * attenuation(path.distance) / attenuation(apparentDistance);
+    for (const axis of ["x", "y", "z"] as const) {
+      const param = voice.pan[axis === "x" ? "positionX" : axis === "y" ? "positionY" : "positionZ"];
+      if (immediate) param.value = path.position[axis];
+      else param.setTargetAtTime(path.position[axis], this.ctx!.currentTime, 0.12);
+    }
     if (immediate) {
       voice.level.gain.value = gain;
       voice.filter.frequency.value = path.cutoff;
@@ -471,6 +460,15 @@ export class BackroomsAudio {
         ),
       );
       const detune = (rng() - 0.5) * 2;
+      const ballast = ctx.createGain(), wobble = ctx.createOscillator(), depth = ctx.createGain();
+      ballast.gain.value = 0.94;
+      wobble.frequency.value = 0.35 + rng() * 0.65;
+      depth.gain.value = 0.035;
+      wobble.connect(depth).connect(ballast.gain);
+      ballast.connect(voice.input);
+      voice.sources.push(wobble);
+      voice.nodes.push(ballast, depth);
+      wobble.start();
       for (const [frequency, volume] of [
         [120, 0.5],
         [240, 0.19],
@@ -482,7 +480,7 @@ export class BackroomsAudio {
         osc.frequency.value = frequency;
         osc.detune.value = detune;
         level.gain.value = volume * (0.85 + rng() * 0.3);
-        osc.connect(level).connect(voice.input);
+        osc.connect(level).connect(ballast);
         voice.sources.push(osc);
         voice.nodes.push(level);
         osc.start();
@@ -559,12 +557,13 @@ export class BackroomsAudio {
       surface === "carpet" ? 0.55 : 1.1,
       distant ? 3 : 1.7,
     );
-    voice.input.gain.value = profile.gain * (surface === "water" && running ? 1.1 : 1);
+    const performance = footstepPerformance(surface, running, entity, this.rng);
+    voice.input.gain.value = profile.gain * performance.gain;
     const source = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
     source.buffer = buffer;
-    source.playbackRate.value = (entity ? 0.72 : 0.96) + this.rng() * 0.08;
+    source.playbackRate.value = performance.rate;
     filter.type = "lowpass";
-    filter.frequency.value = entity ? 1100 : profile.cutoff;
+    filter.frequency.value = (entity ? 1100 : profile.cutoff) * performance.brightness;
     filter.Q.value = 0.5;
     source.connect(filter).connect(voice.input);
     voice.sources.push(source);
