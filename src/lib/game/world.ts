@@ -145,28 +145,30 @@ export function buildSection(
     add(g, mat, x, y, z, rx, ry);
   }
   function wall(x: number, z: number, vertical: boolean, height = HEIGHT) {
+    // Collinear segments meet at cell edges. Extending them by their thickness
+    // puts two faces at the same depth, exposing both themes at section seams.
     box(
-      vertical ? 0.18 : CELL + 0.18,
+      vertical ? 0.18 : CELL,
       height,
-      vertical ? CELL + 0.18 : 0.18,
+      vertical ? CELL : 0.18,
       x,
       height / 2,
       z,
       theme.wall,
     );
     box(
-      vertical ? 0.22 : CELL + 0.22,
+      vertical ? 0.22 : CELL,
       0.115,
-      vertical ? CELL + 0.22 : 0.22,
+      vertical ? CELL : 0.22,
       x,
       0.058,
       z,
       mats.trim,
     );
     box(
-      vertical ? 0.21 : CELL + 0.21,
+      vertical ? 0.21 : CELL,
       0.055,
-      vertical ? CELL + 0.21 : 0.21,
+      vertical ? CELL : 0.21,
       x,
       height - 0.027,
       z,
@@ -398,7 +400,7 @@ export function buildSection(
       if (!(bits & N)) wall(x, cz * CELL, false, northHeight);
       else if (height !== ceilingAt(data, cx, cz - 1))
         box(
-          CELL + 0.18,
+          CELL,
           northHeight - HEIGHT,
           0.18,
           x,
@@ -411,7 +413,7 @@ export function buildSection(
         box(
           0.18,
           westHeight - HEIGHT,
-          CELL + 0.18,
+          CELL,
           cx * CELL,
           (westHeight + HEIGHT) / 2,
           z,

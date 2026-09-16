@@ -138,7 +138,7 @@ export class CharacterMotor {
             ox + (x + 0.5) * CELL,
             northHeight / 2,
             oz + z * CELL,
-            (CELL + 0.18) / 2,
+            CELL / 2,
             northHeight / 2,
             0.09,
           );
@@ -149,7 +149,7 @@ export class CharacterMotor {
             oz + (z + 0.5) * CELL,
             0.09,
             westHeight / 2,
-            (CELL + 0.18) / 2,
+            CELL / 2,
           );
         // Match the soffit above open transitions into taller halls.
         if (bits & N && height !== ceilingAt(data, x, z - 1))
