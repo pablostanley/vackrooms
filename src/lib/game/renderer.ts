@@ -5,6 +5,7 @@ import { tslExports } from "vgpu/three";
 import tapeModule from "@/shaders/tape.wgsl";
 import { createPoolWater } from "./pool-water";
 import { RenderResolution } from "./render-resolution";
+import { createGLContactShadows, createGPUContactShadows } from "./contact-shadows";
 
 type WarpInputs = { uv: Node; seconds: Node; damage: Node; anomaly: Node };
 type GradeInputs = WarpInputs & { color: Node };
@@ -42,7 +43,9 @@ export async function createRenderer(
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFShadowMap;
         const pipeline = new RenderPipeline(renderer);
+        const contactShadows = createGPUContactShadows(scene, camera);
         const scenePass = pass(scene, camera);
+        scenePass.contextNode = contactShadows.context;
         const cameraTexture = scenePass.getTextureNode("output");
         const seconds = uniform(0),
           damage = uniform(0.7),
@@ -100,6 +103,10 @@ export async function createRenderer(
             resolution.pixelRatio(width, height, window.devicePixelRatio),
           );
           gpuRenderer.setSize(width, height);
+          contactShadows.resize(
+            width * gpuRenderer.getPixelRatio(),
+            height * gpuRenderer.getPixelRatio(),
+          );
         };
         return {
           canvas: renderer.domElement,
@@ -125,6 +132,7 @@ export async function createRenderer(
             water.material.dispose();
             pipeline.dispose();
             scenePass.dispose();
+            contactShadows.dispose();
             gpuRenderer.dispose();
           },
         };
@@ -148,11 +156,13 @@ export async function createRenderer(
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   const target = new THREE.WebGLRenderTarget(1, 1);
+  const contactShadows = createGLContactShadows(scene, camera, target);
   const postScene = new THREE.Scene(),
     postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const material = new THREE.ShaderMaterial({
     uniforms: {
       image: { value: target.texture },
+      contactOcclusion: { value: contactShadows.texture },
       seconds: { value: 0 },
       damage: { value: 0.7 },
       anomaly: { value: 0 },
@@ -161,7 +171,7 @@ export async function createRenderer(
     depthWrite: false,
     vertexShader:
       "varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }",
-    fragmentShader: `uniform sampler2D image; uniform float seconds; uniform float damage; uniform float anomaly; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D image; uniform sampler2D contactOcclusion; uniform float seconds; uniform float damage; uniform float anomaly; varying vec2 vUv;
       float noise(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
       void main(){vec2 p=vUv; vec2 c=p-.5; p+=c*dot(c,c)*.032*damage;
       float frame=floor(seconds*30.);float jitter=(noise(vec2(floor(vUv.y*480.),frame))-.5)*.0008;
@@ -170,6 +180,8 @@ export async function createRenderer(
       float bleed=damage*.0007+anomaly*.0008;vec3 color=vec3(texture2D(image,p+vec2(bleed,0)).r,texture2D(image,p).g,texture2D(image,p-vec2(bleed,0)).b);
       vec2 soft=vec2(damage*.0015,0.);color=color*.6+texture2D(image,p+soft).rgb*.2+texture2D(image,p-soft).rgb*.2;
       vec2 halo=vec2(.0035,.0025);vec3 glow=max(texture2D(image,p+halo).rgb-.82,0.)+max(texture2D(image,p-halo).rgb-.82,0.)+max(texture2D(image,p+vec2(halo.x,-halo.y)).rgb-.82,0.)+max(texture2D(image,p-vec2(halo.x,-halo.y)).rgb-.82,0.);color+=glow*.075;
+      // Preserve luminous panels and bright direct highlights in the fallback.
+      float ao=texture2D(contactOcclusion,p).r;float highlight=smoothstep(.45,.9,max(color.r,max(color.g,color.b)));color*=mix(1.,ao,.5*(1.-highlight));
       float v=pow(clamp(vUv.x*(1.-vUv.x)*vUv.y*(1.-vUv.y)*16.,0.,1.),.065);color*=mix(1.,v*.97,damage*.8);
       float grain=noise(floor(vUv*vec2(1280.,960.))+floor(seconds*29.97))-.5;color+=grain*(.013+anomaly*.08)*damage;
       float loss=step(.86,noise(vec2(floor(vUv.y*240.),frame)));color*=1.-loss*anomaly*damage*.18;gl_FragColor=vec4(color,1.);
@@ -186,6 +198,7 @@ export async function createRenderer(
       Math.max(1, Math.floor(width * ratio)),
       Math.max(1, Math.floor(height * ratio)),
     );
+    contactShadows.resize(target.width, target.height);
   };
   return {
     canvas: renderer.domElement,
@@ -207,6 +220,7 @@ export async function createRenderer(
       material.uniforms.anomaly.value = s;
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);
+      contactShadows.render(renderer);
       renderer.setRenderTarget(null);
       renderer.render(postScene, postCamera);
     },
@@ -215,6 +229,7 @@ export async function createRenderer(
       quad.geometry.dispose();
       material.dispose();
       target.dispose();
+      contactShadows.dispose();
       renderer.dispose();
     },
   };
