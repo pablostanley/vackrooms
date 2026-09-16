@@ -19,6 +19,7 @@ import {
 import { buildLandmark } from "./landmarks";
 import { createRoomAmbientMap, planRoomLighting } from "./room-lighting";
 import type { Materials } from "./materials";
+import { configureSurfaceSampling, projectSurfaceUVs } from "./surface-textures";
 import type { ShapedObstacle } from "./physics";
 import {
   computerKinds,
@@ -106,6 +107,8 @@ export function buildSection(
       new THREE.Vector3(1, 1, 1),
     );
     geometry.applyMatrix4(matrix);
+    if (mat.userData.surfaceMeters)
+      projectSurfaceUVs(geometry, mat.userData.surfaceMeters);
     if (!batches.has(mat)) batches.set(mat, []);
     batches.get(mat)!.push(geometry);
   }
@@ -120,17 +123,6 @@ export function buildSection(
     angle = 0,
   ) {
     const g = new THREE.BoxGeometry(w, h, d);
-    const uv = g.getAttribute("uv");
-    if ([mats.wall, theme.wall].includes(mat as THREE.MeshStandardMaterial)) {
-      for (let i = 0; i < uv.count; i++) {
-        const face = Math.floor(i / 4);
-        uv.setXY(
-          i,
-          (uv.getX(i) * (face < 2 ? d : w)) / 1.7,
-          (uv.getY(i) * h) / HEIGHT,
-        );
-      }
-    }
     add(g, mat, x, y, z, 0, angle);
   }
   function plane(
@@ -214,10 +206,11 @@ export function buildSection(
       );
     const parts: Float32Array[] = [];
     for (const part of source.parts) {
-      const geometry = part.geometry
-        .clone()
-        .applyMatrix4(pose)
-        .translate(ox, 0, oz);
+      const geometry = part.geometry.clone();
+      // Furniture grain follows the object when it rotates or hangs from a wall.
+      if (part.material.userData.surfaceMeters)
+        projectSurfaceUVs(geometry, part.material.userData.surfaceMeters);
+      geometry.applyMatrix4(pose).translate(ox, 0, oz);
       if (kind === "slide")
         parts.push(new Float32Array(geometry.getAttribute("position").array));
       if (!batches.has(part.material)) batches.set(part.material, []);
@@ -759,6 +752,7 @@ export function buildSection(
       let surface = material;
       if (ambientMap && material instanceof THREE.MeshStandardMaterial) {
         const local = material.clone();
+        configureSurfaceSampling(local);
         local.aoMap = ambientMap;
         local.emissiveMap = ambientMap;
         const positions = merged.getAttribute("position");
