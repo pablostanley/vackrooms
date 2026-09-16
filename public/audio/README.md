@@ -8,7 +8,9 @@ license is included in `kenney-rpg/License.txt`.
 
 - `footstep00.ogg`: normal carpet footsteps.
 - `footstep04.ogg`: pool decks and food-court hard floors.
-- `footstep08.ogg`: running on dry floors and heavier creature footsteps.
+- `footstep08.ogg`: heavier creature footsteps. Player running retains the carpet
+  or hard-floor recording with a little more weight and brightness. Seeded gain,
+  pitch, and filter variation keep repeated steps from sounding identical.
 - `creak1.ogg`, `creak2.ogg`, `creak3.ogg`: quiet, fixed-position building settling,
   using the existing sparse event schedule, wall filtering, distance falloff, and room echo.
 - `cloth4.ogg`: soft takeoff rustle for accepted jumps and double jumps.

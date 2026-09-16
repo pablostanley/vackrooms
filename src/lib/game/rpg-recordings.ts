@@ -42,8 +42,17 @@ export function footstepRecording(
   waterIndex = 0,
 ): keyof typeof FOOTSTEP_RECORDINGS {
   if (surface === "water") return WATER_RECORDINGS[waterIndex];
-  if (running || entity) return "heavy";
+  if (entity) return "heavy";
   return surface === "hard" ? "hard" : "normal";
+}
+
+/** Running changes weight, not the floor material. Keep variation below caricature. */
+export function footstepPerformance(surface: FootstepSurface, running: boolean, entity: boolean, rng: () => number) {
+  return {
+    gain: (running ? (surface === "water" ? 1.1 : 1.25) : 1) * (0.92 + rng() * 0.16),
+    rate: (entity ? 0.72 : running ? 0.98 : 0.96) + rng() * 0.08,
+    brightness: (running ? 1.06 : 1) * (0.94 + rng() * 0.12),
+  };
 }
 
 /** Decode a small fixed set once. Missed footsteps are never queued for later. */
