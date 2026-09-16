@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { random, type Theme } from "./maze";
+import { configureSurfaceSampling, createSurfaceTextures, SURFACE_SIZE, type Surface } from "./surface-textures";
 
 function canvasTexture(
   draw: (ctx: CanvasRenderingContext2D, size: number) => void,
@@ -40,55 +41,16 @@ export function createMaterials() {
     textures.push(t);
     return t;
   };
-  const wallpaper = texture((ctx, s) => {
-    ctx.fillStyle = "#c9bc6b";
-    ctx.fillRect(0, 0, s, s);
-    // Nearly flat paper: the dated motif is visible only close to a wall.
-    ctx.strokeStyle = "rgba(119,111,48,.035)";
-    ctx.lineWidth = 0.7;
-    for (let x = 16; x < s; x += 32)
-      for (let y = 0; y < s; y += 64) {
-        ctx.beginPath();
-        ctx.moveTo(x, y - 12);
-        ctx.bezierCurveTo(x - 7, y, x - 5, y + 5, x, y + 12);
-        ctx.bezierCurveTo(x + 5, y + 5, x + 7, y, x, y - 12);
-        ctx.stroke();
-      }
-    grain(ctx, s, 3, 83);
-  });
-  const carpet = texture((ctx, s) => {
-    ctx.fillStyle = "#a39157";
-    ctx.fillRect(0, 0, s, s);
-    grain(ctx, s, 7, 129);
-    const rng = random(31);
-    for (let i = 0; i < 5; i++) {
-      const x = rng() * s,
-        y = rng() * s,
-        r = 65 + rng() * 95;
-      const stain = ctx.createRadialGradient(x, y, 0, x, y, r);
-      stain.addColorStop(0, "rgba(92,73,31,.035)");
-      stain.addColorStop(1, "rgba(92,73,31,0)");
-      ctx.fillStyle = stain;
-      ctx.fillRect(x - r, y - r, r * 2, r * 2);
-    }
-  });
-  const ceiling = texture((ctx, s) => {
-    ctx.fillStyle = "#beb579";
-    ctx.fillRect(0, 0, s, s);
-    grain(ctx, s, 2, 871);
-    ctx.strokeStyle = "rgba(139,129,69,.22)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, s, s);
-    ctx.beginPath();
-    ctx.moveTo(s / 2, 0);
-    ctx.lineTo(s / 2, s);
-    ctx.stroke();
-  });
-  const tile = texture((ctx, s) => {
-    ctx.fillStyle = "#aaa577";
-    ctx.fillRect(0, 0, s, s);
-    grain(ctx, s, 4, 566);
-  });
+  const surface = (name: Surface) => {
+    const maps = createSurfaceTextures(name);
+    textures.push(maps.map, maps.bumpMap);
+    return maps;
+  };
+  const wallpaper = surface("wallpaper");
+  const carpet = surface("carpet");
+  const ceiling = surface("ceiling");
+  const plaster = surface("plaster");
+  const woodGrain = surface("wood");
   const lightMap = texture((ctx, s) => {
     ctx.fillStyle = "#edeacf";
     ctx.fillRect(0, 0, s, s);
@@ -107,34 +69,32 @@ export function createMaterials() {
     ctx.fillRect(0, 0, s, s);
   }, 128);
   const wall = new THREE.MeshStandardMaterial({
-    map: wallpaper,
+    ...wallpaper,
     roughness: 0.97,
     color: "#ffffff",
     emissive: "#ccbc5f",
     emissiveIntensity: 0.035,
   });
   const floor = new THREE.MeshStandardMaterial({
-    map: carpet,
+    ...carpet,
     roughness: 1,
     emissive: "#ab9552",
     emissiveIntensity: 0.025,
   });
   const top = new THREE.MeshStandardMaterial({
-    map: ceiling,
+    ...ceiling,
     roughness: 1,
     color: "#ffffff",
     emissive: "#c4b976",
     emissiveIntensity: 0.075,
   });
   const tileWall = new THREE.MeshStandardMaterial({
-    map: tile,
+    ...plaster,
     roughness: 0.48,
-    bumpMap: tile,
-    bumpScale: 0.025,
     color: "#b0bb92",
   });
   const tileFloor = new THREE.MeshStandardMaterial({
-    map: tile,
+    ...plaster,
     roughness: 0.38,
     color: "#818d72",
   });
@@ -169,14 +129,21 @@ export function createMaterials() {
     polygonOffsetFactor: -1,
   });
   const wood = new THREE.MeshStandardMaterial({
+    ...woodGrain,
     color: "#4a3017",
     roughness: 0.8,
   });
   const fabric = new THREE.MeshStandardMaterial({
+    bumpMap: carpet.bumpMap,
+    roughnessMap: carpet.roughnessMap,
+    bumpScale: 0.002,
     color: "#535843",
     roughness: 1,
   });
   const upholstery = new THREE.MeshStandardMaterial({
+    bumpMap: carpet.bumpMap,
+    roughnessMap: carpet.roughnessMap,
+    bumpScale: 0.002,
     color: "#8b7c53",
     roughness: 1,
   });
@@ -190,6 +157,7 @@ export function createMaterials() {
     roughness: 0.88,
   });
   const cream = new THREE.MeshStandardMaterial({
+    ...plaster,
     color: "#c8bc91",
     roughness: 0.86,
   });
@@ -204,6 +172,21 @@ export function createMaterials() {
     side: THREE.DoubleSide,
   });
   const darkness = new THREE.MeshBasicMaterial({ color: "#060806" });
+  for (const [kind, materials] of [
+    ["wallpaper", [wall, service, archive]],
+    ["carpet", [floor]],
+    ["ceiling", [top]],
+    ["plaster", [tileWall, tileFloor, cream]],
+    ["wood", [wood]],
+  ] as const)
+    for (const material of materials) {
+      material.userData.surfaceMeters = SURFACE_SIZE[kind];
+      configureSurfaceSampling(material);
+    }
+  // Upholstery has finer fibers than floor carpet but shares its relief maps.
+  fabric.userData.surfaceMeters = upholstery.userData.surfaceMeters = 0.6;
+  configureSurfaceSampling(fabric);
+  configureSurfaceSampling(upholstery);
   return {
     wall,
     floor,
