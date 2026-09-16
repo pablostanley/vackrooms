@@ -15,5 +15,7 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint
+      - name: Install CPU renderer for WGSL validation
+        run: npx --no-install vgpu install-software-renderer
       - run: npm run check:shaders
       - run: npm run build

@@ -146,7 +146,9 @@ export class BackroomsEngine {
     // readable. Less uniform fill lets the architectural contact shading show.
     this.scene.add(new THREE.HemisphereLight("#fff4cd", "#a39770", 1.15));
     this.scene.add(new THREE.AmbientLight("#fff5d6", 0.3));
-    for (let i = 0; i < 12; i++) {
+    // Leave five texture slots for albedo, packed surface detail, the outage
+    // mask, Three's BRDF lookup, and contact AO on baseline 16-texture GPUs.
+    for (let i = 0; i < 11; i++) {
       const light = new THREE.SpotLight("#fff2c9", 28, 16, 1.32, 0.85, 2);
       light.castShadow = true;
       light.shadow.mapSize.set(512, 512);
