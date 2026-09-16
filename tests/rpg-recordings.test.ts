@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { FOOTSTEP_RECORDINGS, RPG_RECORDINGS, WATER_RECORDINGS, footstepRecording, nextWaterRecording, RpgRecordings } from "../src/lib/game/rpg-recordings";
+import { FOOTSTEP_RECORDINGS, RPG_RECORDINGS, WATER_RECORDINGS, footstepRecording, footstepPerformance, nextWaterRecording, RpgRecordings } from "../src/lib/game/rpg-recordings";
 import { random } from "../src/lib/game/maze";
 
 const recordingCount = Object.keys(RPG_RECORDINGS).length;
@@ -13,9 +13,27 @@ test("recorded footsteps follow surfaces, with water taking precedence over runn
     for (const [index, recording] of WATER_RECORDINGS.entries())
       assert.equal(footstepRecording("water", running, false, index), recording);
   for (const surface of ["carpet", "hard"] as const) {
-    assert.equal(FOOTSTEP_RECORDINGS[footstepRecording(surface, true)].src, "/audio/kenney-rpg/footstep08.ogg");
+    assert.equal(footstepRecording(surface, true), footstepRecording(surface, false));
     assert.equal(footstepRecording(surface, false, true), "heavy");
   }
+});
+
+test("footstep performance varies naturally, stays seeded, and gives running more weight", () => {
+  const sequence = () => {
+    const rng = random(42);
+    return Array.from({ length: 30 }, () => footstepPerformance("carpet", false, false, rng));
+  };
+  assert.deepEqual(sequence(), sequence());
+  assert.equal(new Set(sequence().map((step) => step.gain)).size, 30);
+  for (const step of sequence()) {
+    assert.ok(step.gain >= 0.92 && step.gain <= 1.08);
+    assert.ok(step.rate >= 0.96 && step.rate <= 1.04);
+  }
+  const walk = footstepPerformance("carpet", false, false, random(5));
+  const run = footstepPerformance("carpet", true, false, random(5));
+  const water = footstepPerformance("water", true, false, random(5));
+  assert.ok(run.gain > walk.gain && run.brightness > walk.brightness);
+  assert.ok(water.gain < run.gain);
 });
 
 test("water steps vary without consecutive repeats and remain seeded", () => {
