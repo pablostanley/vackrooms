@@ -25,7 +25,7 @@ test("cached shadows refresh for fixture/world changes and clear departed caster
   finishRender();
   for (let frame = 0; frame < 120; frame++) {
     lights[0].intensity = 24 + Math.sin(frame);
-    cache.update(null);
+    cache.update([]);
     assert.ok(
       lights.every((light) => !light.shadow.needsUpdate),
       "flicker reuses shadow depth",
@@ -48,14 +48,14 @@ test("cached shadows refresh for fixture/world changes and clear departed caster
   cache.place(lights[1], new THREE.Vector3(5, 3, 8));
   finishRender();
   for (const moving of [caster, caster, null]) {
-    cache.update(moving);
+    cache.update(moving ? [moving] : []);
     assert.ok(
       lights.every((light) => light.shadow.needsUpdate),
       "animate or clear the caster",
     );
     finishRender();
   }
-  cache.update(null);
+  cache.update([]);
   assert.ok(lights.every((light) => !light.shadow.needsUpdate));
   lights.forEach((light) => light.dispose());
 });
@@ -84,29 +84,39 @@ test("moving casters refresh only intersecting lights and clear departed shadows
   const finishRender = () => lights.forEach((light) => { light.shadow.needsUpdate = false; });
   const caster = new THREE.Sphere(new THREE.Vector3(0, 1.4, 0), 2.2);
   finishRender();
-  cache.update(caster);
+  cache.update([caster]);
   assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [true, false, false]);
   finishRender();
   caster.center.x = 40;
-  cache.update(caster);
+  cache.update([caster]);
   assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [true, true, false]);
   finishRender();
-  cache.update(caster);
+  cache.update([caster]);
   assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [false, true, false]);
   finishRender();
-  cache.update(null);
+  cache.update([]);
   assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [false, true, false]);
   finishRender();
-  cache.update(null);
+  cache.update([]);
   assert.ok(lights.every((light) => !light.shadow.needsUpdate));
+  const second = new THREE.Sphere(new THREE.Vector3(80, 1.4, 0), 2.2);
+  cache.update([caster, second]);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [false, true, true]);
+  finishRender();
+  cache.update([second]);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [false, true, true]);
+  finishRender();
+  cache.update([second]);
+  assert.deepEqual(lights.map((light) => light.shadow.needsUpdate), [false, false, true]);
   cache.invalidate();
   assert.ok(lights.every((light) => light.shadow.needsUpdate), "world changes still refresh all maps");
   lights.forEach((light) => light.dispose());
 });
 
-test("the shadow-culling sphere encloses the creature through walking and reaching poses", () => {
+for (const variant of ["stalker", "pyramid"] as const) test(`the shadow-culling sphere encloses the ${variant} through walking and reaching poses`, () => {
   const material = new THREE.MeshBasicMaterial();
-  const entity = new EntityModel(material);
+  const entity = new EntityModel(material, variant);
+  assert.equal(!!entity.getObjectByName("pyramid-head"), variant === "pyramid");
   const vertex = new THREE.Vector3();
   const center = new THREE.Vector3(0, 1.4, 0);
   for (const reach of [0, 1]) {

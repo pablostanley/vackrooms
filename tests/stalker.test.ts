@@ -6,6 +6,7 @@ import {
   groundDistance,
   type EntityView,
 } from "../src/lib/game/entity-navigation";
+import { Encounters } from "../src/lib/game/encounters";
 import { EntityModel } from "../src/lib/game/entity-model";
 import {
   LEG_LENGTH,
@@ -20,6 +21,7 @@ import {
   CELL,
   CHUNK,
   E,
+  SPAN,
   W,
   generateChunk,
   type ChunkData,
@@ -166,16 +168,16 @@ test("pools block feet but allow sight across the water", () => {
   assert.ok(nav.sight({ x: 15, y: 1.7, z: 28.8 }, { x: 42, y: 2.5, z: 28.8 }));
 });
 
-test("encounters have a seeded opening, skipped opportunities and long rests", () => {
+test("encounters have an early seeded opening, short retries and bounded rests", () => {
   const a = new EncounterSchedule(199307),
     b = new EncounterSchedule(199307);
-  assert.ok(a.next >= 75 && a.next <= 135);
+  assert.ok(a.next >= 18 && a.next <= 30);
   assert.equal(a.next, b.next);
-  for (let time = 0; time < 74; time++) assert.equal(a.poll(time), false);
-  for (let time = 75; time < 900; time++)
+  for (let time = 0; time < 18; time++) assert.equal(a.poll(time), false);
+  for (let time = 18; time < 900; time++)
     assert.equal(a.poll(time), b.poll(time));
   a.rest(900);
-  assert.ok(a.next >= 1005 && a.next <= 1110);
+  assert.ok(a.next >= 945 && a.next <= 975);
   const arrivals = new Set(
     Array.from({ length: 8 }, (_, seed) => new EncounterSchedule(seed).next),
   );
@@ -187,20 +189,20 @@ function encounter(seed: number) {
     stalker = new Stalker(seed, nav),
     input = { view: view(), playerSpeed: 0 };
   let time = 0;
-  while (!stalker.present && time < 450) {
+  while (!stalker.present && time < 35) {
     stalker.update(0.1, input, () =>
       assert.fail("no footsteps during isolation"),
     );
     time += 0.1;
   }
   assert.ok(stalker.present);
-  assert.ok(time >= 75);
+  assert.ok(time >= 18 && time <= 30.1);
   assert.equal(
     nav.visible(stalker.position, input.view),
     false,
     "never pops into the camera frustum",
   );
-  assert.ok(groundDistance(stalker.position, input.view.position) >= 14);
+  assert.ok(groundDistance(stalker.position, input.view.position) >= 10);
   return { nav, stalker, input };
 }
 
@@ -365,6 +367,132 @@ test("an unreachable retreat still ends once hidden, with no phantom footfalls",
   assert.equal(steps, 0);
 });
 
+test("walking away starts a chase instead of leaving a slow glimpse behind", () => {
+  const stalker = new Stalker(1, openWorld());
+  const input = { view: view(), playerSpeed: 2.35, canGrab: false };
+  input.view.forward.z = 1;
+  stalker.stage({ x: 22, z: 10 }, input.view.position);
+  for (let i = 0; i < 30 * 20; i++) {
+    input.view.position.z += 2.35 / 30;
+    stalker.update(1 / 30, input, () => {});
+    assert.ok(stalker.present, "walking away cannot remove a creature tracking you");
+  }
+  assert.equal(stalker.phase, "pursuing");
+  assert.ok(stalker.position.z > 50, "keeps pace through the section boundary");
+  assert.ok(groundDistance(stalker.position, input.view.position) < 18);
+});
+
+test("a sensed player keeps an old pursuit alive even when the camera turns away", () => {
+  const stalker = new Stalker(2, openWorld());
+  const input = { view: view(), playerSpeed: 2.35, canGrab: false };
+  stalker.stage({ x: 22, z: 10 }, input.view.position, true);
+  for (let i = 0; i < 3000; i++) {
+    if (i === 1490) input.view.forward.z = 1;
+    stalker.update(0.1, input, () => {});
+    assert.equal(stalker.phase, "pursuing", "neither chase nor lifetime timers may retire a sensed target");
+  }
+});
+
+test("a chase survives resident sections loading and unloading without teleporting", () => {
+  const nav = openWorld(), stalker = new Stalker(1, nav);
+  const input = { view: view(), playerSpeed: 2.35, canGrab: false };
+  input.view.forward.z = 1;
+  stalker.stage({ x: 22, z: 10 }, input.view.position, true);
+  let sectionZ = 0;
+  for (let i = 0; i < 30 * 90; i++) {
+    input.view.position.z += 2.35 / 30;
+    const nextSectionZ = Math.floor(input.view.position.z / SPAN);
+    if (nextSectionZ !== sectionZ) {
+      for (let x = -1; x <= 1; x++) {
+        nav.removeSection(`${x},${sectionZ - 1}`);
+        nav.addSection(`${x},${nextSectionZ + 1}`, openChunk(x, nextSectionZ + 1), []);
+      }
+      sectionZ = nextSectionZ;
+    }
+    const previous = stalker.position.clone();
+    stalker.update(1 / 30, input, () => {});
+    assert.equal(stalker.phase, "pursuing");
+    assert.ok(stalker.position.distanceTo(previous) <= 2.85 / 30 + 1e-6);
+    assert.ok(nav.canOccupy(stalker.position));
+    assert.equal(nav.chunks.size, 9);
+  }
+  assert.ok(sectionZ >= 4);
+});
+
+test("regaining contact during retreat resumes pursuit", () => {
+  const nav = openWorld(), stalker = new Stalker(2, nav);
+  const input = { view: view(), playerSpeed: 0, canGrab: false };
+  stalker.stage({ x: 22, z: 10 }, input.view.position, true);
+  stalker.update(0.1, input, () => {});
+  const sight = nav.sight.bind(nav);
+  nav.sight = () => false;
+  input.view.position.x += 24;
+  for (let i = 0; i < 245; i++) stalker.update(0.1, input, () => {});
+  assert.equal(stalker.phase, "retreating");
+  nav.sight = sight;
+  for (let i = 0; i < 5; i++) stalker.update(0.1, input, () => {});
+  assert.equal(stalker.phase, "pursuing");
+});
+
+test("an unavailable spawn retries promptly without skipping another encounter", () => {
+  const nav = openWorld(), stalker = new Stalker(199307, nav);
+  const input = { view: view(), playerSpeed: 0 };
+  const route = nav.route.bind(nav);
+  nav.route = () => [];
+  for (let i = 0; i < 350; i++) stalker.update(0.1, input, () => {});
+  assert.equal(stalker.present, false);
+  nav.route = route;
+  for (let i = 0; i < 51 && !stalker.present; i++) stalker.update(0.1, input, () => {});
+  assert.ok(stalker.present);
+  assert.equal(nav.visible(stalker.position, input.view), false);
+});
+
+test("two seeded creatures arrive at separate times without spawning on each other", () => {
+  const nav = openWorld(), encounters = new Encounters(199307, nav);
+  const input = { view: view(), playerSpeed: 0 };
+  const arrivals = [0, 0];
+  for (let i = 1; i <= 760; i++) {
+    encounters.update(0.1, input, () => {});
+    encounters.stalkers.forEach((stalker, index) => {
+      if (!arrivals[index] && stalker.present) {
+        arrivals[index] = i / 10;
+        assert.equal(nav.visible(stalker.position, input.view), false);
+        if (index === 1) assert.ok(groundDistance(stalker.position, encounters.stalkers[0].position) >= 6);
+      }
+    });
+  }
+  assert.ok(arrivals[0] >= 18 && arrivals[0] <= 30.1);
+  assert.ok(arrivals[1] >= 63 && arrivals[1] <= 75.1);
+  assert.equal(encounters.stalkers.length, 2);
+});
+
+test("either creature can hold you, with one death and shared protection after escape", () => {
+  for (const holder of [0, 1]) {
+    for (const fps of [30, 60, 144]) {
+      const encounters = new Encounters(1, openWorld());
+      const input = { view: view(), playerSpeed: 0 };
+      encounters.stalkers[holder].stage({ x: 22, z: 21.05 }, input.view.position, true);
+      for (let i = 0; i < fps / 10; i++) encounters.update(1 / fps, input, () => {});
+      assert.equal(encounters.attacker, encounters.stalkers[holder]);
+      encounters.stalkers[1 - holder].stage({ x: 22.95, z: 22 }, input.view.position, true);
+      for (let i = 0; i < fps; i++) encounters.update(1 / fps, input, () => {});
+      assert.equal(encounters.stalkers.filter((stalker) => stalker.attacking).length, 1);
+      assert.equal(encounters.escape(), true);
+      for (let i = 0; i < fps * 2.8; i++) {
+        encounters.update(1 / fps, input, () => {});
+        assert.equal(encounters.attacking, false, "both creatures honor the escape window");
+      }
+      let deaths = 0;
+      for (let i = 0; i < fps * 8; i++) deaths += Number(encounters.update(1 / fps, input, () => {}));
+      assert.equal(deaths, 1);
+      assert.equal(encounters.attacker?.phase, "dead");
+      encounters.reset();
+      assert.equal(encounters.present, false);
+      assert.equal(encounters.attackTime, 0);
+    }
+  }
+});
+
 test("fixed-step playback repeats across render rates and resets grant isolation", () => {
   const a = encounter(2),
     b = encounter(2);
@@ -378,7 +506,7 @@ test("fixed-step playback repeats across render rates and resets grant isolation
   assert.equal(a.stalker.gait, b.stalker.gait);
   assert.equal(stepsA, stepsB);
   a.stalker.reset();
-  for (let i = 0; i < 1000; i++)
+  for (let i = 0; i < 440; i++)
     a.stalker.update(0.1, a.input, () => assert.fail("reset footstep"));
   assert.equal(a.stalker.present, false);
 });
@@ -456,7 +584,7 @@ test("knees bend forward and planted feet stay on the floor through walking and 
 
 test("real furnished tapes produce hidden arrivals and traversable stalking routes", () => {
   const materials = headlessMaterials();
-  for (const seed of [199307, 42069, 7]) {
+  for (const seed of [199307, 42069, 7, 1, 2, 42]) {
     const nav = new EntityNavigation();
     const sections = [];
     for (let z = -1; z <= 1; z++)
@@ -475,6 +603,7 @@ test("real furnished tapes produce hidden arrivals and traversable stalking rout
         present = stalker.present;
       stalker.update(0.1, input, () => {});
       if (!present && stalker.present) {
+        if (!arrived) assert.ok(i / 10 <= 35, `tape ${seed} gets its first arrival within 35 seconds`);
         arrived = true;
         assert.equal(nav.visible(stalker.position, input.view), false);
       }
