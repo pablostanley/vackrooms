@@ -22,34 +22,28 @@ export type StalkerPhase =
 export interface StalkerInput {
   view: EntityView;
   playerSpeed: number;
+  canGrab?: boolean;
+  otherPositions?: readonly GroundPoint[];
 }
 const STEP = 1 / 30;
 
 /** Seeded opportunities use active game time, never timers or audio randomness. */
 export class EncounterSchedule {
   private rng: () => number;
-  private opening = true;
   next: number;
-  constructor(seed: number) {
+  constructor(seed: number, delay = 0) {
     this.rng = random(seed ^ 0x7374616c);
-    this.next = 75 + this.rng() * 60;
+    this.next = delay + 18 + this.rng() * 12;
   }
   rest(time: number) {
-    this.next = time + 105 + this.rng() * 105;
+    this.next = time + 45 + this.rng() * 30;
   }
   retry(time: number) {
-    this.next = time + 12 + this.rng() * 16;
+    this.next = time + 3 + this.rng() * 2;
   }
   poll(time: number) {
     if (time < this.next) return false;
     this.retry(time);
-    const opening = this.opening;
-    this.opening = false;
-    // Sometimes nothing happens at all, even when a suitable route exists.
-    if (this.rng() < 0.2 && !opening) {
-      this.rest(time);
-      return false;
-    }
     return true;
   }
 }
@@ -70,8 +64,6 @@ export class Stalker {
   private age = 0;
   private phaseAge = 0;
   private grace = 0;
-  private lifetime = 0;
-  private glimpseOnly = false;
   private attention = 0;
   private lastSensed = -Infinity;
   private sensedSpeed = 0;
@@ -89,9 +81,10 @@ export class Stalker {
   constructor(
     seed: number,
     private nav: EntityNavigation,
+    delay = 0,
   ) {
     this.rng = random(seed ^ 0x63726565);
-    this.schedule = new EncounterSchedule(seed);
+    this.schedule = new EncounterSchedule(seed, delay);
   }
   get present() {
     return this.phase !== "isolated";
@@ -117,8 +110,6 @@ export class Stalker {
     this.heading = Math.atan2(player.x - position.x, player.z - position.z);
     this.grace = 55;
     this.age = pursuit ? 200 : 0;
-    this.lifetime = 420;
-    this.glimpseOnly = false;
     this.attention = this.gait = this.previousGait = this.stuck = 0;
     this.lastKnown = { x: player.x, z: player.z };
     this.lastSensed = this.time;
@@ -129,6 +120,8 @@ export class Stalker {
     this.phase = "isolated";
     this.speed = 0;
     this.observed = false;
+    this.canSeePlayer = this.canHearPlayer = false;
+    this.sensedSpeed = 0;
     this.lastKnown = this.destination = null;
     this.path = [];
     this.schedule.rest(this.time);
@@ -211,29 +204,26 @@ export class Stalker {
           point,
           score:
             Math.abs(dot - 0.35) * 8 +
-            Math.abs(distance - 18) * 0.2 +
+            Math.abs(distance - 14) * 0.2 +
             this.rng() * 3,
         });
       }
     return points.sort((a, b) => a.score - b.score);
   }
   private appear(input: StalkerInput) {
-    for (const { point } of this.candidates(input.view, 14, 26).slice(0, 6)) {
+    for (const { point } of this.candidates(input.view, 10, 22).slice(0, 16)) {
+      if (input.otherPositions?.some((other) => groundDistance(point, other) < 6)) continue;
       const route = this.nav.route(point, input.view.position);
       if (!route.length) continue;
       const length = route.reduce(
         (total, p, i) => total + groundDistance(i ? route[i - 1] : point, p),
         0,
       );
-      if (length > 48) continue;
+      if (length > 36) continue;
       this.position.set(point.x, 0, point.z);
       this.heading = Math.atan2(route[0].x - point.x, route[0].z - point.z);
       this.age = this.attention = this.gait = this.speed = this.stuck = 0;
       this.grace = 48 + this.rng() * 18;
-      this.glimpseOnly = this.rng() < 0.3;
-      this.lifetime = this.glimpseOnly
-        ? 28 + this.rng() * 18
-        : 220 + this.rng() * 35;
       this.side = this.rng() < 0.5 ? -1 : 1;
       this.lastKnown = { x: input.view.position.x, z: input.view.position.z };
       this.lastSensed = this.time;
@@ -282,7 +272,7 @@ export class Stalker {
       return;
     }
     if (!this.lastKnown) return;
-    if (this.phase === "stalking" && this.age < this.grace) {
+    if (this.phase === "stalking" && this.age < this.grace && this.canSeePlayer) {
       // Seek a side approach around the last *perceived* position, then hold distance.
       const dx = this.lastKnown.x - this.position.x,
         dz = this.lastKnown.z - this.position.z;
@@ -334,7 +324,7 @@ export class Stalker {
     const distance = groundDistance(input.view.position, this.position);
     const sensed = this.canSeePlayer || this.canHearPlayer;
     const unseenFor = this.time - this.lastSensed;
-    if (!this.nav.canOccupy(this.position) || distance > 48) {
+    if (!this.nav.canOccupy(this.position) || (distance > 64 && !sensed)) {
       // Resident geometry can disappear behind the camera; never teleport an observed figure.
       if (!this.nav.visible(this.position, input.view)) this.reset();
       return false;
@@ -346,7 +336,7 @@ export class Stalker {
           : distance < 4.5
             ? 0.75
             : this.sensedSpeed > 0.25
-              ? 0.13
+              ? 0.35
               : -0.3
         : -0.45;
       this.attention = Math.max(
@@ -354,27 +344,26 @@ export class Stalker {
         Math.min(8, this.attention + stimulus * STEP),
       );
       if (
-        this.age >= this.grace + 18 &&
-        !this.glimpseOnly &&
-        this.attention > 4.5 &&
-        sensed
+        sensed && (
+          (this.age >= 4 && !this.observed && this.sensedSpeed > 0.25) ||
+          (this.age >= this.grace + 8 && this.attention > 2)
+        )
       )
         this.change("pursuing");
-      else if (this.age > this.lifetime || unseenFor > 18)
-        this.change("retreating");
+      else if (unseenFor > 4.5) this.change("searching");
     } else if (this.phase === "pursuing") {
       if (unseenFor > 4.5) this.change("searching");
-      else if (this.phaseAge > 150) this.change("retreating");
     } else if (this.phase === "searching") {
       if (sensed) this.change("pursuing");
-      else if (this.phaseAge > 13) this.change("retreating");
+      else if (unseenFor > 24) this.change("retreating");
+    } else if (this.phase === "retreating" && sensed) {
+      this.change("pursuing");
     }
-    if (this.age > this.lifetime + 35 && this.phase !== "retreating")
-      this.change("retreating");
     if (
       this.phase === "retreating" &&
       this.phaseAge > 3 &&
-      !this.nav.visible(this.position, input.view)
+      !sensed && unseenFor > 24 &&
+      !this.observed
     ) {
       this.reset();
       return false;
@@ -403,7 +392,7 @@ export class Stalker {
             ? 2.85
             : 1.55
         : this.phase === "searching"
-          ? 1.1
+          ? 2.2
           : this.phase === "retreating"
             ? 1.35
             : this.observed
@@ -441,6 +430,10 @@ export class Stalker {
         x: this.position.x + ((target.x - this.position.x) / distance) * travel,
         z: this.position.z + ((target.z - this.position.z) / distance) * travel,
       };
+      if (input.otherPositions?.some((other) =>
+        groundDistance(next, other) < 0.75 &&
+        groundDistance(next, other) < groundDistance(this.position, other)
+      )) break;
       if (!this.nav.clearSegment(this.position, next)) {
         this.path = [];
         break;
@@ -464,14 +457,16 @@ export class Stalker {
     if (Math.floor((this.gait + Math.PI / 2) / Math.PI) > previousBeat)
       footstep(this.position.clone(), this.phase === "pursuing");
     this.stuck = moved < 0.001 && desired > 0 ? this.stuck + STEP : 0;
-    if (
-      this.phase !== "retreating" &&
-      (this.stuck > 5 || (!this.path.length && unseenFor > 8))
-    )
-      this.change("retreating");
+    if (this.stuck > 5) {
+      // Replan around changing resident geometry; a blocked route is not an exit.
+      this.path = [];
+      this.nextPlan = this.nextDestination = 0;
+      this.stuck = 0;
+    }
     // Contact needs a fresh, unobstructed body ray and capsule route: no grabs through desks/walls.
     if (
       (this.phase === "pursuing" || this.phase === "stalking") &&
+      input.canGrab !== false &&
       groundDistance(input.view.position, this.position) < 1.05 &&
       input.view.position.y < 2.7 && input.view.position.y > 0.4 &&
       this.nav.sight(

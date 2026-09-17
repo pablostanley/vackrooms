@@ -38,10 +38,10 @@ export class ShadowCache {
     light.shadow.needsUpdate = true;
   }
 
-  update(caster: Sphere | null) {
+  update(casters: readonly Sphere[]) {
     for (const light of this.lights) {
       const moving =
-        !!caster && light.visible && light.shadow.getFrustum().intersectsSphere(caster);
+        light.visible && casters.some((caster) => light.shadow.getFrustum().intersectsSphere(caster));
       // Clear the old silhouette once after it leaves this particular light.
       if (moving || this.affected.has(light)) light.shadow.needsUpdate = true;
       if (moving) this.affected.add(light);

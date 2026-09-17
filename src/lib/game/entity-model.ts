@@ -25,7 +25,7 @@ export class EntityModel extends THREE.Group {
   private lower = new THREE.Vector3();
   private inverse = new THREE.Quaternion();
   private armPose = new THREE.Quaternion();
-  constructor(material: THREE.Material) {
+  constructor(material: THREE.Material, variant: "stalker" | "pyramid" = "stalker") {
     super();
     const mesh = (parent: THREE.Group, geometry: THREE.BufferGeometry) => {
       const result = new THREE.Mesh(geometry, material);
@@ -73,7 +73,7 @@ export class EntityModel extends THREE.Group {
       result.scale.set(sx, sy, sz);
       return result;
     };
-    this.name = "stalker";
+    this.name = variant;
     this.hips.position.y = 1.33;
     this.add(this.hips);
     tissue(this.hips, 0, 0, 0, 0.145, 0.14, 0.085);
@@ -87,15 +87,30 @@ export class EntityModel extends THREE.Group {
     this.chest.add(neck);
     skin(neck, 0.17, 0.044, -0.008);
     this.head.position.set(0.04, 0.3, 0.025);
-    const skull = tissue(this.head, 0, 0, 0, 0.132, 0.232, 0.126);
-    const vertices = skull.geometry.attributes.position;
-    for (let i = 0; i < vertices.count; i++) {
-      const y = vertices.getY(i);
-      const taper = 0.88 + (0.12 * (y + 1)) / 2;
-      vertices.setX(i, vertices.getX(i) * taper + 0.035 * Math.sin(y * 2.5));
-      vertices.setZ(i, vertices.getZ(i) * taper - 0.035 * y);
+    if (variant === "pyramid") {
+      // A broad, faceted head with a forward-leaning apex; still fits the doors.
+      const geometry = new THREE.ConeGeometry(0.45, 0.72, 4, 1);
+      geometry.rotateY(Math.PI / 4);
+      const vertices = geometry.attributes.position;
+      for (let i = 0; i < vertices.count; i++) {
+        const height = (vertices.getY(i) + 0.36) / 0.72;
+        vertices.setZ(i, vertices.getZ(i) * 1.12 + height * 0.16);
+      }
+      geometry.computeVertexNormals();
+      const skull = mesh(this.head, geometry);
+      skull.name = "pyramid-head";
+      skull.position.y = 0.02;
+    } else {
+      const skull = tissue(this.head, 0, 0, 0, 0.132, 0.232, 0.126);
+      const vertices = skull.geometry.attributes.position;
+      for (let i = 0; i < vertices.count; i++) {
+        const y = vertices.getY(i);
+        const taper = 0.88 + (0.12 * (y + 1)) / 2;
+        vertices.setX(i, vertices.getX(i) * taper + 0.035 * Math.sin(y * 2.5));
+        vertices.setZ(i, vertices.getZ(i) * taper - 0.035 * y);
+      }
+      skull.geometry.computeVertexNormals();
     }
-    skull.geometry.computeVertexNormals();
     this.chest.add(this.head);
     for (const side of [-1, 1]) {
       const hip = new THREE.Group(),

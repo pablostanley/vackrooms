@@ -10,7 +10,7 @@ import { TapeOverlay } from "./tape-overlay";
 import { buildSection, type Portal, type Section } from "./world";
 import { EntityNavigation, groundDistance } from "./entity-navigation";
 import { EntityModel } from "./entity-model";
-import { Stalker } from "./stalker";
+import { Encounters } from "./encounters";
 import { crushEnvelope, DEATH_HOLD, nextLifeSeed } from "./encounter-effects";
 import { ComputerScreens } from "./computer-screens";
 import { computerFocus, type ComputerStation } from "./computers";
@@ -79,16 +79,19 @@ export class BackroomsEngine {
     roughness: 0.96,
     metalness: 0,
   });
-  private entity = new EntityModel(this.entityMaterial);
+  private entities = [
+    new EntityModel(this.entityMaterial),
+    new EntityModel(this.entityMaterial, "pyramid"),
+  ];
   // Includes the full height, gait, and extended arms of the animated creature.
-  private entityShadowBounds = new THREE.Sphere(new THREE.Vector3(), 2.2);
+  private entityShadowBounds = this.entities.map(() => new THREE.Sphere(new THREE.Vector3(), 2.2));
   private navigation = new EntityNavigation();
-  private stalker: Stalker;
+  private encounters: Encounters;
   private playerSpeed = 0;
   private threat = 0;
   private deathHold = 0;
   private respawnFade = 0;
-  private preview: "attack" | "stalk" | null = null;
+  private preview: "attack" | "stalk" | "pyramid" | "pair" | null = null;
   private flashlight = new THREE.SpotLight("#e5e0b0", 0, 23, 0.46, 0.7, 1.8);
   private keys = new Set<string>();
   private position = new THREE.Vector3(CELL * 2.5, 1.66, CELL * 4.5);
@@ -135,7 +138,7 @@ export class BackroomsEngine {
   ) {
     this.settings = settings;
     this.audio = new BackroomsAudio(seed);
-    this.stalker = new Stalker(seed, this.navigation);
+    this.encounters = new Encounters(seed, this.navigation);
     this.audio.setVolume(settings.volume);
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
@@ -161,7 +164,7 @@ export class BackroomsEngine {
       this.lights.push(light);
     }
     this.shadows = new ShadowCache(this.lights);
-    this.scene.add(this.flashlight, this.flashlight.target, this.entity);
+    this.scene.add(this.flashlight, this.flashlight.target, ...this.entities);
     this.camera.rotation.order = "YXZ";
     this.stream();
     this.updateLights();
@@ -183,7 +186,7 @@ export class BackroomsEngine {
       }
       if (process.env.NODE_ENV === "development") {
         const mode = new URLSearchParams(location.search).get("monster");
-        if (mode === "attack" || mode === "stalk") {
+        if (mode === "attack" || mode === "stalk" || mode === "pyramid" || mode === "pair") {
           this.preview = mode;
           this.previewEncounter();
         }
@@ -383,7 +386,7 @@ export class BackroomsEngine {
     });
   }
   private look(dx: number, dy: number) {
-    if (this.stalker.attacking) return;
+    if (this.encounters.attacking) return;
     this.yaw -= dx * 0.002 * this.settings.sensitivity;
     this.pitch = THREE.MathUtils.clamp(
       this.pitch - dy * 0.002 * this.settings.sensitivity,
@@ -406,7 +409,7 @@ export class BackroomsEngine {
     this.active = true;
     this.lastTime = 0;
     this.tapeBurst = 0.65;
-    if (this.controls) this.controls.enabled = !this.stalker.attacking;
+    if (this.controls) this.controls.enabled = !this.encounters.attacking;
     this.hasStarted = true;
     if (lock) this.requestLock();
     this.callbacks.play();
@@ -439,7 +442,7 @@ export class BackroomsEngine {
   }
   useComputer(fullscreen = true) {
     const station = this.computerScreens?.nearest;
-    if (!this.active || this.focusedComputer || !station || this.stalker.attacking) return;
+    if (!this.active || this.focusedComputer || !station || this.encounters.attacking) return;
     this.focusedComputer = station;
     if (this.computerScreens!.isPowered(station)) this.audio.playComputer();
     this.returnView = {
@@ -515,7 +518,7 @@ export class BackroomsEngine {
     this.touchMove = { x, y };
   }
   jump() {
-    if (this.active && !this.focusedComputer && this.stalker.phase !== "dead") this.motor?.jump();
+    if (this.active && !this.focusedComputer && this.encounters.attacker?.phase !== "dead") this.motor?.jump();
   }
   noclip(held: boolean) {
     if (held) this.keys.add("KeyE");
@@ -564,7 +567,7 @@ export class BackroomsEngine {
       return;
     }
     if (pressed.has(PAD.light)) this.toggleFlashlight();
-    if (this.stalker.phase === "grabbing" && pressed.has(PAD.interact)) {
+    if (this.encounters.attacker?.phase === "grabbing" && pressed.has(PAD.interact)) {
       this.jump();
       return;
     }
@@ -765,8 +768,8 @@ export class BackroomsEngine {
     this.motor?.clearSections();
     this.position.set(CELL * 2.5, 1.66, CELL * 4.5);
     this.motor?.teleport(this.position);
-    this.entity.visible = false;
-    this.stalker.reset();
+    for (const entity of this.entities) entity.visible = false;
+    this.encounters.reset();
     this.threat = 0;
     this.nearestPortal = null;
     this.playerSpeed = 0;
@@ -784,8 +787,8 @@ export class BackroomsEngine {
     this.padRun = this.padInteract = false;
     this.gamepad.suspend();
     this.audio.resetSpace(0, this.seed);
-    this.stalker = new Stalker(this.seed, this.navigation);
     this.rebuildWorld();
+    this.encounters = new Encounters(this.seed, this.navigation);
     this.yaw = -0.13;
     this.pitch = -0.025;
     this.camera.position.copy(this.position);
@@ -809,12 +812,23 @@ export class BackroomsEngine {
       for (const [dx, dz] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
         const monster = { x: player.x + dx * 5.5, z: player.z + dz * 5.5 };
         if (!this.navigation.canOccupy(monster) || !this.navigation.clearSegment(player, monster)) continue;
+        const second = { x: monster.x + dz * 1.4, z: monster.z - dx * 1.4 };
+        if (this.preview === "pair" &&
+          (!this.navigation.canOccupy(second) || !this.navigation.clearSegment(player, second))) continue;
         this.position.copy(player);
         this.motor?.teleport(player);
-        this.stalker.stage(monster, player, this.preview === "attack");
-        this.entity.position.copy(this.stalker.position);
-        this.entity.rotation.y = this.stalker.heading;
-        this.entity.visible = true;
+        this.encounters.reset();
+        const index = this.preview === "pyramid" ? 1 : 0;
+        this.encounters.stalkers[index].stage(monster, player, this.preview !== "stalk");
+        if (this.preview === "pair") {
+          this.encounters.stalkers[1].stage(second, player, true);
+        }
+        this.entities.forEach((entity, i) => {
+          const stalker = this.encounters.stalkers[i];
+          entity.position.copy(stalker.position);
+          entity.rotation.y = stalker.heading;
+          entity.visible = stalker.present;
+        });
         this.yaw = Math.atan2(-dx, -dz);
         this.pitch = 0;
         this.camera.position.copy(player);
@@ -838,9 +852,9 @@ export class BackroomsEngine {
     );
     for (const [key, data] of this.chunks) {
       if (
-        this.stalker.present &&
-        Math.floor(this.stalker.position.x / SPAN) === data.x &&
-        Math.floor(this.stalker.position.z / SPAN) === data.z
+        this.encounters.stalkers.some((stalker) => stalker.present &&
+          Math.floor(stalker.position.x / SPAN) === data.x &&
+          Math.floor(stalker.position.z / SPAN) === data.z)
       )
         continue;
       const dx = data.x * SPAN + SPAN / 2 - this.position.x,
@@ -873,9 +887,9 @@ export class BackroomsEngine {
     }
   }
   private updateEntity(dt: number) {
-    const previousGait = this.stalker.renderGait;
-    const wasAttacking = this.stalker.attacking;
-    const caught = this.stalker.update(
+    const previousGait = this.encounters.stalkers.map((stalker) => stalker.renderGait);
+    const wasAttacking = this.encounters.attacking;
+    const caught = this.encounters.update(
       dt,
       {
         view: {
@@ -891,31 +905,36 @@ export class BackroomsEngine {
       },
       (position, running) => this.audio.entityStep(position, running),
     );
-    this.entity.visible = this.stalker.present;
-    this.stalker.renderPosition(this.entity.position);
-    this.entity.rotation.y = this.stalker.heading;
-    const distance = groundDistance(this.position, this.stalker.position);
-    const clear = this.stalker.present && this.navigation.sight(
-      this.position, { x: this.stalker.position.x, y: 1.5, z: this.stalker.position.z },
-    );
-    const proximity = this.stalker.present ? Math.max(0, 1 - distance / 17) * (clear ? 1 : 0.18) : 0;
+    const attack = crushEnvelope(this.encounters.attackTime, this.settings.reducedMotion);
+    let proximity = 0;
+    this.entities.forEach((entity, i) => {
+      const stalker = this.encounters.stalkers[i];
+      entity.visible = stalker.present;
+      stalker.renderPosition(entity.position);
+      entity.rotation.y = stalker.heading;
+      const distance = groundDistance(this.position, stalker.position);
+      const clear = stalker.present && this.navigation.sight(
+        this.position, { x: stalker.position.x, y: 1.5, z: stalker.position.z },
+      );
+      if (stalker.present)
+        proximity = Math.max(proximity, Math.max(0, 1 - distance / 17) * (clear ? 1 : 0.18));
+      const struggle = stalker.attacking ? Math.sin(stalker.attackTime * 34) * attack.shake : 0;
+      entity.position.x += Math.cos(this.yaw) * struggle * 0.055;
+      entity.position.z -= Math.sin(this.yaw) * struggle * 0.055;
+      entity.position.y += Math.abs(struggle) * 0.025;
+      entity.animate(
+        stalker.renderGait,
+        stalker.renderGait !== previousGait[i],
+        stalker.speed,
+        dt,
+        stalker.attacking ? 1 : clear && stalker.phase !== "staggered" ? THREE.MathUtils.smoothstep(6 - distance, 0, 4.5) : 0,
+        stalker.attacking ? attack.squeeze : 0,
+        struggle,
+      );
+    });
     this.threat += (proximity - this.threat) * Math.min(1, dt * 4);
-    const attack = crushEnvelope(this.stalker.attackTime, this.settings.reducedMotion);
-    const struggle = this.stalker.attacking ? Math.sin(this.stalker.attackTime * 34) * attack.shake : 0;
-    this.entity.position.x += Math.cos(this.yaw) * struggle * 0.055;
-    this.entity.position.z -= Math.sin(this.yaw) * struggle * 0.055;
-    this.entity.position.y += Math.abs(struggle) * 0.025;
-    this.entity.animate(
-      this.stalker.renderGait,
-      this.stalker.renderGait !== previousGait,
-      this.stalker.speed,
-      dt,
-      this.stalker.attacking ? 1 : clear && this.stalker.phase !== "staggered" ? THREE.MathUtils.smoothstep(6 - distance, 0, 4.5) : 0,
-      this.stalker.attacking ? attack.squeeze : 0,
-      struggle,
-    );
     this.stress = Math.max(this.stress, this.threat * 0.75);
-    if (this.stalker.attacking && !wasAttacking) {
+    if (this.encounters.attacking && !wasAttacking) {
       this.keys.clear();
       this.motor?.clearJumpInput();
       this.touchMove = this.padMove = { x: 0, y: 0 };
@@ -924,28 +943,30 @@ export class BackroomsEngine {
       if (this.controls) this.controls.enabled = false;
       this.callbacks.message("It's holding you.");
     }
-    this.audio.entityThreat(this.threat, this.stalker.attacking ? 0.25 + attack.squeeze * 0.75 : 0,
-      this.stalker.attacking ? this.stalker.attackTime : this.seconds, attack.blackout);
+    this.audio.entityThreat(this.threat, this.encounters.attacking ? 0.25 + attack.squeeze * 0.75 : 0,
+      this.encounters.attacking ? this.encounters.attackTime : this.seconds, attack.blackout);
     if (caught) {
       this.deathHold = DEATH_HOLD;
       this.callbacks.message("You died. Signal lost.");
     }
   }
   private attackCamera(dt: number) {
-    const attack = crushEnvelope(this.stalker.attackTime, this.settings.reducedMotion);
-    const targetYaw = Math.atan2(this.position.x - this.stalker.position.x, this.position.z - this.stalker.position.z);
+    const attack = crushEnvelope(this.encounters.attackTime, this.settings.reducedMotion);
+    const attacker = this.encounters.attacker;
+    if (!attacker) return;
+    const targetYaw = Math.atan2(this.position.x - attacker.position.x, this.position.z - attacker.position.z);
     const turn = Math.atan2(Math.sin(targetYaw - this.yaw), Math.cos(targetYaw - this.yaw));
     this.yaw += THREE.MathUtils.clamp(turn, -dt * 1.4, dt * 1.4);
     this.pitch += (0.08 - this.pitch) * Math.min(1, dt * 3);
     this.camera.position.copy(this.position);
     this.camera.position.y -= attack.squeeze * 0.12;
     const shake = attack.shake;
-    const struggle = Math.sin(this.stalker.attackTime * 34) * shake;
+    const struggle = Math.sin(this.encounters.attackTime * 34) * shake;
     this.camera.position.x += Math.cos(this.yaw) * struggle * 0.035;
     this.camera.position.z -= Math.sin(this.yaw) * struggle * 0.035;
-    this.camera.position.y += Math.sin(this.stalker.attackTime * 29) * shake * 0.022;
+    this.camera.position.y += Math.sin(this.encounters.attackTime * 29) * shake * 0.022;
     this.camera.rotation.set(
-      this.pitch + Math.sin(this.stalker.attackTime * 29) * shake * 0.011,
+      this.pitch + Math.sin(this.encounters.attackTime * 29) * shake * 0.011,
       this.yaw + struggle * 0.01,
       struggle * 0.008,
     );
@@ -953,7 +974,7 @@ export class BackroomsEngine {
   private struggle(dt: number) {
     // Keep Rapier's gravity and jump rules alive while horizontal walking is held.
     const jumped = this.motor?.move(0, 0, dt, this.position);
-    if (!jumped || !this.stalker.escape()) return;
+    if (!jumped || !this.encounters.escape()) return;
     this.audio.jump(this.position, jumped === 2);
     this.audio.entityThreat(0, 0, this.seconds, 0);
     this.threat = this.stress = this.tapeBurst = 0;
@@ -993,9 +1014,9 @@ export class BackroomsEngine {
         if (this.deathHold > 0) {
           this.deathHold = Math.max(0, this.deathHold - dt);
           if (!this.deathHold) this.respawn();
-        } else if (this.stalker.phase === "grabbing") {
+        } else if (this.encounters.attacker?.phase === "grabbing") {
           this.struggle(dt);
-        } else if (!this.stalker.attacking) {
+        } else if (!this.encounters.attacking) {
           this.walk(dt);
           this.stream();
           this.findPortal(dt);
@@ -1004,7 +1025,7 @@ export class BackroomsEngine {
             this.alterUnseen();
           }
         }
-        if (this.stalker.attacking) this.attackCamera(dt);
+        if (this.encounters.attacking) this.attackCamera(dt);
         this.audio.update(
           this.seconds,
           this.camera.position,
@@ -1014,7 +1035,7 @@ export class BackroomsEngine {
           this.audioUp.set(0, 1, 0).applyQuaternion(this.camera.quaternion),
           this.chunks,
           this.sections.values(),
-          this.stalker.present,
+          this.encounters.present,
         );
         this.updateEntity(dt);
       } else if (!this.hasStarted) {
@@ -1054,24 +1075,26 @@ export class BackroomsEngine {
         .multiplyScalar(8)
         .add(this.camera.position);
       this.flashlight.intensity = this.flashOn ? 22 : 0;
-      this.entityShadowBounds.center.copy(this.entity.position).y += 1.4;
+      this.entities.forEach((entity, i) => {
+        this.entityShadowBounds[i].center.copy(entity.position).y += 1.4;
+      });
       this.shadows.update(
-        this.active && !this.focusedComputer && this.entity.visible
-          ? this.entityShadowBounds
-          : null,
+        this.active && !this.focusedComputer
+          ? this.entityShadowBounds.filter((_, i) => this.entities[i].visible)
+          : [],
       );
       this.stress = Math.max(0, this.stress - dt * 0.4);
       const tapeDamage = this.settings.reducedMotion
         ? Math.min(0.18, this.settings.tape)
         : this.settings.tape;
-      const attack = crushEnvelope(this.stalker.attackTime, this.settings.reducedMotion);
+      const attack = crushEnvelope(this.encounters.attackTime, this.settings.reducedMotion);
       // Proximity feeds horizontal tape loss continuously, without camera wobble.
       const tapeAnomaly = this.settings.reducedMotion
         ? 0
         : Math.max(
             this.tapeBurst,
             this.threat * this.threat * 0.75,
-            this.stalker.attacking ? 0.7 + attack.squeeze * 0.3 : 0,
+            this.encounters.attacking ? 0.7 + attack.squeeze * 0.3 : 0,
           );
       if (this.elapsed - this.lastScreens > 0.1) {
         this.computerScreens?.update(
@@ -1095,8 +1118,8 @@ export class BackroomsEngine {
         tapeDamage,
         tapeAnomaly,
         this.settings.reducedMotion,
-        this.stalker.attacking ? attack.red : 0,
-        Math.max(this.stalker.attacking ? attack.blackout : 0, this.respawnFade),
+        this.encounters.attacking ? attack.red : 0,
+        Math.max(this.encounters.attacking ? attack.blackout : 0, this.respawnFade),
       );
       this.tapeBurst = Math.max(0, this.tapeBurst - dt * 5);
       if (this.elapsed - this.lastStats > 0.12) {
@@ -1106,7 +1129,7 @@ export class BackroomsEngine {
           distance: this.distance,
           depth: this.depth,
           nearPortal: !!this.nearestPortal,
-          nearComputer: !this.stalker.attacking && !!this.computerScreens?.nearest,
+          nearComputer: !this.encounters.attacking && !!this.computerScreens?.nearest,
           browsing: !!this.focusedComputer,
           noclipProgress: this.clipProgress,
           signal: Math.max(
@@ -1116,9 +1139,9 @@ export class BackroomsEngine {
           flashlight: this.flashOn,
           backend: this.renderer?.backend ?? "",
           gamepad: this.gamepadConnected,
-          attacking: this.stalker.attacking,
-          canEscape: this.stalker.phase === "grabbing",
-          encounter: this.preview ? `${this.stalker.phase.toUpperCase()} · ${groundDistance(this.position, this.stalker.position).toFixed(1)} M` : undefined,
+          attacking: this.encounters.attacking,
+          canEscape: this.encounters.attacker?.phase === "grabbing",
+          encounter: this.preview ? this.encounters.stalkers.map((stalker, i) => `${this.entities[i].name.toUpperCase()} ${stalker.phase.toUpperCase()} · ${groundDistance(this.position, stalker.position).toFixed(1)} M`).join(" / ") : undefined,
         });
       }
       this.frameId = requestAnimationFrame(this.tick);
@@ -1144,7 +1167,7 @@ export class BackroomsEngine {
     this.computerScreens?.dispose();
     this.motor?.dispose();
     for (const s of this.sections.values()) s.dispose();
-    this.entity.traverse((o) => {
+    for (const entity of this.entities) entity.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
     });
     this.entityMaterial.dispose();
