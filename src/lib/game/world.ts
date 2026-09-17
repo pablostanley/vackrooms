@@ -14,6 +14,7 @@ import {
   inLandmark,
   ceilingAt,
   poolBounds,
+  courtyardBounds,
   type ChunkData,
 } from "./maze";
 import { buildLandmark } from "./landmarks";
@@ -354,8 +355,10 @@ export function buildSection(
     return false;
   }
   const basin = poolBounds(data.landmark);
+  const courtyard = courtyardBounds(data.landmark);
   const floorOpening =
     basin ??
+    (courtyard && courtyard.floorY < 0 ? courtyard : null) ??
     (data.landmark.kind === "levelFun"
       ? {
           x: data.landmark.x * CELL,
@@ -367,7 +370,7 @@ export function buildSection(
   const floor = (x: number, z: number, w: number, d: number) =>
     plane(w, d, x + w / 2, 0, z + d / 2, theme.floor, -Math.PI / 2, 0, 4.8);
   if (floorOpening) {
-    // Leave one surface for inset pools and the party room's replacement carpet.
+    // Leave one surface for pools, sunken courtyards, and replacement carpet.
     const { x, z, width, length } = floorOpening;
     floor(0, 0, SPAN, z);
     floor(0, z + length, SPAN, SPAN - z - length);
@@ -400,7 +403,11 @@ export function buildSection(
         bits = data.cells[cz * CHUNK + cx];
       const landmark = inLandmark(data.landmark, cx, cz);
       const height = ceilingAt(data, cx, cz);
-      plane(CELL, CELL, x, height, z, mats.top, Math.PI / 2, 0, 2.4);
+      plane(
+        CELL, CELL, x, height, z,
+        courtyard && landmark ? mats.courtyardWall : mats.top,
+        Math.PI / 2, 0, 2.4,
+      );
       const northHeight = Math.max(height, ceilingAt(data, cx, cz - 1));
       const westHeight = Math.max(height, ceilingAt(data, cx - 1, cz));
       if (!(bits & N)) wall(x, cz * CELL, false, northHeight);
@@ -425,6 +432,11 @@ export function buildSection(
           z,
           theme.wall,
         );
+      if (
+        courtyard && x > courtyard.x && x < courtyard.x + courtyard.width &&
+        z > courtyard.z && z < courtyard.z + courtyard.length
+      ) continue;
+      const fixtureHeight = courtyard && landmark ? HEIGHT : height;
       const normallyLit =
         rng() > 0.14 ||
         (data.x === 0 && data.z === 0 && cx === 2) ||
@@ -438,7 +450,7 @@ export function buildSection(
         0.065,
         0.67,
         x,
-        height - 0.045,
+        fixtureHeight - 0.045,
         z,
         mats.fixtures,
       );
@@ -446,12 +458,12 @@ export function buildSection(
         landmark ? 2.3 : 1.18,
         0.57,
         x,
-        height - 0.082,
+        fixtureHeight - 0.082,
         z,
         lit ? mats.luminous : mats.deadLight,
         Math.PI / 2,
       );
-      if (lit) lights.push(new THREE.Vector3(x + ox, height - 0.19, z + oz));
+      if (lit) lights.push(new THREE.Vector3(x + ox, fixtureHeight - 0.19, z + oz));
       // Landmarks have authored empty space and perimeter details of their own.
       if (landmark) continue;
       const isSpawn = data.x === 0 && data.z === 0 && cx === 2 && cz >= 1;

@@ -9,6 +9,7 @@ import {
   W,
   ceilingAt,
   poolBounds,
+  courtyardBounds,
   type ChunkData,
   type PoolBounds,
 } from "./maze";
@@ -105,19 +106,24 @@ export class CharacterMotor {
         ),
       );
     const basin = poolBounds(data.landmark);
+    const court = courtyardBounds(data.landmark);
+    const recess = basin ?? (court && court.floorY < 0 ? court : null);
     const floor = (x: number, z: number, w: number, d: number, y = 0) =>
       box(ox + x + w / 2, y - 0.06, oz + z + d / 2, w / 2, 0.06, d / 2);
-    if (basin) {
-      floor(0, 0, SPAN, basin.z);
-      floor(0, basin.z + basin.length, SPAN, SPAN - basin.z - basin.length);
-      floor(0, basin.z, basin.x, basin.length);
+    if (recess) {
+      floor(0, 0, SPAN, recess.z);
+      floor(0, recess.z + recess.length, SPAN, SPAN - recess.z - recess.length);
+      floor(0, recess.z, recess.x, recess.length);
       floor(
-        basin.x + basin.width,
-        basin.z,
-        SPAN - basin.x - basin.width,
-        basin.length,
+        recess.x + recess.width,
+        recess.z,
+        SPAN - recess.x - recess.width,
+        recess.length,
       );
-      floor(basin.x, basin.z, basin.width, basin.length, -1.4);
+      floor(
+        recess.x, recess.z, recess.width, recess.length,
+        basin ? -1.4 : court!.floorY,
+      );
     } else floor(0, 0, SPAN, SPAN);
     for (let z = 0; z < CHUNK; z++)
       for (let x = 0; x < CHUNK; x++) {

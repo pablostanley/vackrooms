@@ -210,12 +210,35 @@ export function createMaterials() {
       polygonOffsetUnits: -1,
     });
   });
+  const courtyardWall = new THREE.MeshStandardMaterial({
+    ...plaster, color: "#d7d4bd", roughness: 0.94,
+  });
+  const courtyardPaving = new THREE.MeshStandardMaterial({
+    ...plaster, color: "#aaa492", roughness: 0.88,
+  });
+  const courtyardWood = new THREE.MeshStandardMaterial({
+    ...woodGrain, color: "#b4a080", roughness: 0.9,
+  });
+  const courtyardGrass = new THREE.MeshStandardMaterial({
+    bumpMap: carpet.bumpMap, roughnessMap: carpet.roughnessMap,
+    bumpScale: 0.007, color: "#56633a", roughness: 1,
+  });
+  const courtyardCurtain = new THREE.MeshStandardMaterial({
+    color: "#343c32", roughness: 0.88,
+  });
+  const courtyardWarm = new THREE.MeshStandardMaterial({
+    color: "#b8a370", emissive: "#d3ad64", emissiveIntensity: 0.36, roughness: 0.95,
+  });
+  const courtyardGlass = new THREE.MeshStandardMaterial({
+    color: "#a2ae94", transparent: true, opacity: 0.1,
+    roughness: 0.18, metalness: 0.15, depthWrite: false, side: THREE.DoubleSide,
+  });
   for (const [kind, materials] of [
     ["wallpaper", [wall, service, archive]],
     ["carpet", [floor]],
     ["ceiling", [top]],
-    ["plaster", [tileWall, tileFloor, cream, funWall]],
-    ["wood", [wood]],
+    ["plaster", [tileWall, tileFloor, cream, funWall, courtyardWall, courtyardPaving]],
+    ["wood", [wood, courtyardWood]],
   ] as const)
     for (const material of materials) {
       material.userData.surfaceMeters = SURFACE_SIZE[kind];
@@ -225,6 +248,8 @@ export function createMaterials() {
   fabric.userData.surfaceMeters = upholstery.userData.surfaceMeters = 0.6;
   configureSurfaceSampling(fabric);
   configureSurfaceSampling(upholstery);
+  courtyardGrass.userData.surfaceMeters = 1.2;
+  configureSurfaceSampling(courtyardGrass);
   return {
     wall,
     floor,
@@ -251,6 +276,13 @@ export function createMaterials() {
     funTrim,
     funStripe,
     funMurals,
+    courtyardWall,
+    courtyardPaving,
+    courtyardWood,
+    courtyardGrass,
+    courtyardCurtain,
+    courtyardWarm,
+    courtyardGlass,
     forTheme: (theme: Theme) => ({
       wall:
         theme === "service" ? service : theme === "archive" ? archive : wall,
@@ -286,6 +318,13 @@ export function createMaterials() {
         funTrim,
         funStripe,
         ...funMurals,
+        courtyardWall,
+        courtyardPaving,
+        courtyardWood,
+        courtyardGrass,
+        courtyardCurtain,
+        courtyardWarm,
+        courtyardGlass,
       ].forEach((m) => m.dispose());
     },
   };

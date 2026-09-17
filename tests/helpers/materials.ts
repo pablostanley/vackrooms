@@ -23,6 +23,13 @@ export function headlessMaterials(): Materials {
     "funCarpet",
     "funTrim",
     "funStripe",
+    "courtyardWall",
+    "courtyardPaving",
+    "courtyardWood",
+    "courtyardGrass",
+    "courtyardCurtain",
+    "courtyardWarm",
+    "courtyardGlass",
   ] as const;
   const standard = Object.fromEntries(
     standardNames.map((name) => [name, new THREE.MeshStandardMaterial()]),

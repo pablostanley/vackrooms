@@ -12,8 +12,9 @@ import {
   type ChunkData,
 } from "./maze";
 import type { Materials } from "./materials";
+import { buildCourtyard } from "./courtyard";
 
-interface Builder {
+export interface LandmarkBuilder {
   box: (
     w: number,
     h: number,
@@ -41,7 +42,7 @@ interface Builder {
 }
 
 /** Large silhouettes and a few perimeter fixtures leave the walking floor empty. */
-export function buildLandmark(data: ChunkData, mats: Materials, b: Builder) {
+export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuilder) {
   const room = data.landmark;
   const x0 = room.x * CELL,
     z0 = room.z * CELL;
@@ -52,6 +53,10 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: Builder) {
   const ox = data.x * CHUNK * CELL,
     oz = data.z * CHUNK * CELL;
   b.group.userData.landmark = room;
+  if (room.kind === "courtyard") {
+    buildCourtyard(data, mats, b);
+    return;
+  }
   const solid = (
     w: number,
     h: number,
