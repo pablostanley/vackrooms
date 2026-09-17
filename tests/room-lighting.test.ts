@@ -165,7 +165,7 @@ test("outages remove actual fixtures, lamps illuminate from the shade, and secti
   const mats = headlessMaterials();
   const modes = new Set<string>();
   try {
-    for (const seed of [1, 3, 8]) {
+    for (const seed of [1, 3, 20]) {
       const data = generateChunk(0, 0, seed);
       const section = buildSection(data, mats, 0);
       const plan = planRoomLighting(data);

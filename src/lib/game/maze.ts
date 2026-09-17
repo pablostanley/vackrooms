@@ -13,7 +13,12 @@ export const directions = [
   { dx: -1, dz: 0, bit: W, opposite: E },
 ];
 export type Theme = "offices" | "service" | "pool" | "archive";
-export type LandmarkKind = "lobby" | "foodCourt" | "poolroom" | "corridor";
+export type LandmarkKind =
+  | "lobby"
+  | "foodCourt"
+  | "poolroom"
+  | "corridor"
+  | "levelFun";
 export interface Landmark {
   kind: LandmarkKind;
   x: number;
@@ -44,6 +49,14 @@ export function landmarkKind(x: number, z: number, seed: number): LandmarkKind {
   // Three adjacent sections share a corridor. Its two internal gates stay aligned
   // even when unseen office branches regenerate at a different depth.
   if (modulo(Math.floor(x / 3) + z + phase, 4) === 0) return "corridor";
+  // One party room per 24-section band. Pick only non-corridor slots so the
+  // three-section hallway runs survive, including at negative coordinates.
+  const band = Math.floor(x / 24);
+  const candidates = Array.from({ length: 24 }, (_, i) => band * 24 + i).filter(
+    (cx) => modulo(Math.floor(cx / 3) + z + phase, 4) !== 0,
+  );
+  if (x === candidates[hash(band, z, seed + 1709) % candidates.length])
+    return "levelFun";
   return (["lobby", "foodCourt", "poolroom"] as const)[
     modulo(x + z + phase, 3)
   ];
@@ -165,14 +178,23 @@ export function generateChunk(
   const landmark: Landmark =
     kind === "corridor"
       ? { kind, x: 0, z: corridorRow, width: CHUNK, length: 1, height: HEIGHT }
-      : {
-          kind,
-          x: 4,
-          z: 2,
-          width: 7,
-          length: 8 + Math.floor(shape() * 2),
-          height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
-        };
+      : kind === "levelFun"
+        ? {
+            kind,
+            x: 4,
+            z: 2,
+            width: 3,
+            length: 2 + Math.floor(shape() * 2),
+            height: HEIGHT,
+          }
+        : {
+            kind,
+            x: 4,
+            z: 2,
+            width: 7,
+            length: 8 + Math.floor(shape() * 2),
+            height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
+          };
   // Only remove walls: all original maze connections and shared gates survive.
   for (let rz = landmark.z; rz < landmark.z + landmark.length; rz++)
     for (let rx = landmark.x; rx < landmark.x + landmark.width; rx++) {
@@ -206,6 +228,54 @@ export function generateChunk(
   if (x === 0 && z === 0) {
     if (kind === "corridor") approach(2, 4, 2, rz);
     else approach(2, 2, rx, rz);
+  }
+  if (kind === "levelFun") {
+    // Give the party room actual walls. Close only redundant perimeter edges:
+    // never sever an office branch, alter a section gate, or lose the approach
+    // from spawn. Two opposite entrances are always retained.
+    for (let cz = rz; cz <= bottom; cz++)
+      for (let cx = rx; cx <= right; cx++)
+        for (const d of directions) {
+          const nx = cx + d.dx,
+            nz = cz + d.dz;
+          if (inLandmark(landmark, nx, nz)) continue;
+          if (
+            d.bit === W &&
+            cz ===
+              (x === 0 && z === 0 ? rz : Math.max(rz, Math.min(bottom, west)))
+          )
+            continue;
+          if (d.bit === E && cz === Math.max(rz, Math.min(bottom, east)))
+            continue;
+          const at = cz * CHUNK + cx,
+            next = nz * CHUNK + nx;
+          if (!(cells[at] & d.bit)) continue;
+          cells[at] &= ~d.bit;
+          cells[next] &= ~d.opposite;
+          const reached = new Set([at]),
+            queue = [at];
+          for (const current of queue) {
+            for (const step of directions) {
+              const sx = (current % CHUNK) + step.dx,
+                sz = Math.floor(current / CHUNK) + step.dz;
+              if (
+                sx < 0 ||
+                sz < 0 ||
+                sx >= CHUNK ||
+                sz >= CHUNK ||
+                !(cells[current] & step.bit)
+              )
+                continue;
+              const neighbor = sz * CHUNK + sx;
+              if (!reached.has(neighbor)) {
+                reached.add(neighbor);
+                queue.push(neighbor);
+              }
+            }
+            if (reached.has(next)) break;
+          }
+          if (!reached.has(next)) connect(at, next, d.bit, d.opposite);
+        }
   }
   const choice = rng();
   const theme: Theme =

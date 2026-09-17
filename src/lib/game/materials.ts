@@ -1,6 +1,12 @@
 import * as THREE from "three";
 import { random, type Theme } from "./maze";
-import { configureSurfaceSampling, createSurfaceTextures, SURFACE_SIZE, type Surface } from "./surface-textures";
+import { drawFunCarpet, drawFunMural } from "./fun-textures";
+import {
+  configureSurfaceSampling,
+  createSurfaceTextures,
+  SURFACE_SIZE,
+  type Surface,
+} from "./surface-textures";
 
 function canvasTexture(
   draw: (ctx: CanvasRenderingContext2D, size: number) => void,
@@ -172,11 +178,43 @@ export function createMaterials() {
     side: THREE.DoubleSide,
   });
   const darkness = new THREE.MeshBasicMaterial({ color: "#060806" });
+  const funWall = new THREE.MeshStandardMaterial({
+    ...plaster,
+    color: "#e0cf85",
+    roughness: 0.96,
+  });
+  const funCarpet = new THREE.MeshStandardMaterial({
+    ...carpet,
+    map: texture(drawFunCarpet, 1024),
+    roughness: 1,
+  });
+  funCarpet.userData.surfaceMeters = 3.6;
+  configureSurfaceSampling(funCarpet);
+  const funTrim = new THREE.MeshStandardMaterial({
+    color: "#b9b49a",
+    roughness: 0.9,
+  });
+  const funStripe = new THREE.MeshStandardMaterial({
+    color: "#797252",
+    roughness: 0.95,
+  });
+  const funMurals = [0, 1, 2].map((kind) => {
+    const map = texture((ctx, size) => drawFunMural(ctx, size, kind));
+    map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map,
+      alphaTest: 0.5,
+      roughness: 1,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+  });
   for (const [kind, materials] of [
     ["wallpaper", [wall, service, archive]],
     ["carpet", [floor]],
     ["ceiling", [top]],
-    ["plaster", [tileWall, tileFloor, cream]],
+    ["plaster", [tileWall, tileFloor, cream, funWall]],
     ["wood", [wood]],
   ] as const)
     for (const material of materials) {
@@ -208,6 +246,11 @@ export function createMaterials() {
     metal,
     paper,
     darkness,
+    funWall,
+    funCarpet,
+    funTrim,
+    funStripe,
+    funMurals,
     forTheme: (theme: Theme) => ({
       wall:
         theme === "service" ? service : theme === "archive" ? archive : wall,
@@ -238,6 +281,11 @@ export function createMaterials() {
         metal,
         paper,
         darkness,
+        funWall,
+        funCarpet,
+        funTrim,
+        funStripe,
+        ...funMurals,
       ].forEach((m) => m.dispose());
     },
   };

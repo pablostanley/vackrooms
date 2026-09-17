@@ -1,5 +1,16 @@
 import * as THREE from "three";
-import { CELL, CHUNK, N, E, poolBounds, type ChunkData } from "./maze";
+import {
+  CELL,
+  CHUNK,
+  N,
+  E,
+  S,
+  W,
+  hash,
+  inLandmark,
+  poolBounds,
+  type ChunkData,
+} from "./maze";
 import type { Materials } from "./materials";
 
 interface Builder {
@@ -58,6 +69,140 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: Builder) {
       ),
     );
   };
+
+  if (room.kind === "levelFun") {
+    b.plane(width, length, x, 0, z, mats.funCarpet, -Math.PI / 2);
+    let murals = 0;
+    let table = false;
+    const offset = hash(data.x, data.z, 6113) % mats.funMurals.length;
+    for (let cz = room.z; cz < room.z + room.length; cz++)
+      for (let cx = room.x; cx < room.x + room.width; cx++) {
+        const bits = data.cells[cz * CHUNK + cx];
+        for (const [bit, dx, dz, angle] of [
+          [N, 0, -1, 0],
+          [E, 1, 0, -Math.PI / 2],
+          [S, 0, 1, Math.PI],
+          [W, -1, 0, Math.PI / 2],
+        ]) {
+          if (inLandmark(room, cx + dx, cz + dz)) continue;
+          const px = (cx + 0.5 + dx * 0.5) * CELL;
+          const pz = (cz + 0.5 + dz * 0.5) * CELL;
+          if (bits & bit) {
+            // Frame the open maze edges as broad doorways, with real Rapier
+            // solids and a 2m-wide central walking lane through every gate.
+            const jamb = (CELL - 2) / 2;
+            for (const side of [-1, 1]) {
+              const jx = px + (dz ? (side * (CELL + 2)) / 4 : 0);
+              const jz = pz + (dx ? (side * (CELL + 2)) / 4 : 0);
+              solid(
+                dx ? 0.18 : jamb,
+                room.height,
+                dx ? jamb : 0.18,
+                jx,
+                room.height / 2,
+                jz,
+                mats.funWall,
+              );
+              b.box(
+                dx ? 0.23 : jamb,
+                0.21,
+                dx ? jamb : 0.23,
+                jx,
+                0.105,
+                jz,
+                mats.funTrim,
+              );
+            }
+            solid(
+              dx ? 0.18 : 2,
+              room.height - 2.5,
+              dx ? 2 : 0.18,
+              px,
+              (room.height + 2.5) / 2,
+              pz,
+              mats.funWall,
+            );
+            b.plane(
+              CELL,
+              0.085,
+              px - dx * 0.113,
+              room.height - 0.28,
+              pz - dz * 0.113,
+              mats.funStripe,
+              0,
+              angle,
+            );
+            continue;
+          }
+          // Skin only the room-facing side of an existing closed wall. Its
+          // reverse remains the office finish; every maze entrance stays open.
+          b.plane(
+            CELL,
+            room.height,
+            px - dx * 0.101,
+            room.height / 2,
+            pz - dz * 0.101,
+            mats.funWall,
+            0,
+            angle,
+          );
+          b.plane(
+            CELL,
+            0.21,
+            px - dx * 0.126,
+            0.105,
+            pz - dz * 0.126,
+            mats.funTrim,
+            0,
+            angle,
+          );
+          b.plane(
+            CELL,
+            0.085,
+            px - dx * 0.113,
+            room.height - 0.28,
+            pz - dz * 0.113,
+            mats.funStripe,
+            0,
+            angle,
+          );
+          // Leave breathing room between life-sized painted characters.
+          if (murals < 6) {
+            b.plane(
+              2.85,
+              2.85,
+              px - dx * 0.117,
+              1.48,
+              pz - dz * 0.117,
+              mats.funMurals[(murals + offset) % mats.funMurals.length],
+              0,
+              angle,
+            );
+            murals++;
+          }
+          if (!table) {
+            const tx = px - dx * 0.55,
+              tz = pz - dz * 0.55;
+            const tw = dx ? 0.62 : 2.8,
+              td = dx ? 2.8 : 0.62;
+            solid(tw, 0.09, td, tx, 0.74, tz, mats.wood);
+            for (const sx of [-1, 1])
+              for (const sz of [-1, 1])
+                solid(
+                  0.045,
+                  0.695,
+                  0.045,
+                  tx + sx * (tw / 2 - 0.12),
+                  0.3475,
+                  tz + sz * (td / 2 - 0.12),
+                  mats.metal,
+                );
+            table = true;
+          }
+        }
+      }
+    return;
+  }
 
   if (room.kind === "corridor") {
     // Repeated shallow ribs reveal the uninterrupted 172.8m perspective. Every

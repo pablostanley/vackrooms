@@ -41,6 +41,8 @@ export function roomSoundAt(
   if (!cell) return "office";
   if (inLandmark(cell.chunk.landmark, cell.cx, cell.cz)) {
     switch (cell.chunk.landmark.kind) {
+      case "levelFun":
+        return "office";
       case "poolroom":
         return "pool";
       case "corridor":
