@@ -59,11 +59,11 @@ test("every tape has a reachable first landmark and a bounded recurring variety"
         assert.deepEqual(data.landmark, generateChunk(x, z, seed, 33).landmark);
         kinds.add(data.landmark.kind);
       }
-      assert.equal(
-        kinds.size,
-        4,
-        "each 12-section walk crosses all four landmark families",
-      );
+      for (const kind of ["lobby", "foodCourt", "poolroom", "corridor"])
+        assert.ok(
+          kinds.has(kind),
+          "each 12-section walk keeps the four familiar landmarks",
+        );
     }
   }
 });
@@ -97,7 +97,7 @@ test("long corridors continue straight across three sections and regenerated gat
 test("all boundary gates stay connected around real landmark and furniture obstacles", () => {
   const mats = headlessMaterials();
   try {
-    for (const seed of [1, 2, 3, 8]) {
+    for (const seed of [1, 2, 3, 8, 42]) {
       const data = generateChunk(0, 0, seed),
         section = buildSection(data, mats, 0);
       try {

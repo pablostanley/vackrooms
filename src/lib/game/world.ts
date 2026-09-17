@@ -354,19 +354,25 @@ export function buildSection(
     return false;
   }
   const basin = poolBounds(data.landmark);
+  const floorOpening =
+    basin ??
+    (data.landmark.kind === "levelFun"
+      ? {
+          x: data.landmark.x * CELL,
+          z: data.landmark.z * CELL,
+          width: data.landmark.width * CELL,
+          length: data.landmark.length * CELL,
+        }
+      : null);
   const floor = (x: number, z: number, w: number, d: number) =>
     plane(w, d, x + w / 2, 0, z + d / 2, theme.floor, -Math.PI / 2, 0, 4.8);
-  if (basin) {
-    // The water occupies a real recess; no carpet plane intersects its surface.
-    floor(0, 0, SPAN, basin.z);
-    floor(0, basin.z + basin.length, SPAN, SPAN - basin.z - basin.length);
-    floor(0, basin.z, basin.x, basin.length);
-    floor(
-      basin.x + basin.width,
-      basin.z,
-      SPAN - basin.x - basin.width,
-      basin.length,
-    );
+  if (floorOpening) {
+    // Leave one surface for inset pools and the party room's replacement carpet.
+    const { x, z, width, length } = floorOpening;
+    floor(0, 0, SPAN, z);
+    floor(0, z + length, SPAN, SPAN - z - length);
+    floor(0, z, x, length);
+    floor(x + width, z, SPAN - x - width, length);
   } else floor(0, 0, SPAN, SPAN);
   buildLandmark(data, mats, { box, plane, lights, colliders, water, group });
   if (lighting.lampCell !== null) {
@@ -420,7 +426,9 @@ export function buildSection(
           theme.wall,
         );
       const normallyLit =
-        rng() > 0.14 || (data.x === 0 && data.z === 0 && cx === 2);
+        rng() > 0.14 ||
+        (data.x === 0 && data.z === 0 && cx === 2) ||
+        (landmark && data.landmark.kind === "levelFun");
       const at = cz * CHUNK + cx;
       const lit = lighting.cells.has(at)
         ? lighting.fixtures.has(at)
