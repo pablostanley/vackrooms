@@ -57,7 +57,7 @@ test("every tape has a reachable first landmark and a bounded recurring variety"
       for (let x = -6; x < 6; x++) {
         const data = generateChunk(x, z, seed);
         assert.deepEqual(data.landmark, generateChunk(x, z, seed, 33).landmark);
-        kinds.add(data.landmark.kind);
+        if (data.landmark.kind !== "courtyard") kinds.add(data.landmark.kind);
       }
       for (const kind of ["lobby", "foodCourt", "poolroom", "corridor"])
         assert.ok(

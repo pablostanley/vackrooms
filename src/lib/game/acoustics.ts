@@ -60,7 +60,8 @@ export function hardFloorAt(chunks: Map<string, ChunkData>, p: SoundPosition) {
   // Only these landmarks replace the base carpet with a poured floor.
   return (
     cell.chunk.landmark.kind === "poolroom" ||
-    cell.chunk.landmark.kind === "foodCourt"
+    cell.chunk.landmark.kind === "foodCourt" ||
+    cell.chunk.landmark.kind === "courtyard"
   );
 }
 

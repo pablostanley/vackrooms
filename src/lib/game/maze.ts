@@ -14,11 +14,7 @@ export const directions = [
 ];
 export type Theme = "offices" | "service" | "pool" | "archive";
 export type LandmarkKind =
-  | "lobby"
-  | "foodCourt"
-  | "poolroom"
-  | "corridor"
-  | "levelFun";
+  "lobby" | "foodCourt" | "poolroom" | "corridor" | "levelFun" | "courtyard";
 export interface Landmark {
   kind: LandmarkKind;
   x: number;
@@ -26,6 +22,7 @@ export interface Landmark {
   width: number;
   length: number;
   height: number;
+  courtyard?: "ground" | "overlook";
 }
 export interface PoolBounds {
   x: number;
@@ -45,6 +42,29 @@ const modulo = (n: number, size: number) => ((n % size) + size) % size;
 
 /** A seeded cadence, rather than independent dice rolls with unbounded droughts. */
 export function landmarkKind(x: number, z: number, seed: number): LandmarkKind {
+  const kind = ordinaryLandmarkKind(x, z, seed);
+  if (kind === "corridor" || kind === "levelFun") return kind;
+  // One courtyard per 5x5 district, separated by at least two ordinary sections.
+  // Keep corridor runs and the rare party-room cadence intact.
+  const bx = Math.floor(x / 5),
+    bz = Math.floor(z / 5);
+  const candidates: [number, number][] = [];
+  for (let dz = 1; dz <= 3; dz++)
+    for (let dx = 1; dx <= 3; dx++) {
+      const cx = bx * 5 + dx,
+        cz = bz * 5 + dz;
+      const existing = ordinaryLandmarkKind(cx, cz, seed);
+      if (existing !== "corridor" && existing !== "levelFun")
+        candidates.push([cx, cz]);
+    }
+  const site = candidates[hash(bx, bz, seed + 941) % candidates.length];
+  return site[0] === x && site[1] === z ? "courtyard" : kind;
+}
+function ordinaryLandmarkKind(
+  x: number,
+  z: number,
+  seed: number,
+): LandmarkKind {
   const phase = hash(0, 0, seed + 907);
   // Three adjacent sections share a corridor. Its two internal gates stay aligned
   // even when unseen office branches regenerate at a different depth.
@@ -71,6 +91,18 @@ export function inLandmark(room: Landmark, x: number, z: number) {
 }
 export function ceilingAt(data: ChunkData, x: number, z: number) {
   return inLandmark(data.landmark, x, z) ? data.landmark.height : HEIGHT;
+}
+export const COURTYARD_STOREY = 4.2;
+/** The gallery remains at maze level; only the inaccessible patio is lower. */
+export function courtyardBounds(room: Landmark) {
+  if (room.kind !== "courtyard") return null;
+  return {
+    x: (room.x + 1) * CELL,
+    z: (room.z + 1) * CELL,
+    width: (room.width - 2) * CELL,
+    length: (room.length - 2) * CELL,
+    floorY: room.courtyard === "overlook" ? -3 * COURTYARD_STOREY : 0,
+  };
 }
 export function poolBounds(room: Landmark): PoolBounds | null {
   if (room.kind !== "poolroom") return null;
@@ -187,14 +219,31 @@ export function generateChunk(
             length: 2 + Math.floor(shape() * 2),
             height: HEIGHT,
           }
-        : {
-            kind,
-            x: 4,
-            z: 2,
-            width: 7,
-            length: 8 + Math.floor(shape() * 2),
-            height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
-          };
+        : kind === "courtyard"
+          ? {
+              kind,
+              x: 3,
+              z: 2,
+              width: 8,
+              length: 9,
+              courtyard: modulo(
+                Math.floor(x / 5) + Math.floor(z / 5) + hash(0, 0, seed + 947),
+                2,
+              )
+                ? "overlook"
+                : "ground",
+              height: 0,
+            }
+          : {
+              kind,
+              x: 4,
+              z: 2,
+              width: 7,
+              length: 8 + Math.floor(shape() * 2),
+              height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
+            };
+  if (kind === "courtyard")
+    landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
   // Only remove walls: all original maze connections and shared gates survive.
   for (let rz = landmark.z; rz < landmark.z + landmark.length; rz++)
     for (let rx = landmark.x; rx < landmark.x + landmark.width; rx++) {
@@ -316,6 +365,19 @@ export function canStand(
   const cell = cellAt(chunks, x, z);
   if (!cell) return false;
   const basin = poolBounds(cell.chunk.landmark);
+  const court = courtyardBounds(cell.chunk.landmark);
+  if (court && court.floorY < 0) {
+    const px = x - cell.chunk.x * SPAN,
+      pz = z - cell.chunk.z * SPAN;
+    const pad = radius + 0.16;
+    if (
+      px > court.x - pad &&
+      px < court.x + court.width + pad &&
+      pz > court.z - pad &&
+      pz < court.z + court.length + pad
+    )
+      return false;
+  }
   if (basin) {
     const px = x - cell.chunk.x * SPAN,
       pz = z - cell.chunk.z * SPAN;
