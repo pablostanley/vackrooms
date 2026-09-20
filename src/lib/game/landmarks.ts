@@ -13,6 +13,7 @@ import {
 } from "./maze";
 import type { Materials } from "./materials";
 import { buildCourtyard } from "./courtyard";
+import { buildNeighborhood } from "./neighborhood";
 
 export interface LandmarkBuilder {
   box: (
@@ -55,6 +56,10 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuild
   b.group.userData.landmark = room;
   if (room.kind === "courtyard") {
     buildCourtyard(data, mats, b);
+    return;
+  }
+  if (room.kind === "neighborhood") {
+    buildNeighborhood(data, mats, b);
     return;
   }
   const solid = (

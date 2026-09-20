@@ -30,6 +30,12 @@ export function headlessMaterials(): Materials {
     "courtyardCurtain",
     "courtyardWarm",
     "courtyardGlass",
+    "streetWall",
+    "streetAsphalt",
+    "streetGrass",
+    "streetRoof",
+    "streetTrim",
+    "streetHedge",
   ] as const;
   const standard = Object.fromEntries(
     standardNames.map((name) => [name, new THREE.MeshStandardMaterial()]),
@@ -44,16 +50,22 @@ export function headlessMaterials(): Materials {
     { length: 3 },
     () => new THREE.MeshStandardMaterial({ alphaTest: 0.5 }),
   );
+  const streetSiding = Array.from(
+    { length: 5 },
+    () => new THREE.MeshStandardMaterial(),
+  );
   return {
     ...standard,
     ...basic,
     funMurals,
+    streetSiding,
     forTheme: () => ({ wall: standard.wall, floor: standard.floor }),
     dispose: () => {
       for (const material of [
         ...Object.values(standard),
         ...Object.values(basic),
         ...funMurals,
+        ...streetSiding,
       ])
         material.dispose();
     },
