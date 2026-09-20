@@ -5,16 +5,25 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 const mono = Geist_Mono({ variable: "--font-mono", subsets: ["latin"] });
+const social = {
+  title: "vackrooms",
+  description:
+    "Backrooms, made with vgpu and three.js. You’ve been here before. You just don’t remember when.",
+};
 export const metadata: Metadata = {
+  metadataBase: new URL("https://vackrooms.vercel.app"),
   title: "vackrooms — You’ve been here before.",
   description:
-    "An endless first-person backrooms labyrinth. Oppressive fluorescent lights, forgotten rooms, and a tape that keeps rolling. Built with Next.js, Three.js, and vgpu.",
+    "A backrooms game made with vgpu and three.js. An endless first-person labyrinth of oppressive fluorescent lights, forgotten rooms, and a tape that keeps rolling.",
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "vackrooms.",
-    description: "You’ve been here before. You just don’t remember when.",
+    ...social,
+    url: "/",
+    siteName: "vackrooms",
     type: "website",
+    locale: "en_US",
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", ...social },
 };
 export const viewport: Viewport = {
   width: "device-width",
