@@ -6,6 +6,8 @@ An endless first-person backrooms game, presented as a damaged VHS recording fro
 
 [![A few seconds of vackrooms: a poolroom, a Level Fun party room, a sealed courtyard, and the creature](docs/media/preview.gif)](https://vackrooms.vercel.app)
 
+Want sound? [Watch the one-minute tape](docs/media/vackrooms-tape.mp4).
+
 Built with Next.js, Three.js, Rapier, and [vgpu](https://github.com/vercel-labs/vgpu). Runs on WebGPU, with a WebGL2 fallback. No accounts, no backend, no downloaded level data.
 
 ## What's in there
