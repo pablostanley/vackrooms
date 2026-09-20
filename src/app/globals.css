@@ -293,17 +293,23 @@ button:disabled {
   margin-top: calc(var(--hud-unit) * -0.875);
   letter-spacing: calc(var(--hud-unit) * 0.125);
 }
+.credits {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--hud-unit) * 0.875);
+}
 .credit {
-  font-size: calc(var(--hud-unit) * 1);
+  font-size: calc(var(--hud-unit) * 1.5);
   color: inherit;
   text-decoration: none;
-  opacity: 0.45;
+  text-shadow: var(--osd-shadow);
   letter-spacing: calc(var(--hud-unit) * 0.125);
-  transition: opacity 0.2s;
 }
 .credit:hover,
 .credit:focus-visible {
-  opacity: 0.9;
+  text-decoration: underline;
+  text-underline-offset: calc(var(--hud-unit) * 0.375);
 }
 .mobile-hint {
   display: none;
