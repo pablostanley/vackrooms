@@ -1,5 +1,7 @@
 Always commit and push changes. Prefer a concise pull request for review.
 
+Deployment: the Vercel project is `pablostanley/vackrooms` in Pabs' projects, production at vackrooms.vercel.app. Only share and verify `*-pablostanley.vercel.app` preview links, never `playground-vercel.tools`. A stale, inaccessible project in `vercel-internal-playground` is still git-connected to this repo; the `ignoreCommand` in `vercel.json` cancels its builds. Keep that guard until that project is deleted or disconnected.
+
 Use the installed vgpu documentation as the API authority. Validate authored WGSL using `npm run check:shaders`; a Next.js build does not validate shaders. Keep gameplay client-side, deterministic by tape seed, and bounded in resident sections. Verify connectivity and matching boundary gates when changing generation. Use the real browser to check visual or interaction changes. Main office rooms should feel oppressively fluorescent and bright; the optional flashlight starts off.
 
 <!-- BEGIN:nextjs-agent-rules -->
