@@ -279,14 +279,24 @@ export default function Backrooms() {
               </p>
             </>
           )}
-          <a
-            className="credit"
-            href="https://pablostanley.com"
-            target="_blank"
-            rel="noreferrer"
-          >
-            MADE BY PABLO STANLEY
-          </a>
+          <div className="credits">
+            <a
+              className="credit"
+              href="https://pablostanley.com"
+              target="_blank"
+              rel="noreferrer"
+            >
+              MADE BY PABLO STANLEY
+            </a>
+            <a
+              className="credit"
+              href="https://github.com/pablostanley/vackrooms"
+              target="_blank"
+              rel="noreferrer"
+            >
+              SOURCE ON GITHUB
+            </a>
+          </div>
         </div>
       )}
       {error && (
