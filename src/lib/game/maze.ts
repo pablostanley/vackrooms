@@ -14,7 +14,13 @@ export const directions = [
 ];
 export type Theme = "offices" | "service" | "pool" | "archive";
 export type LandmarkKind =
-  "lobby" | "foodCourt" | "poolroom" | "corridor" | "levelFun" | "courtyard";
+  | "lobby"
+  | "foodCourt"
+  | "poolroom"
+  | "corridor"
+  | "levelFun"
+  | "courtyard"
+  | "neighborhood";
 export interface Landmark {
   kind: LandmarkKind;
   x: number;
@@ -42,6 +48,39 @@ const modulo = (n: number, size: number) => ((n % size) + size) % size;
 
 /** A seeded cadence, rather than independent dice rolls with unbounded droughts. */
 export function landmarkKind(x: number, z: number, seed: number): LandmarkKind {
+  const kind = familiarLandmarkKind(x, z, seed);
+  if (kind === "corridor" || kind === "levelFun" || kind === "courtyard")
+    return kind;
+  // One indoor street per 6x6 district: sporadic, and never the opening section.
+  const bx = Math.floor(x / 6),
+    bz = Math.floor(z / 6);
+  const candidates: [number, number][] = [];
+  for (let dz = 1; dz <= 4; dz++)
+    for (let dx = 2; dx <= 3; dx++) {
+      const cx = bx * 6 + dx,
+        cz = bz * 6 + dz;
+      // The ordinary kinds repeat every three sections. A street only takes a
+      // slot whose twins on both sides survive, and those columns never host a
+      // street themselves, so every 12-section walk keeps the familiar rooms.
+      const existing = familiarLandmarkKind(cx, cz, seed);
+      if (
+        (existing === "lobby" ||
+          existing === "foodCourt" ||
+          existing === "poolroom") &&
+        familiarLandmarkKind(cx - 3, cz, seed) === existing &&
+        familiarLandmarkKind(cx + 3, cz, seed) === existing
+      )
+        candidates.push([cx, cz]);
+    }
+  if (!candidates.length) return kind;
+  const site = candidates[hash(bx, bz, seed + 1291) % candidates.length];
+  return site[0] === x && site[1] === z ? "neighborhood" : kind;
+}
+function familiarLandmarkKind(
+  x: number,
+  z: number,
+  seed: number,
+): LandmarkKind {
   const kind = ordinaryLandmarkKind(x, z, seed);
   if (kind === "corridor" || kind === "levelFun") return kind;
   // One courtyard per 5x5 district, separated by at least two ordinary sections.
@@ -234,7 +273,10 @@ export function generateChunk(
                 : "ground",
               height: 0,
             }
-          : {
+          : kind === "neighborhood"
+            ? // A long street: house fronts occupy the two outer columns.
+              { kind, x: 3, z: 1, width: 6, length: 10, height: 9.6 }
+            : {
               kind,
               x: 4,
               z: 2,
@@ -278,10 +320,11 @@ export function generateChunk(
     if (kind === "corridor") approach(2, 4, 2, rz);
     else approach(2, 2, rx, rz);
   }
-  if (kind === "levelFun") {
+  if (kind === "levelFun" || kind === "neighborhood") {
     // Give the party room actual walls. Close only redundant perimeter edges:
     // never sever an office branch, alter a section gate, or lose the approach
-    // from spawn. Two opposite entrances are always retained.
+    // from spawn. Two opposite entrances are always retained. The street also
+    // keeps a doorway at each end, and its sealed sides become house lots.
     for (let cz = rz; cz <= bottom; cz++)
       for (let cx = rx; cx <= right; cx++)
         for (const d of directions) {
@@ -295,6 +338,12 @@ export function generateChunk(
           )
             continue;
           if (d.bit === E && cz === Math.max(rz, Math.min(bottom, east)))
+            continue;
+          if (
+            kind === "neighborhood" &&
+            ((d.bit === N && cx === Math.max(rx, Math.min(right, north))) ||
+              (d.bit === S && cx === Math.max(rx, Math.min(right, south))))
+          )
             continue;
           const at = cz * CHUNK + cx,
             next = nz * CHUNK + nx;

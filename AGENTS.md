@@ -12,6 +12,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-Visual direction: bright fluorescent illumination with soft spatial shadows; sickly ochre, cream, or greenish yellow walls; restrained damp brown carpet; no natural blue hues. Avoid heavy grunge, contrasty lighting, and blacked-out main offices. Use Three.js PointerLockControls and Rapier character movement instead of custom player collision.
+Visual direction: bright fluorescent illumination with soft spatial shadows; sickly ochre, cream, or greenish yellow walls; restrained damp brown carpet; no natural blue hues. The one exception is the rare indoor neighborhood street, whose warehouse walls are painted sky blue. Avoid heavy grunge, contrasty lighting, and blacked-out main offices. Use Three.js PointerLockControls and Rapier character movement instead of custom player collision.
 
 Interface: only the VHS camcorder HUD, no extra header, landing-page UI, promotional text, or commercial logos. Use Geist Mono for the HUD and Geist Sans for supporting settings text. No other font families. Scale HUD type, spacing, and marks together with the viewport. Keep interaction hints concise and contextual. Do not add tiled grid wall or floor themes.

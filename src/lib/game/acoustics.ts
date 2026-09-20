@@ -61,7 +61,8 @@ export function hardFloorAt(chunks: Map<string, ChunkData>, p: SoundPosition) {
   return (
     cell.chunk.landmark.kind === "poolroom" ||
     cell.chunk.landmark.kind === "foodCourt" ||
-    cell.chunk.landmark.kind === "courtyard"
+    cell.chunk.landmark.kind === "courtyard" ||
+    cell.chunk.landmark.kind === "neighborhood"
   );
 }
 

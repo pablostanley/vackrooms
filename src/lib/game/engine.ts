@@ -3,7 +3,7 @@ import { PointerLockControls } from "three/addons/controls/PointerLockControls.j
 import { CharacterMotor } from "./physics";
 import { BackroomsAudio } from "./audio";
 import { footstepSurfaceAt } from "./acoustics";
-import { CELL, generateChunk, SPAN, type ChunkData } from "./maze";
+import { CELL, generateChunk, landmarkKind, SPAN, type ChunkData } from "./maze";
 import { createMaterials } from "./materials";
 import { createRenderer, type GameRenderer } from "./renderer";
 import { TapeOverlay } from "./tape-overlay";
@@ -166,11 +166,31 @@ export class BackroomsEngine {
     this.shadows = new ShadowCache(this.lights);
     this.scene.add(this.flashlight, this.flashlight.target, ...this.entities);
     this.camera.rotation.order = "YXZ";
+    if (process.env.NODE_ENV === "development") this.visitLandmark();
     this.stream();
     this.updateLights();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     void this.initialize();
+  }
+  /** Development only: `?visit=neighborhood` begins inside the nearest one. */
+  private visitLandmark() {
+    const kind = new URLSearchParams(location.search).get("visit");
+    if (!kind) return;
+    for (let ring = 1; ring < 14; ring++)
+      for (let z = -ring; z <= ring; z++)
+        for (let x = -ring; x <= ring; x++) {
+          if (Math.max(Math.abs(x), Math.abs(z)) !== ring) continue;
+          if (landmarkKind(x, z, this.seed) !== kind) continue;
+          const room = generateChunk(x, z, this.seed).landmark;
+          this.position.set(
+            x * SPAN + (room.x + room.width / 2) * CELL,
+            1.66,
+            z * SPAN + (room.z + 0.5) * CELL,
+          );
+          this.yaw = Math.PI;
+          return;
+        }
   }
   private async initialize() {
     try {

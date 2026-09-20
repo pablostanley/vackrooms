@@ -233,11 +233,59 @@ export function createMaterials() {
     color: "#a2ae94", transparent: true, opacity: 0.1,
     roughness: 0.18, metalness: 0.15, depthWrite: false, side: THREE.DoubleSide,
   });
+  // The indoor street: painted sky walls, lap siding, shingles, and lawn.
+  const streetWall = new THREE.MeshStandardMaterial({
+    ...plaster, color: "#86bdea", roughness: 0.95,
+    // The warm fixtures would otherwise pull painted sky toward teal.
+    emissive: "#2f7fd0", emissiveIntensity: 0.22,
+  });
+  const streetAsphalt = new THREE.MeshStandardMaterial({
+    ...plaster, color: "#75736c", roughness: 0.97,
+  });
+  const streetGrass = new THREE.MeshStandardMaterial({
+    bumpMap: carpet.bumpMap, roughnessMap: carpet.roughnessMap,
+    bumpScale: 0.009, color: "#5c8a3c", roughness: 1,
+  });
+  const streetRoof = new THREE.MeshStandardMaterial({
+    color: "#7a7973", roughness: 0.96, side: THREE.DoubleSide,
+  });
+  const streetTrim = new THREE.MeshStandardMaterial({
+    color: "#efeee6", roughness: 0.8,
+  });
+  const streetHedge = new THREE.MeshStandardMaterial({
+    bumpMap: carpet.bumpMap, roughnessMap: carpet.roughnessMap,
+    bumpScale: 0.02, color: "#2f4a2b", roughness: 1,
+  });
+  const lapMap = texture((ctx, s) => {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, s, s);
+    // Four boards per tile; each casts a thin shadow onto the one below.
+    for (let board = 0; board < 4; board++) {
+      const y = (board * s) / 4;
+      const g = ctx.createLinearGradient(0, y, 0, y + s / 4);
+      g.addColorStop(0, "rgba(0,0,0,.34)");
+      g.addColorStop(0.09, "rgba(0,0,0,.1)");
+      g.addColorStop(0.2, "rgba(0,0,0,0)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y, s, s / 4);
+    }
+    grain(ctx, s, 7, 389);
+  }, 256);
+  const streetSiding = ["#e9e6d8", "#d9c98a", "#9aa3a8", "#5f7f9e", "#a9b48e"].map(
+    (color) => {
+      const siding = new THREE.MeshStandardMaterial({
+        map: lapMap, color, roughness: 0.9,
+      });
+      siding.userData.surfaceMeters = 0.56;
+      return siding;
+    },
+  );
   for (const [kind, materials] of [
     ["wallpaper", [wall, service, archive]],
     ["carpet", [floor]],
     ["ceiling", [top]],
-    ["plaster", [tileWall, tileFloor, cream, funWall, courtyardWall, courtyardPaving]],
+    ["plaster", [tileWall, tileFloor, cream, funWall, courtyardWall, courtyardPaving, streetWall, streetAsphalt]],
     ["wood", [wood, courtyardWood]],
   ] as const)
     for (const material of materials) {
@@ -250,6 +298,9 @@ export function createMaterials() {
   configureSurfaceSampling(upholstery);
   courtyardGrass.userData.surfaceMeters = 1.2;
   configureSurfaceSampling(courtyardGrass);
+  streetGrass.userData.surfaceMeters = streetHedge.userData.surfaceMeters = 1.2;
+  configureSurfaceSampling(streetGrass);
+  configureSurfaceSampling(streetHedge);
   return {
     wall,
     floor,
@@ -283,6 +334,13 @@ export function createMaterials() {
     courtyardCurtain,
     courtyardWarm,
     courtyardGlass,
+    streetWall,
+    streetAsphalt,
+    streetGrass,
+    streetRoof,
+    streetTrim,
+    streetHedge,
+    streetSiding,
     forTheme: (theme: Theme) => ({
       wall:
         theme === "service" ? service : theme === "archive" ? archive : wall,
@@ -325,6 +383,13 @@ export function createMaterials() {
         courtyardCurtain,
         courtyardWarm,
         courtyardGlass,
+        streetWall,
+        streetAsphalt,
+        streetGrass,
+        streetRoof,
+        streetTrim,
+        streetHedge,
+        ...streetSiding,
       ].forEach((m) => m.dispose());
     },
   };
