@@ -1,119 +1,78 @@
 # vackrooms
 
-An endless first-person backrooms game, presented as a damaged VHS recording. Built with Next.js App Router, Three.js, Rapier, and [vgpu](https://github.com/vercel-labs/vgpu).
+An endless first-person backrooms game, presented as a damaged VHS recording from June 18, 1994. Everything you see is generated in your browser from a tape seed: the office maze, the furniture, the poolrooms, the thing that follows you.
 
-## Run
+**[Play it at vackrooms.vercel.app](https://vackrooms.vercel.app)**
+
+[![A few seconds of vackrooms: a poolroom, a Level Fun party room, a sealed courtyard, and the creature](docs/media/preview.gif)](https://vackrooms.vercel.app)
+
+Built with Next.js, Three.js, Rapier, and [vgpu](https://github.com/vercel-labs/vgpu). Runs on WebGPU, with a WebGL2 fallback. No accounts, no backend, no downloaded level data.
+
+## What's in there
+
+| | |
+| --- | --- |
+| ![A full-sized indoor pool under fluorescent ceiling panels](docs/media/poolrooms.jpg) | ![A tall, thin creature with a cone-shaped head walking beside a pool](docs/media/creature.jpg) |
+| **Poolrooms.** Recessed 25×16m basins with WGSL water, caustics, and wet footsteps. | **Something else is in here.** It stalks, freezes when watched, and runs when you do. |
+| ![A beige CRT monitor showing a live website inside a Netscape-style browser](docs/media/computer.jpg) | ![A party room with red star-patterned carpet and cartoon mascots on the walls](docs/media/level-fun.jpg) |
+| **Working computers.** Chunky 90s CRTs that load real websites, with a dial-up handshake. | **Level Fun.** Rare seeded party rooms. |
+| ![A sealed courtyard surrounded by windowed walls, seen from the office maze](docs/media/courtyard.jpg) | ![A shuttered food court with a long empty floor](docs/media/food-court.jpg) |
+| **Covered courtyards.** Sealed upper-floor overlooks you can never quite reach. | **Landmarks.** Lobbies, food courts, and 170m corridors between the offices. |
+
+- **Endless and seeded.** Every visit draws a new tape. Add `?tape=199307` to the URL to replay a specific maze, or use Cassette settings → COPY TAPE LINK to share yours.
+- **Rooms change when you are not looking.** Unseen sections mutate; landmarks stay put.
+- **Noclip.** Hold E on an unstable wall to fall to a deeper level.
+- **Spatial sound.** HRTF panning, traced wall occlusion, per-room reverb, and footsteps that are sometimes not yours.
+- **VHS pipeline.** Tape warp, tracking errors, chroma offset, bloom, and grain, all on the GPU.
+
+## Run it locally
+
+You need Node 20 or newer (CI uses 24).
 
 ```sh
+git clone https://github.com/pablostanley/vackrooms.git
+cd vackrooms
 npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. A WebGPU-capable browser with hardware acceleration runs the vgpu pipeline. WebGL2 browsers use a GLSL compatibility pass. No service keys or downloaded assets are needed; materials, architecture, and audio are generated locally.
+Open http://localhost:3000 and click Record. A WebGPU browser with hardware acceleration gets the vgpu pipeline; WebGL2 browsers get a GLSL compatibility pass. There are no environment variables or service keys to set up.
 
 ## Controls
 
-| Input                        | Action                             |
-| ---------------------------- | ---------------------------------- |
-| WASD / arrow keys            | Walk                               |
-| Mouse / click and drag       | Look                               |
-| Shift                        | Run                                |
-| Space                        | Jump onto low objects              |
+| Input                        | Action                                |
+| ---------------------------- | ------------------------------------- |
+| WASD / arrow keys            | Walk                                  |
+| Mouse / click and drag       | Look                                  |
+| Shift                        | Run                                   |
+| Space                        | Jump onto low objects                 |
 | Space again while airborne   | Bigger double jump (once per landing) |
-| F                            | Toggle flashlight (off by default) |
-| Hold E near an unstable wall | Noclip to a deeper level           |
-| E near a computer            | Focus its live browser             |
-| Escape                       | Leave computer / pause             |
+| F                            | Toggle flashlight (off by default)    |
+| Hold E near an unstable wall | Noclip to a deeper level              |
+| E near a computer            | Focus its live browser                |
+| Escape                       | Leave computer / pause                |
 
-Touch devices have a movement stick, swipe-to-look, a Jump button (tap again in the air for the boost), and contextual action buttons. The unbranded, translucent camcorder HUD uses Geist Mono; supporting setup text uses Geist Sans. One viewport-based scale controls the HUD type, spacing, icons, and viewfinder marks. Main rooms use sickly-yellow fluorescent illumination with soft cast shadows and restrained damp-brown floors. A single compact icon row exposes sound, flashlight, pause, and cassette settings. The date reads June 18, 1994; the simulated battery starts at 22% and drains with recording time. Setup includes sound, sensitivity, tape damage, and a steady camera option. System reduced-motion preferences are respected. The sound starts with the user's first interaction and pauses with the game.
+Touch devices get a movement stick, swipe-to-look, and contextual buttons. Standard Xbox and PlayStation-style gamepads work too; the full mapping is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#jumping-settings-and-gamepads).
 
-## Jump behavior
-
-Space jumps immediately; another fresh press while airborne adds one stronger upward boost. A quick double tap works without delaying the first jump or requiring a double-click timing window. Holding Space does not repeat. Forward plus jump gets onto low chairs, sofas, and pool coping; higher props require the boost and enough ceiling clearance. Walk forward up a slide chute to reach its platform, stop anywhere on the slope, and walk back down. Floor slides leave standing headroom under office ceilings. Walking off an edge falls naturally. Walking camera sway and footsteps stop in the air.
-
-The motor allows 100ms of grace after leaving an edge and buffers presses up to 120ms before landing. Physics sweeps run at most 1/120s per step; the normal jump rises about 0.87m and the immediate boost about 2.15m, with later boosts reaching higher. Pause, computer entry, and teleport discard queued jump presses.
-
-References: [Minecraft's Space / forward-and-jump controls](https://edusupport.minecraft.net/hc/en-us/articles/360047116832-Minecraft-keyboard-and-mouse-controls), [Jumping Flash's second airborne press](https://secure.cdn.us.playstation.com/manuals/classic/games/jumping-flash-manual-en.pdf), and [Fortnite's forward-and-jump approach to ledges](https://dev.epicgames.com/documentation/en-us/fortnite/mantle). These inform the controls; the heights and timing forgiveness are tuned for this game's furniture and pool depth. This implements physical jumping onto surfaces, without a separate grab-and-pull mantle animation.
-
-Sound volume, look sensitivity, tape damage, and steady camera are saved automatically in this browser on this device, including across tapes. Mute remembers the previous nonzero volume, even after a muted reload or setting the slider to zero. System reduced motion supplies the initial comfort default; a saved choice takes precedence. These preferences never leave the browser. If local storage is unavailable, controls still work for the current session.
-
-Standard-mapped Xbox and PlayStation-style controllers are supported. Press a controller button to make it available to the browser, then release the controls before playing. Click Record once to enable browser audio.
-
-| Gamepad input | Action |
-| --- | --- |
-| Left / right stick | Walk / look |
-| Hold L3 or RT / R2 | Run |
-| A / × | Record, use computer, or hold to noclip |
-| Y / △ | Flashlight |
-| X / □ | Mute / restore volume |
-| B / ○ | Leave computer / pause / close settings |
-| Menu / Options | Record / pause / close settings |
-| View / Share | Open / close settings |
-| D-pad up / down | Focus a settings control |
-| D-pad left / right; A / × | Adjust a slider; activate a button or checkbox |
-
-Stick input has a radial dead zone and uses the saved look sensitivity. Disconnecting pauses recording; reconnecting or returning from another tab requires neutral controls before input resumes. Computer websites still use mouse, keyboard, or touch. The camcorder row keeps its original four controls and fixed dimensions.
+Sound, look sensitivity, tape damage, and a steady-camera comfort option live in the cassette settings and are saved in your browser only. System reduced-motion preferences are respected.
 
 ## How it works
 
-- `src/lib/game/maze.ts`: seeded, connected maze sections. Shared boundary hashes keep gates aligned across streaming and regeneration. A spanning tree guarantees a path through every room; additional openings create nonsensical office spaces and loops.
-- `src/lib/game/landmarks.ts`: one large landmark in every 57.6m section, with ordinary offices between discoveries. Empty lobbies have 8.4m ceilings; shuttered food courts have only two tables; pool halls contain recessed 25×16m basins and continuous dry decks. Three aligned sections form 172.8m corridors. Landmark families and footprints survive unseen mutations, while the surrounding office maze changes.
-- `src/lib/game/furniture-models.ts`: sofas, tables, lamps, slides, spring horses, alphabet blocks, and chairs, built from batched procedural geometry.
-- `src/lib/game/computer-models.ts`: three procedural 90s workstations: laminate office desk with a desktop PC, walnut cart with speakers and a tower, and a simple wood hutch. All use real chunky CRT geometry.
-- `src/lib/game/computer-screens.ts`: live HTTPS iframes in CSS3D, with Netscape Navigator / Internet Explorer inspired browser chrome. At most two live screens; visibility rays hide glass behind walls and furniture, and distance/section eviction releases pages. Focus flattens the same DOM projection for reliable native iframe clicks.
-- `src/lib/game/computer-crt.ts` and `src/shaders/crt.wgsl`: vgpu renders shared static curvature, raster, and glass maps once, then releases its GPU device. Native SVG curves the browser chrome; the glass backdrop reduces the entire live screen to a 216-color web palette with subtle, approximately 500×375 pixel sampling. Scanlines, warm phosphor color, and a soft vignette sit above the reduced signal. No website pixels are captured and no extra per-frame readback is needed. WebGPU failure keeps the palette and existing CSS glass in browsers supporting SVG backdrop filters; other browsers retain the CSS glass.
-- `src/lib/game/furniture-layout.ts`: solid attachment anchors keep every stacked chair leg embedded in the seat below. Arbitrarily rotated wall/ceiling props intersect the architecture, with reserved walking lanes through each room.
-- `src/lib/game/world.ts`: batched architecture, ceiling panels, wallpaper, furniture, faded service areas, and unstable walls. A 3×3 window of sections streams around the player and disposes sections left behind.
-- Static section meshes bake their transforms and bounds once. Computer visibility reuses the section's opaque meshes, checks all five glass samples, and stops at the first obstruction or the two-screen limit.
-- `src/lib/game/shadow-cache.ts`: fixtures keep their shadow maps when distance ranks swap. Moving creatures refresh only lights whose shadow view intersects their full animated bounds, including one final refresh to clear a departing silhouette. World changes still invalidate the maps. Gameplay renders at the display rate, standby at 30 fps, and hidden tabs stop rendering until visible again. Section streaming runs only when the player crosses a section boundary.
-- `src/lib/game/render-resolution.ts`: WebGPU/vgpu and WebGL start at high resolution (up to 2× pixel density and a 4K pixel budget). After a one-second warmup, gameplay below 50 fps over two seconds lowers the render scale through 85%, 70%, 50%, and 35%. Pauses, computer browsing, and isolated long gaps reset sampling; three consecutive frames over 250 ms also lower the scale. The lower scale stays for the session to avoid oscillation; reload starts high again. The HTML HUD and computer screens retain their native resolution.
-- `src/lib/game/engine.ts`: Three.js PointerLockControls, camera feedback, streaming, unseen room changes, noclipping, and the stalking encounter controller.
-- `src/lib/game/stalker.ts`: fixed-step, tape-seeded isolation, stalking, pursuit, search, and retreat. The first opportunity comes after 75–135 active seconds; later encounters have 105–210 seconds of isolation and skipped opportunities. Early eye contact freezes the creature for its 18–32 second stalking grace period, after which it can walk under your gaze. Running draws attention and faster pursuit; losing sight and going quiet sends it to the last perceived position. Some encounters remain sightings. Spawns and departures stay outside visible sightlines.
-- `src/lib/game/entity-navigation.ts`: bounded A* routes over resident walls, furniture bounds, and dry pool decks, with body clearance and cached grid samples invalidated by streaming or mutations. Visibility tests head, chest, shoulders, and legs against the actual camera frustum and height-aware wall/furniture segments.
-- `src/lib/game/entity-model.ts`: smooth, tapered anatomy with rounded hands/feet and softly lit dark skin. Two-bone leg solving plants the feet, lifts the return swing, and bends knees forward; arms counter-swing with a slight lag. `entity-gait.ts` shares stride length with the movement controller so pose and spatial footfalls follow actual traveled distance, with interpolated rendering between simulation ticks.
-- `src/lib/game/physics.ts`: Rapier kinematic capsule movement, wall sliding, gravity, buffered jumping, one airborne boost, automatic small steps, and floor contact. Chair and sofa collision follows individual parts so seats support the player. Slides use convex colliders from their rendered parts, preserving the ramp, platform, rails, and supports; navigation keeps its conservative bounds. Fixed colliders stream and dispose with each maze section.
-- `src/lib/game/renderer.ts`: `vgpu/three` turns exported WGSL helpers into Three.js TSL nodes using `tslExports`. A Three.js `RenderPipeline` samples the scene through `tapeWarp`, softens detail, blooms fluorescent highlights, offsets RGB channels, and grades every frame through `tapeGrade`. The GPU never copies the camera image back to the CPU.
-- `src/lib/game/tape-overlay.ts`: lightweight grain plates and scanline losses rendered over the camcorder HUD. Brief horizontal tears replace sustained wavy transitions; steady camera suppresses their motion.
-- `src/shaders/tape.wgsl`: reusable VHS warping, tracking, grain, scanlines, vignette, and anomaly distortion. The complete vgpu shader artifact preserves exports through the Next.js WGSL loader.
-- `src/shaders/water.wgsl` and `src/lib/game/pool-water.ts`: vgpu WGSL water displacement, moving caustics, view-dependent Fresnel response, and analytical reflections of the fluorescent ceiling rhythm. All resident pools share one material and animation clock; steady camera freezes water motion. WebGL uses an explicit GLSL fallback. Raised coping prevents accidental walking entry and supports jumping onto the rim. The basin has a solid floor; a double jump clears the rim back to the connected dry deck. Swimming is not implemented.
-- `src/lib/game/audio.ts`: localized fluorescent fixtures and footsteps using Web Audio HRTF panning, camera-relative listening, distance falloff, and smoothly blended room reflections. Kenney RPG Audio recordings provide normal carpet steps (`footstep00`), hard floors (`footstep04`), and running/heavy steps (`footstep08`). Six individually trimmed splashes from the supplied shallow-water recording vary without consecutive repeats. Submerged feet inside the basin use only these water clips even while running; the deck and raised rim stay dry. Recordings preload once, use restrained per-file gains and seeded pitch variation, and retain existing room echoes. Late loads never replay missed steps. Accepted jumps and double jumps play a soft cloth rustle; entering a pool plays one of the same water clips. The same pack supplies three quiet, spatial creaks for the existing sparse settling events and a dry metal click for the flashlight across all controls; its button skips the generic UI click. Four nearby fixtures play at once, with up to four fading out; transient voices are capped and disposed after use. Creature footfalls are lower and longer, follow its real position, and speed up with pursuit. Ambient false footsteps pause during encounters, with a fresh quiet interval afterward. Audio suspends on pause and clears spatial sources on descent.
-- `src/lib/game/acoustics.ts`: wall and doorway tracing across resident section boundaries, muffled transmission through partitions, and office/hall/pool/corridor reverb profiles. Seeded distant footsteps, duct airflow, and occasional settling noises have 52–104 seconds between opportunities, with deliberate skipped events and no entity or transition stingers. Distant footstep routes begin behind walls and follow open passages.
+The short version: a seeded maze generator streams a 3×3 window of 57.6m sections around the player, each with one guaranteed landmark. Geometry, materials, and furniture are batched procedural meshes. Rapier drives a kinematic character capsule. A Three.js render pipeline runs the scene through WGSL tape shaders authored with vgpu. Audio is Web Audio with traced acoustics. The game loop is entirely client-side and deterministic per tape.
 
-Ordinary visits and refreshes draw a new random tape, changing the maze and the selection and placement of furniture. Add `?tape=199307` to reproduce a particular starting maze. Cassette settings → COPY TAPE LINK shares the seed, not the player's current position. The initial visual composition is intentional; later sections vary with the tape and depth. On revisiting unloaded sections their base layout regenerates; unseen temporary mutations are bounded to resident sections.
+| Path | What lives there |
+| --- | --- |
+| `src/lib/game/maze.ts`, `landmarks.ts`, `world.ts` | Generation and section streaming |
+| `src/lib/game/engine.ts`, `physics.ts` | Game loop, controls, Rapier movement |
+| `src/lib/game/stalker.ts`, `entity-*.ts` | Creature behavior, navigation, model, gait |
+| `src/lib/game/computer-*.ts` | CRT workstations and the in-world browser |
+| `src/lib/game/audio.ts`, `acoustics.ts` | Spatial audio and room acoustics |
+| `src/lib/game/renderer.ts`, `src/shaders/*.wgsl` | VHS, water, CRT, and noise shaders |
+| `tests/` | Node test suites for generation, physics, audio, and behavior |
 
-Every tape starts in an office, with a landmark reachable along a route of at most 30m. Further sections guarantee recurring landmarks instead of relying on random rolls with potentially long gaps. Tapes `1`, `2`, `3`, and `8` introduce a lobby, poolroom, corridor, and food court respectively. Each 12-section row contains all four families. Fog hides the outer edge of the nine resident sections without adding an end wall to the long corridors.
+The module-by-module tour, including the computer browsing model and its iframe limits, is in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-## Computer browsing
-
-Press E while facing a nearby CRT, or tap its contextual hint. The camera frames the screen and its plastic bezel; walking, noclipping, and world mutations pause while browsing. Computers start at one of four sites: [vgpu](https://vgpu.sh/), [Buttsss](https://buttsss.com/), [Long Doge Challenge](https://longdogechallenge.com/), or [Checkbox Race](https://checkboxrace.com/). Each section's three computers have different home sites, assigned deterministically by tape and section. Home returns to that computer's assigned site, including after its page is evicted and recreated. Reload and an HTTPS address bar work inside the period browser shell.
-
-The power switch on the lower-right bezel turns the monitor off and on. Off hides the website and disables its controls; the computer keeps the page running so switching back on resumes the current page. Power state survives nearby page-cache replacement and is released when its section leaves the resident world.
-
-When sound is enabled, entering a computer plays an original synthesized dial-up handshake. Its five-second duration includes the final fade; leaving early fades it out immediately. It follows the existing sound volume and mute controls, and repeated entry never layers multiple modem voices.
-
-Computer mode requests fullscreen so native Escape returns to the camera even after clicking or typing inside the cross-origin site. On browsers or embedded previews that deny fullscreen, use BACK TO CAMERA or the browser window's × button. The page remains mounted when leaving and re-entering nearby; it resets after distance or section eviction. Some embedded app browsers also block third-party iframes; verify live site navigation in a normal browser.
-
-Chromium excludes foreign iframe pixels from parent SVG displacement. Full-page curvature therefore requires the cooperative adapter in [vgpu PR #446](https://github.com/vercel-labs/vgpu/pull/446) to be deployed on vgpu.sh. The host sends only its generated curvature map to the matching frame after an origin-checked readiness message. Color reduction and pixel sampling use the glass's backdrop filter, which includes foreign iframe pixels without an adapter. The glass never intercepts clicks or changes the site's layout.
-
-Back and Forward use the embedded site's cooperative `vackrooms-browser` bridge and its frame-local Navigation API. The arrows stay disabled until the site reports accurate navigation state. The [companion vgpu site integration](https://github.com/vercel-labs/vgpu/pull/446) must be deployed before they work on vgpu.sh. A supported site also keeps Location, Reload, and Open in tab synchronized with its current page. This never calls the game's history or reads a foreign frame's history.
-
-Sites that send frame-blocking headers cannot run inside the monitor; Open in tab is available. For sites without the bridge, Location, Reload, and Open in tab use the last entered address, while links within the site navigate normally. No page proxy or frame-protection bypass is used. Websites require a network connection; the procedural world does not.
-
-## Vercel
-
-Public demo: https://vackrooms.vercel.app
-
-The public project lives in the `pablostanley` Vercel scope. The separate Internal Playground project retains its protected previews.
-
-Next.js statically renders the shell. The browser owns the interactive world. Vercel Web Analytics and Speed Insights are included; enable them in the linked Vercel project dashboard to collect deployment data. There is no artificial backend dependency in the game loop.
-
-```sh
-npx vercel@latest deploy --yes
-```
-
-## Validation
-
-In development, add `?renderer=webgl` (or `&renderer=webgl` after a tape seed) to exercise the fallback on a WebGPU-capable browser. This override is ignored in production.
+## Checks
 
 ```sh
 npm test
@@ -123,6 +82,35 @@ npm run check:shaders
 npm run build
 ```
 
-Rapier tests exercise wall sliding, floor contact, streaming, teleportation, jump buffering and ledge grace, jump height at 30/60/144Hz, ceiling contact, chair-seat landings, and jumping into and back out of a pool, as well as walking its complete dry deck. Slide tests cover walking up/down, stable standing, headroom, rotated and streamed placements, and real generated ramps. Maze and landmark tests cover first-discovery distance across 128 tapes, recurring variety, physically connected boundary gates around furniture and pool obstacles, straight corridor seams, deterministic generation, and regeneration-compatible gates. `check:shaders` validates both the tape and water WGSL; a successful Next.js build alone is not shader validation. The browser preview must also be checked for real GPU rendering and interaction.
+`check:shaders` validates the WGSL with vgpu; a passing Next.js build alone does not. In development, add `?renderer=webgl` to exercise the fallback on a WebGPU-capable browser. The same checks run in GitHub Actions on every push and pull request.
 
-The current game includes procedural offices, service areas, archives, enormous lobbies, abandoned food courts, full-sized poolrooms, long corridors, stacked/clipped furniture, noclip transitions, and stalking behavior. Swimming, ledge-grab animations, and advanced platforming are future extensions.
+## Deploy
+
+It is a static Next.js shell with a client-side game, so any Next.js host works. On Vercel:
+
+```sh
+npx vercel@latest deploy
+```
+
+Vercel Web Analytics and Speed Insights are wired in and do nothing unless you enable them on your own project.
+
+## Contributing
+
+Issues and pull requests are welcome. A few things keep the game feeling like itself:
+
+- Keep gameplay client-side, deterministic by tape seed, and bounded to resident sections.
+- When you touch generation, verify connectivity and matching boundary gates (the maze and landmark tests do this).
+- Main rooms stay oppressively bright and fluorescent: sickly yellow, damp brown carpet, no natural blue. The only interface is the camcorder HUD.
+- Check visual and interaction changes in a real browser, not only in tests.
+
+`AGENTS.md` has the same guidance for coding agents.
+
+Not built yet: swimming, ledge-grab animations, and more advanced platforming.
+
+## Credits and license
+
+Made by [Pablo Stanley](https://pablostanley.com), in the tradition of the Backrooms creepypasta and the many games and videos it inspired.
+
+The source code is released under the [MIT License](LICENSE).
+
+Audio has its own terms, documented in [`public/audio/README.md`](public/audio/README.md): footsteps, creaks, cloth, and the flashlight click come from [Kenney's RPG Audio](https://kenney.nl/assets/rpg-audio) pack (CC0). The dial-up and shallow-water recordings are third-party sound effects that are not covered by the MIT license; replace them if you redistribute the game.
