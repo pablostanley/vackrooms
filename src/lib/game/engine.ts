@@ -1169,6 +1169,7 @@ export class BackroomsEngine {
     for (const s of this.sections.values()) s.dispose();
     for (const entity of this.entities) entity.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose();
     });
     this.entityMaterial.dispose();
     this.lights.forEach((light) => light.dispose());

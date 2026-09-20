@@ -127,7 +127,9 @@ for (const variant of ["stalker", "pyramid"] as const) test(`the shadow-culling 
         if (!(object instanceof THREE.Mesh)) return;
         const positions = object.geometry.getAttribute("position");
         for (let i = 0; i < positions.count; i++) {
-          vertex.fromBufferAttribute(positions, i).applyMatrix4(object.matrixWorld);
+          vertex.fromBufferAttribute(positions, i);
+          if (object instanceof THREE.SkinnedMesh) object.applyBoneTransform(i, vertex);
+          vertex.applyMatrix4(object.matrixWorld);
           assert.ok(vertex.distanceTo(center) <= 2.2, "animated tissue remains inside the shadow bound");
         }
       });
