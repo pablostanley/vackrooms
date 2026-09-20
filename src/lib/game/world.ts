@@ -39,6 +39,7 @@ import {
 import {
   anchorPose,
   chairStack,
+  chairStackStyles,
   leavesPassagesClear,
 } from "./furniture-layout";
 
@@ -498,20 +499,26 @@ export function buildSection(
             scatterFurniture(kind, cx, cz, "floor");
         } else if (arrangement < 0.29) {
           // Only the wooden model has the seat/leg contract used by the piles.
-          const poses = chairStack(
-            x + 1.4,
-            z + 1.4,
-            yaw,
-            3 + Math.floor(chairRng() * 3),
-            chairRng,
-          );
-          const pileBounds = new THREE.Box3();
-          for (const pose of poses)
-            pileBounds.union(model("chair").bounds.clone().applyMatrix4(pose));
-          if (leavesPassagesClear(pileBounds, cx, cz, bits))
-            poses.forEach((pose, index) =>
-              furniture("chair", pose, index ? "chair" : "floor"),
-            );
+          const style =
+            chairStackStyles[Math.floor(chairRng() * chairStackStyles.length)];
+          // Sometimes two short piles replace the single tall tower.
+          const paired = chairRng() < 0.3;
+          const count = paired
+            ? 2 + Math.floor(chairRng() * 2)
+            : 3 + Math.floor(chairRng() * 3);
+          const poses = chairStack(x + 1.4, z + 1.4, yaw, count, chairRng, style);
+          if (paired)
+            poses.push(...chairStack(
+              x - 1.4, z - 1.4, yaw + Math.PI / 2, count, chairRng, style,
+            ));
+          // Check each pile's solids, preserving the walking lane between them.
+          if (poses.every((pose) => leavesPassagesClear(
+            model("chair").bounds.clone().applyMatrix4(pose), cx, cz, bits,
+          )))
+            poses.forEach((pose, index) => furniture(
+              "chair", pose,
+              index === 0 || (paired && index === count) ? "floor" : "chair",
+            ));
           else chair(x + 1.4, z + 1.4, yaw, kind);
         } else {
           chair(x + 1.4, z + 1.4, yaw, kind);
@@ -610,6 +617,11 @@ export function buildSection(
     "blocks",
     "slide",
     "springHorse",
+    "filingCabinet",
+    "bookcase",
+    "bench",
+    "sideTable",
+    "utilityCart",
   ];
   if (data.x === 0 && data.z === 0) {
     // Each tape begins with its own small selection of familiar objects.

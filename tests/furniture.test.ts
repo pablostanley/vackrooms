@@ -5,6 +5,7 @@ import { OBB } from "three/addons/math/OBB.js";
 import {
   anchorPose,
   chairStack,
+  chairStackStyles,
   leavesPassagesClear,
 } from "../src/lib/game/furniture-layout";
 import { CELL, N, E, S, W, directions, random } from "../src/lib/game/maze";
@@ -30,21 +31,23 @@ function boxAt(center: Vector3, size: Vector3) {
 }
 
 test("every upper chair leg intersects the previous seat under seeded rotations", () => {
-  for (let seed = 0; seed < 48; seed++) {
-    for (const count of [2, 4, 6]) {
-      const poses = chairStack(-13.4, 7.9, seed * 0.71, count, random(seed));
-      assert.equal(poses.length, count);
-      for (let i = 1; i < poses.length; i++) {
-        const lowerSeat = orientedBox(seatCenter, seatSize, poses[i - 1]);
-        const upperLeg = orientedBox(
-          new Vector3(0.19, 0.23, 0.19),
-          legSize,
-          poses[i],
-        );
-        assert.ok(
-          lowerSeat.intersectsOBB(upperLeg),
-          `chair ${i} floats above its support for seed ${seed}, count ${count}`,
-        );
+  for (const style of chairStackStyles) {
+    for (let seed = 0; seed < 48; seed++) {
+      for (const count of [2, 4, 6]) {
+        const poses = chairStack(-13.4, 7.9, seed * 0.71, count, random(seed), style);
+        assert.equal(poses.length, count);
+        for (let i = 1; i < poses.length; i++) {
+          const lowerSeat = orientedBox(seatCenter, seatSize, poses[i - 1]);
+          const upperLeg = orientedBox(
+            new Vector3(0.19, 0.23, 0.19),
+            legSize,
+            poses[i],
+          );
+          assert.ok(
+            lowerSeat.intersectsOBB(upperLeg),
+            `chair ${i} floats above its support for seed ${seed}, count ${count}`,
+          );
+        }
       }
     }
   }
@@ -73,6 +76,17 @@ test("the same tape produces the same stack while other seeds vary the pile", ()
     chairStack(2.4, -12, 0.5, 5, random(seed)).map((pose) => pose.elements);
   assert.deepEqual(poseValues(199307), poseValues(199307));
   assert.notDeepEqual(poseValues(199307).slice(1), poseValues(199308).slice(1));
+});
+
+test("stack styles have distinct silhouettes and reproduce from the same tape", () => {
+  const silhouettes = new Set<string>();
+  for (const style of chairStackStyles) {
+    const snapshot = () => chairStack(0, 0, 0, 5, random(42), style)
+      .map((pose) => pose.elements);
+    assert.deepEqual(snapshot(), snapshot());
+    silhouettes.add(JSON.stringify(snapshot()));
+  }
+  assert.equal(silhouettes.size, chairStackStyles.length);
 });
 
 test("rotated and scaled furniture remains attached to a solid wall", () => {
