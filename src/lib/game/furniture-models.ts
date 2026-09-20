@@ -19,6 +19,11 @@ export function isChairKind(kind: FurnitureKind): kind is ChairKind {
 
 export type FurnitureKind =
   | ChairKind
+  | "filingCabinet"
+  | "bookcase"
+  | "bench"
+  | "sideTable"
+  | "utilityCart"
   | "sofa"
   | "table"
   | "lamp"
@@ -274,6 +279,69 @@ export function createFurniture(
       cushion([1.8, 0.12, 1.08], [0, 0.8, 0], mats.wood, 0.025);
       cushion([1.76, 0.025, 1.04], [0, 0.858, 0], mats.cream, 0.008);
       anchor.set(0, 0.8, 0);
+      break;
+    }
+    case "filingCabinet": {
+      box([0.62, 1.36, 0.62], [0, 0.68, 0], mats.enamel);
+      box([0.55, 0.08, 0.55], [0, 0.04, 0], mats.metal);
+      for (let i = 0; i < 4; i++) {
+        const y = 0.23 + i * 0.32;
+        box([0.55, 0.285, 0.035], [0, y, -0.325], mats.cream);
+        box([0.19, 0.035, 0.045], [0, y + 0.035, -0.36], mats.metal);
+        box([0.12, 0.045, 0.012], [0, y - 0.065, -0.35], mats.wood);
+      }
+      anchor.set(0, 0.68, 0);
+      break;
+    }
+    case "bookcase": {
+      box([1.22, 1.85, 0.06], [0, 0.925, 0.23], mats.wood);
+      for (const x of [-0.58, 0.58])
+        box([0.08, 1.85, 0.52], [x, 0.925, 0], mats.wood);
+      for (const y of [0.055, 0.49, 0.93, 1.37, 1.81])
+        box([1.16, 0.08, 0.52], [0, y, 0], mats.wood);
+      // A few forgotten binders leave most shelves conspicuously empty.
+      for (let i = 0; i < 5; i++) {
+        const x = -0.42 + i * 0.085;
+        box([0.07, 0.3 + (i % 2) * 0.045, 0.27], [x, 0.68, 0.04],
+          i % 2 ? mats.fabric : mats.cream);
+      }
+      anchor.set(0, 0.93, 0);
+      break;
+    }
+    case "bench": {
+      for (const x of [-0.7, 0.7]) {
+        box([0.065, 0.44, 0.48], [x, 0.22, 0], mats.metal);
+        box([0.28, 0.05, 0.56], [x, 0.025, 0], mats.metal);
+      }
+      cushion([1.85, 0.14, 0.61], [0, 0.48, 0], mats.upholstery, 0.045);
+      for (const x of [-0.6, 0, 0.6])
+        box([0.012, 0.008, 0.53], [x, 0.552, 0], mats.fabric);
+      anchor.set(0, 0.48, 0);
+      break;
+    }
+    case "sideTable": {
+      for (const x of [-0.26, 0.26])
+        for (const z of [-0.26, 0.26])
+          box([0.055, 0.57, 0.055], [x, 0.285, z], mats.wood);
+      box([0.58, 0.045, 0.58], [0, 0.17, 0], mats.wood);
+      cushion([0.72, 0.085, 0.72], [0, 0.585, 0], mats.wood, 0.018);
+      box([0.68, 0.018, 0.68], [0, 0.635, 0], mats.cream);
+      anchor.set(0, 0.585, 0);
+      break;
+    }
+    case "utilityCart": {
+      for (const x of [-0.39, 0.39])
+        for (const z of [-0.23, 0.23]) {
+          cylinder(0.065, 0.065, 0.055, [x, 0.065, z], mats.metal, [0, 0, Math.PI / 2]);
+          strut([x, 0.1, z], [x, 0.94, z], 0.025, mats.metal);
+        }
+      for (const y of [0.22, 0.68]) {
+        box([0.86, 0.045, 0.54], [0, y, 0], mats.enamel);
+        for (const z of [-0.26, 0.26])
+          box([0.86, 0.09, 0.025], [0, y + 0.045, z], mats.enamel);
+      }
+      strut([0.39, 0.94, -0.23], [0.39, 0.94, 0.23], 0.027, mats.metal);
+      anchor.set(0, 0.68, 0);
       break;
     }
     case "lamp": {

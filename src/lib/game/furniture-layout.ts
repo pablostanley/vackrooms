@@ -21,6 +21,9 @@ export function anchorPose(
   );
 }
 
+export const chairStackStyles = ["crooked", "aligned", "crossed", "spiral"] as const;
+export type ChairStackStyle = (typeof chairStackStyles)[number];
+
 /** Every upper chair's leg penetrates the seat directly below it. */
 export function chairStack(
   x: number,
@@ -28,20 +31,31 @@ export function chairStack(
   yaw: number,
   count: number,
   rng: () => number,
+  style: ChairStackStyle = "crooked",
 ): Matrix4[] {
   const poses = [
     anchorPose(new Vector3(), new Vector3(x, 0, z), new Euler(0, yaw, 0)),
   ];
   for (let i = 1; i < count; i++) {
-    const contact = seatContact.clone().applyMatrix4(poses[i - 1]);
+    const contact = (style === "aligned"
+      ? new Vector3(0.19, 0.455, 0.19)
+      : seatContact.clone()).applyMatrix4(poses[i - 1]);
+    const pitch = (rng() - 0.5) * 0.32;
+    const turn = (rng() - 0.5) * 1.5;
+    const roll = (rng() - 0.5) * 0.38;
     poses.push(
       anchorPose(
         chairLegContact,
         contact,
         new Euler(
-          (rng() - 0.5) * 0.32,
-          yaw + (i % 2) * Math.PI + (rng() - 0.5) * 1.5,
-          (rng() - 0.5) * 0.38,
+          style === "crooked" ? pitch : 0,
+          yaw + (
+            style === "aligned" ? 0
+              : style === "crossed" ? (i % 2) * Math.PI
+                : style === "spiral" ? i * Math.PI / 2
+                  : (i % 2) * Math.PI + turn
+          ),
+          style === "crooked" ? roll : 0,
         ),
       ),
     );

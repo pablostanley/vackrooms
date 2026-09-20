@@ -108,6 +108,11 @@ test("origin rooms vary a small furniture selection across tape seeds", () => {
     "slide",
     "springHorse",
     "blocks",
+    "filingCabinet",
+    "bookcase",
+    "bench",
+    "sideTable",
+    "utilityCart",
   ];
   const seenKinds = new Set<FurnitureKind>();
   const selections = new Set<string>();
