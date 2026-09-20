@@ -279,6 +279,14 @@ export default function Backrooms() {
               </p>
             </>
           )}
+          <a
+            className="credit"
+            href="https://pablostanley.com"
+            target="_blank"
+            rel="noreferrer"
+          >
+            MADE BY PABLO STANLEY
+          </a>
         </div>
       )}
       {error && (
