@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "[ \"$VERCEL_PROJECT_ID\" = \"prj_0PNg1E1yu2iatwcAQILvklWpNUe7\" ]"
+}
