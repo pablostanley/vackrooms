@@ -293,6 +293,18 @@ button:disabled {
   margin-top: calc(var(--hud-unit) * -0.875);
   letter-spacing: calc(var(--hud-unit) * 0.125);
 }
+.credit {
+  font-size: calc(var(--hud-unit) * 1);
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.45;
+  letter-spacing: calc(var(--hud-unit) * 0.125);
+  transition: opacity 0.2s;
+}
+.credit:hover,
+.credit:focus-visible {
+  opacity: 0.9;
+}
 .mobile-hint {
   display: none;
 }
