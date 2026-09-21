@@ -45,7 +45,7 @@ export class TapeOverlay {
   render(time: number, damage: number, anomaly: number, steady: boolean, red = 0, blackout = 0) {
     const context = this.context;
     if (!context || !this.patterns.length) return;
-    const frame = steady ? 0 : Math.floor(time * 30);
+    const frame = steady || damage === 0 ? 0 : Math.floor(time * 30);
     const grainFrame = Math.floor(frame / 2);
     if (
       grainFrame === this.lastFrame &&
@@ -60,33 +60,35 @@ export class TapeOverlay {
     this.lastBlack = blackout;
     const { width, height } = this.canvas;
     context.clearRect(0, 0, width, height);
-    context.globalAlpha = damage * (0.32 + anomaly * 0.7);
-    context.fillStyle = this.patterns[grainFrame % this.patterns.length];
-    context.save();
-    const x = (grainFrame * 37) % 128,
-      y = (grainFrame * 19) % 128;
-    context.translate(-x, -y);
-    context.fillRect(0, 0, width + 128, height + 128);
-    context.restore();
+    if (damage > 0) {
+      context.globalAlpha = damage * (0.32 + anomaly * 0.7);
+      context.fillStyle = this.patterns[grainFrame % this.patterns.length];
+      context.save();
+      const x = (grainFrame * 37) % 128,
+        y = (grainFrame * 19) % 128;
+      context.translate(-x, -y);
+      context.fillRect(0, 0, width + 128, height + 128);
+      context.restore();
 
-    // Fine scanline losses cross the HUD as part of the same recorded image.
-    context.globalAlpha = damage * 0.055;
-    context.fillStyle = "#17180e";
-    for (let row = 1; row < height; row += 3)
-      context.fillRect(0, row, width, 0.6);
+      // Fine scanline losses cross the HUD as part of the same recorded image.
+      context.globalAlpha = damage * 0.055;
+      context.fillStyle = "#17180e";
+      for (let row = 1; row < height; row += 3)
+        context.fillRect(0, row, width, 0.6);
 
-    // Band locations match tapeWarp: a quick tear, never a rolling sine wave.
-    if (!steady && (anomaly > 0 || frame % 211 < 2)) {
-      const strength = Math.max(anomaly, 0.12);
-      for (const band of [
-        (frame * 0.173 + 0.19) % 1,
-        (frame * 0.317 + 0.63) % 1,
-      ]) {
-        const row = Math.floor(band * height);
-        context.globalAlpha = damage * strength * 0.38;
-        context.fillRect(0, row, width, Math.max(1, height * 0.006));
-        context.globalAlpha = damage * strength * 0.15;
-        context.fillRect(0, row + 4, width, 1);
+      // Band locations match tapeWarp: a quick tear, never a rolling sine wave.
+      if (!steady && (anomaly > 0 || frame % 211 < 2)) {
+        const strength = Math.max(anomaly, 0.12);
+        for (const band of [
+          (frame * 0.173 + 0.19) % 1,
+          (frame * 0.317 + 0.63) % 1,
+        ]) {
+          const row = Math.floor(band * height);
+          context.globalAlpha = damage * strength * 0.38;
+          context.fillRect(0, row, width, Math.max(1, height * 0.006));
+          context.globalAlpha = damage * strength * 0.15;
+          context.fillRect(0, row + 4, width, 1);
+        }
       }
     }
     // Attack feedback remains legible even with tape wear turned off.

@@ -139,6 +139,7 @@ export class BackroomsEngine {
     this.settings = settings;
     this.audio = new BackroomsAudio(seed);
     this.encounters = new Encounters(seed, this.navigation);
+    this.encounters.setEnabled(settings.entities);
     this.audio.setVolume(settings.volume);
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
@@ -211,12 +212,14 @@ export class BackroomsEngine {
           this.previewEncounter();
         }
       }
-      const renderer = await createRenderer(this.scene, this.camera);
+      const renderer = await createRenderer(this.scene, this.camera, this.settings);
       if (!this.alive) {
         renderer.dispose();
         return;
       }
       this.renderer = renderer;
+      // Preferences can change while the GPU initializes.
+      renderer.updateSettings(this.settings);
       for (const section of this.sections.values()) this.prepareWater(section);
       this.controls = new PointerLockControls(this.camera, renderer.canvas);
       this.controls.pointerSpeed = this.settings.sensitivity;
@@ -531,6 +534,14 @@ export class BackroomsEngine {
   }
   updateSettings(settings: GameSettings) {
     this.settings = settings;
+    this.renderer?.updateSettings(settings);
+    this.encounters.setEnabled(settings.entities);
+    if (!settings.entities) {
+      this.entities.forEach((entity) => { entity.visible = false; });
+      this.threat = this.stress = this.tapeBurst = this.deathHold = 0;
+      if (this.controls) this.controls.enabled = this.active && !this.focusedComputer;
+      this.audio.entityThreat(0, 0, this.seconds, 0);
+    }
     if (this.controls) this.controls.pointerSpeed = settings.sensitivity;
     this.audio.setVolume(settings.volume);
   }
@@ -809,6 +820,7 @@ export class BackroomsEngine {
     this.audio.resetSpace(0, this.seed);
     this.rebuildWorld();
     this.encounters = new Encounters(this.seed, this.navigation);
+    this.encounters.setEnabled(this.settings.entities);
     this.yaw = -0.13;
     this.pitch = -0.025;
     this.camera.position.copy(this.position);
@@ -821,7 +833,7 @@ export class BackroomsEngine {
   }
   /** Development-only shortcut; replay from the camcorder OSD or reload the URL. */
   previewEncounter() {
-    if (process.env.NODE_ENV !== "development" || !this.preview) return;
+    if (process.env.NODE_ENV !== "development" || !this.preview || !this.settings.entities) return;
     const starts = [this.position.clone().setY(1.66)];
     const ox = Math.floor(this.position.x / SPAN) * SPAN;
     const oz = Math.floor(this.position.z / SPAN) * SPAN;
@@ -1104,12 +1116,12 @@ export class BackroomsEngine {
           : [],
       );
       this.stress = Math.max(0, this.stress - dt * 0.4);
-      const tapeDamage = this.settings.reducedMotion
+      const tapeDamage = !this.settings.tapeEffects ? 0 : this.settings.reducedMotion
         ? Math.min(0.18, this.settings.tape)
         : this.settings.tape;
       const attack = crushEnvelope(this.encounters.attackTime, this.settings.reducedMotion);
       // Proximity feeds horizontal tape loss continuously, without camera wobble.
-      const tapeAnomaly = this.settings.reducedMotion
+      const tapeAnomaly = !this.settings.tapeEffects || this.settings.reducedMotion
         ? 0
         : Math.max(
             this.tapeBurst,

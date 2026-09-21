@@ -4,8 +4,14 @@ import type {
   BackroomsEngine,
   GameStats,
 } from "@/lib/game/engine";
-import { defaultSettings, loadSettings, saveSettings, setVolume, toggleMute, type SavedSettings } from "@/lib/game/settings";
+import { defaultSettings, loadSettings, qualityPresets, saveSettings, setVolume, toggleMute, type QualityPreset, type SavedSettings } from "@/lib/game/settings";
 import { PAD, type GamepadFrame } from "@/lib/game/gamepad";
+const qualityDescriptions: Record<QualityPreset, string> = {
+  auto: "Adjusts resolution while you play to keep movement smooth.",
+  high: "Sharper picture. Uses more graphics power.",
+  balanced: "A softer picture with less work for your device.",
+  low: "Lowest resolution, with contact shadows off. Try this if movement feels slow.",
+};
 const initialStats: GameStats = {
   seconds: 0,
   distance: 0,
@@ -127,6 +133,18 @@ export default function Backrooms() {
   function openSettings() {
     engine.current?.pause();
     dialog.current?.showModal();
+  }
+  function retryCompatibleCamera() {
+    saveSettings({
+      ...settings,
+      quality: "low",
+      contactShadows: false,
+      tapeEffects: false,
+    });
+    const url = new URL(location.href);
+    url.searchParams.set("renderer", "webgl");
+    if (seed) url.searchParams.set("tape", String(seed));
+    location.assign(url.toString());
   }
   async function copyTape() {
     try {
@@ -305,6 +323,10 @@ export default function Backrooms() {
           <button className="record-button" onClick={() => location.reload()}>
             RELOAD TAPE
           </button>
+          <button className="record-button" onClick={retryCompatibleCamera}>
+            TRY COMPATIBILITY MODE
+          </button>
+          <p>Uses simpler graphics. If it still won’t start, try opening the link in Chrome or Safari outside the Reddit app.</p>
         </div>
       )}
       {playing && !stats.browsing && !stats.attacking && (
@@ -371,6 +393,43 @@ export default function Backrooms() {
             ×
           </button>
         </div>
+        <label className="setting-row quality-setting">
+          <span>PICTURE QUALITY</span>
+          <select
+            aria-label="Picture quality"
+            aria-describedby="quality-description"
+            value={settings.quality}
+            onChange={(e) => setSettings({ ...settings, quality: e.target.value as QualityPreset })}
+          >
+            <option value="auto">Auto</option>
+            <option value="high">High</option>
+            <option value="balanced">Balanced</option>
+            <option value="low">Low</option>
+          </select>
+          <small id="quality-description">{qualityDescriptions[settings.quality]}</small>
+        </label>
+        <label className="motion-toggle">
+          <span>
+            CONTACT SHADOWS
+            <small>{settings.quality === "low" ? "Off with Low quality." : "Turn off for faster rendering."}</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.contactShadows && settings.quality !== "low"}
+            disabled={settings.quality === "low"}
+            onChange={(e) => setSettings({ ...settings, contactShadows: e.target.checked })}
+          />
+        </label>
+        <label className="motion-toggle">
+          <span>
+            TAPE EFFECTS<small>Turn off distortion and grain to save graphics power.</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.tapeEffects}
+            onChange={(e) => setSettings({ ...settings, tapeEffects: e.target.checked })}
+          />
+        </label>
         <label className="setting-row">
           <span>
             SOUND<output>{Math.round(settings.volume * 100)}%</output>
@@ -411,6 +470,7 @@ export default function Backrooms() {
           </span>
           <input
             aria-label="Tape damage"
+            disabled={!settings.tapeEffects}
             data-setting="tape"
             type="range"
             min="0"
@@ -432,6 +492,16 @@ export default function Backrooms() {
             onChange={(e) =>
               setSettings({ ...settings, reducedMotion: e.target.checked })
             }
+          />
+        </label>
+        <label className="motion-toggle">
+          <span>
+            ENTITIES<small>Turn off to explore without being chased.</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.entities}
+            onChange={(e) => setSettings({ ...settings, entities: e.target.checked })}
           />
         </label>
         <dl className="controls-list">
@@ -511,7 +581,7 @@ function navigateSettings(
     dialog.close();
     return;
   }
-  const controls = [...dialog.querySelectorAll<HTMLInputElement | HTMLButtonElement>("button:not(:disabled), input:not(:disabled)")];
+  const controls = [...dialog.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled)")];
   const current = controls.findIndex((control) => control === document.activeElement);
   const direction = Number(pressed.has(PAD.down)) - Number(pressed.has(PAD.up));
   if (direction && controls.length) {
@@ -520,7 +590,13 @@ function navigateSettings(
   }
   const focused = controls[current];
   if (!focused) return;
-  if (focused instanceof HTMLInputElement && focused.type === "range") {
+  if (focused instanceof HTMLSelectElement) {
+    const delta = Number(pressed.has(PAD.right)) - Number(pressed.has(PAD.left));
+    if (delta) update((settings) => ({
+      ...settings,
+      quality: qualityPresets[Math.max(0, Math.min(qualityPresets.length - 1, qualityPresets.indexOf(settings.quality) + delta))],
+    }));
+  } else if (focused instanceof HTMLInputElement && focused.type === "range") {
     const delta = Number(pressed.has(PAD.right)) - Number(pressed.has(PAD.left));
     const key = focused.dataset.setting;
     if (!delta || (key !== "volume" && key !== "sensitivity" && key !== "tape")) return;

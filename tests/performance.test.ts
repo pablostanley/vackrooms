@@ -7,6 +7,7 @@ import { buildSection } from "../src/lib/game/world";
 import { generateChunk } from "../src/lib/game/maze";
 import type { ComputerStation } from "../src/lib/game/computers";
 import { headlessMaterials } from "./helpers/materials";
+import { qualityProfile, contactShadowsEnabled } from "../src/lib/game/render-quality";
 import { RenderResolution } from "../src/lib/game/render-resolution";
 import { EntityModel } from "../src/lib/game/entity-model";
 
@@ -140,7 +141,7 @@ for (const variant of ["stalker", "pyramid"] as const) test(`the shadow-culling 
 });
 
 test("render resolution starts at high detail with a bounded 4K pixel workload", () => {
-  const resolution = new RenderResolution();
+  const resolution = new RenderResolution("high");
   assert.equal(resolution.pixelRatio(1280, 720, 2), 2);
   assert.equal(resolution.pixelRatio(390, 844, 3), 2);
   assert.equal(resolution.pixelRatio(1920, 1080, 1), 1);
@@ -319,4 +320,37 @@ test("screen visibility checks the corners and stops after an obstruction", () =
   later.geometry.dispose();
   (later.material as THREE.Material).dispose();
   material.dispose();
+});
+
+
+test("quality budgets bound GPU pixels at every viewport without reducing the HUD", () => {
+  for (const quality of ["auto", "high", "balanced", "low"] as const) {
+    const resolution = new RenderResolution(quality);
+    for (const [w, h, dpr] of [[390, 844, 3], [1920, 1080, 2], [5120, 2880, 2]]) {
+      const ratio = resolution.pixelRatio(w, h, dpr);
+      assert.ok(w * h * ratio ** 2 <= qualityProfile(quality).maxPixels + 0.01);
+      assert.ok(ratio <= qualityProfile(quality).maxDpr);
+    }
+  }
+  assert.equal(new RenderResolution().pixelRatio(1280, 720, 2), 1.25);
+  assert.equal(new RenderResolution("low").pixelRatio(1920, 1080, 2), 2 / 3);
+});
+
+test("manual presets remain stable and switching quality clears adaptive downscaling", () => {
+  const resolution = new RenderResolution();
+  for (let i = 0; i < 3; i++) resolution.recordFrame(300, true);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 0.85);
+  assert.equal(resolution.setQuality("high"), true);
+  for (let i = 0; i < 600; i++) assert.equal(resolution.recordFrame(100, true), false);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 1);
+  assert.equal(resolution.setQuality("auto"), true);
+  assert.equal(resolution.pixelRatio(1920, 1080, 1), 1);
+  assert.equal(resolution.setQuality("auto"), false);
+});
+
+test("low quality removes contact passes and an explicit off applies to every preset", () => {
+  for (const quality of ["auto", "high", "balanced", "low"] as const) {
+    assert.equal(contactShadowsEnabled({ quality, contactShadows: true, tapeEffects: true }), quality !== "low");
+    assert.equal(contactShadowsEnabled({ quality, contactShadows: false, tapeEffects: true }), false);
+  }
 });

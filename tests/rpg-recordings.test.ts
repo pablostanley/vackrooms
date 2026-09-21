@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { FOOTSTEP_RECORDINGS, RPG_RECORDINGS, WATER_RECORDINGS, footstepRecording, footstepPerformance, nextWaterRecording, RpgRecordings } from "../src/lib/game/rpg-recordings";
+import { FOOTSTEP_RECORDINGS, FOOTSTEP_SURFACES, RPG_RECORDINGS, WATER_RECORDINGS, footstepRecording, footstepPerformance, nextWaterRecording, RpgRecordings } from "../src/lib/game/rpg-recordings";
 import { random } from "../src/lib/game/maze";
 
 const recordingCount = Object.keys(RPG_RECORDINGS).length;
+
+test("carpet absorbs heel transients and reflections while hard floors stay distinct", () => {
+  for (const running of [false, true]) {
+    const carpet = FOOTSTEP_RECORDINGS[footstepRecording("carpet", running)];
+    const hard = FOOTSTEP_RECORDINGS[footstepRecording("hard", running)];
+    const weight = footstepPerformance("carpet", running, false, () => 0.5);
+    assert.ok(carpet.gain * weight.gain < hard.gain * 0.5);
+    assert.ok(carpet.cutoff * weight.brightness < 1200, "heel click is filtered even when running");
+  }
+  assert.ok(FOOTSTEP_SURFACES.carpet.attack >= 0.015, "padded onset softens the heel strike");
+  assert.ok(FOOTSTEP_SURFACES.carpet.reflections < FOOTSTEP_SURFACES.hard.reflections / 4);
+  assert.ok(FOOTSTEP_SURFACES.water.reflections > FOOTSTEP_SURFACES.carpet.reflections);
+});
 
 test("recorded footsteps follow surfaces, with water taking precedence over running", () => {
   assert.equal(FOOTSTEP_RECORDINGS[footstepRecording("carpet", false)].src, "/audio/kenney-rpg/footstep00.ogg");

@@ -45,7 +45,32 @@ test("malformed storage, unavailable storage and quota failures never stop the g
 test("saved values are type checked and clamped without accepting unrelated fields", () => {
   assert.deepEqual(loadSettings(false, memoryStorage(JSON.stringify({
     volume: 3, lastVolume: "loud", tape: -1, sensitivity: 200, reducedMotion: true, seed: 123,
-  }))), { volume: 1, lastVolume: 1, tape: 0, sensitivity: 2.5, reducedMotion: true });
+  }))), { ...defaultSettings, volume: 1, lastVolume: 1, tape: 0, sensitivity: 2.5, reducedMotion: true });
   const invalid = loadSettings(false, memoryStorage('{"volume":"1","sensitivity":null,"tape":1e400}'));
   assert.deepEqual(invalid, defaultSettings);
+});
+
+test("performance and exploration preferences survive reload, including explicit false", () => {
+  const storage = memoryStorage();
+  const chosen = {
+    ...defaultSettings,
+    quality: "low" as const,
+    contactShadows: false,
+    tapeEffects: false,
+    entities: false,
+  };
+  saveSettings(chosen, storage);
+  assert.deepEqual(loadSettings(false, storage), chosen);
+});
+
+test("older saved settings gain defaults and invalid performance values are ignored", () => {
+  const legacy = loadSettings(false, memoryStorage('{"volume":0.2,"sensitivity":1.4}'));
+  assert.deepEqual(legacy, { ...defaultSettings, volume: 0.2, lastVolume: 0.2, sensitivity: 1.4 });
+  const invalid = loadSettings(false, memoryStorage(JSON.stringify({
+    quality: "ultra", contactShadows: "false", tapeEffects: 0, entities: null,
+  })));
+  assert.deepEqual(invalid, defaultSettings);
+  for (const quality of ["auto", "high", "balanced", "low"]) {
+    assert.equal(loadSettings(false, memoryStorage(JSON.stringify({ quality }))).quality, quality);
+  }
 });

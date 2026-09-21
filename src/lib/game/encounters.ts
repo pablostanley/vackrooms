@@ -6,6 +6,7 @@ import { Stalker, type StalkerInput } from "./stalker";
 export class Encounters {
   readonly stalkers: readonly Stalker[];
   private escapeGrace = 0;
+  private enabled = true;
 
   constructor(seed: number, navigation: EntityNavigation) {
     this.stalkers = [
@@ -29,6 +30,12 @@ export class Encounters {
     for (const stalker of this.stalkers) stalker.reset();
     this.escapeGrace = 0;
   }
+  /** Exploration mode also releases an existing grab immediately. */
+  setEnabled(enabled: boolean) {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    this.reset();
+  }
   escape() {
     if (!this.attacker?.escape()) return false;
     // A second creature cannot immediately undo a successful jump escape.
@@ -40,6 +47,7 @@ export class Encounters {
     input: StalkerInput,
     footstep: (position: Vector3, running: boolean) => void,
   ) {
+    if (!this.enabled) return false;
     this.escapeGrace = Math.max(0, this.escapeGrace - Math.min(dt, 0.1));
     const attacker = this.attacker;
     if (attacker) return attacker.update(dt, input, footstep);

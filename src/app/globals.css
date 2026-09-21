@@ -432,6 +432,27 @@ button:disabled {
 .setting-row output {
   opacity: 0.6;
 }
+.quality-setting select {
+  width: 100%;
+  padding: calc(var(--hud-unit) * 1.25);
+  border: calc(var(--hud-unit) * 0.125) solid var(--line);
+  border-radius: 0;
+  background: #292b1d;
+  color: var(--paper);
+  font: inherit;
+  cursor: pointer;
+}
+.quality-setting small {
+  display: block;
+  margin-top: calc(var(--hud-unit) * 1);
+  font-size: calc(var(--hud-unit) * 1.5);
+  opacity: 0.6;
+  line-height: 1.5;
+}
+.settings-dialog input:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 .setting-row input {
   width: 100%;
   height: calc(var(--hud-unit) * 0.375);

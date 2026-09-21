@@ -447,6 +447,44 @@ test("an unavailable spawn retries promptly without skipping another encounter",
   assert.equal(nav.visible(stalker.position, input.view), false);
 });
 
+test("exploration mode releases an active grab and cannot spawn or kill while disabled", () => {
+  const encounters = new Encounters(1, openWorld());
+  const input = { view: view(), playerSpeed: 0 };
+  encounters.stalkers[0].stage({ x: 22, z: 21.05 }, input.view.position, true);
+  encounters.update(0.1, input, () => {});
+  assert.equal(encounters.attacking, true);
+  encounters.setEnabled(false);
+  assert.equal(encounters.present, false);
+  assert.equal(encounters.attacking, false);
+  assert.equal(encounters.attackTime, 0);
+  for (let i = 0; i < 6000; i++) {
+    assert.equal(encounters.update(0.1, input, () => assert.fail("exploration footstep")), false);
+    assert.equal(encounters.present, false);
+  }
+  encounters.reset();
+  encounters.update(0.1, input, () => assert.fail("reset must preserve exploration mode"));
+  assert.equal(encounters.present, false);
+});
+
+test("re-enabling encounters grants breathing room and keeps the schedule seeded", () => {
+  const arrivals = (explorationDuration: number) => {
+    const encounters = new Encounters(199307, openWorld());
+    const input = { view: view(), playerSpeed: 0 };
+    encounters.setEnabled(false);
+    for (let i = 0; i < explorationDuration; i++) encounters.update(0.1, input, () => {});
+    encounters.setEnabled(true);
+    for (let i = 1; i <= 800; i++) {
+      encounters.setEnabled(true); // unrelated settings must not restart the schedule
+      encounters.update(0.1, input, () => {});
+      if (encounters.present) return i / 10;
+    }
+    assert.fail("encounters should resume");
+  };
+  const arrival = arrivals(0);
+  assert.ok(arrival >= 45 && arrival <= 75.1);
+  assert.equal(arrivals(6000), arrival, "exploration time cannot advance the encounter RNG");
+});
+
 test("two seeded creatures arrive at separate times without spawning on each other", () => {
   const nav = openWorld(), encounters = new Encounters(199307, nav);
   const input = { view: view(), playerSpeed: 0 };

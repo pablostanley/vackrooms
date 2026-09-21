@@ -18,6 +18,7 @@ import { soundPath } from "./sound-path";
 import {
   CREAK_RECORDINGS,
   FOOTSTEP_RECORDINGS,
+  FOOTSTEP_SURFACES,
   RPG_RECORDINGS,
   footstepRecording,
   footstepPerformance,
@@ -552,13 +553,16 @@ export class BackroomsAudio {
     const buffer = this.recordings?.get(recording);
     if (!buffer) return;
     const profile = FOOTSTEP_RECORDINGS[recording];
+    const material = FOOTSTEP_SURFACES[surface];
     const voice = this.spatial(
       { ...position, y: surface === "water" ? POOL_WATER_Y : position.y + 0.12 },
-      surface === "carpet" ? 0.55 : 1.1,
+      material.reflections,
       distant ? 3 : 1.7,
     );
     const performance = footstepPerformance(surface, running, entity, this.rng);
-    voice.input.gain.value = profile.gain * performance.gain;
+    // Fade in the heel transient so carpet sounds padded instead of like tile.
+    voice.input.gain.setValueAtTime(0, now);
+    voice.input.gain.linearRampToValueAtTime(profile.gain * performance.gain, now + material.attack);
     const source = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
     source.buffer = buffer;
     source.playbackRate.value = performance.rate;
