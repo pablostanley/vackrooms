@@ -434,13 +434,70 @@ button:disabled {
 }
 .quality-setting select {
   width: 100%;
-  padding: calc(var(--hud-unit) * 1.25);
-  border: calc(var(--hud-unit) * 0.125) solid var(--line);
+  min-height: 44px;
+  padding: calc(var(--hud-unit) * 1.5) calc(var(--hud-unit) * 1.75);
+  border: 1px solid #e0deb038;
   border-radius: 0;
-  background: #292b1d;
+  background: #ffffff06;
   color: var(--paper);
   font: inherit;
   cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.quality-setting select:hover {
+  border-color: #e0deb080;
+  background: #e0deb00c;
+}
+.quality-setting select:focus-visible {
+  outline: 2px solid #e0deb0;
+  outline-offset: 3px;
+}
+/* Keep native keyboard, touch, and controller behavior, with a themed picker
+   where supported. Other browsers retain their platform's option menu. */
+@supports (appearance: base-select) {
+  .quality-setting select,
+  .quality-setting select::picker(select) {
+    appearance: base-select;
+  }
+  .quality-setting select::picker-icon {
+    color: #e0deb0;
+    font-size: 0.8em;
+    transition: rotate 120ms ease;
+  }
+  .quality-setting select:open::picker-icon {
+    rotate: 180deg;
+  }
+  .quality-setting select::picker(select) {
+    margin-top: calc(var(--hud-unit) * 0.75);
+    padding: calc(var(--hud-unit) * 0.5);
+    border: 1px solid #e0deb050;
+    border-radius: 0;
+    background: #292b1d;
+    color: var(--paper);
+    box-shadow: 0 8px 24px #10110866;
+    font: inherit;
+  }
+  .quality-setting option {
+    min-height: 44px;
+    padding: calc(var(--hud-unit) * 1.25) calc(var(--hud-unit) * 1.5);
+    border-radius: 0;
+    gap: calc(var(--hud-unit) * 1.25);
+    cursor: pointer;
+  }
+  .quality-setting option:checked {
+    background: #e0deb019;
+    color: #f4f1c8;
+  }
+  .quality-setting option:hover,
+  .quality-setting option:focus-visible {
+    background: #e0deb02b;
+    outline: none;
+  }
+  .quality-setting option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: #e0deb0;
+  }
 }
 .quality-setting small {
   display: block;
