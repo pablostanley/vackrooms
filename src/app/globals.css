@@ -463,7 +463,7 @@ button:disabled {
     content: "";
     width: 0.5em;
     height: 0.5em;
-    margin: 0.15em 0.25em 0;
+    margin: 0.15em 0.25em 0 auto;
     border-right: 1px solid currentColor;
     border-bottom: 1px solid currentColor;
     color: #e0deb0;
