@@ -1,8 +1,15 @@
+export const qualityPresets = ["auto", "high", "balanced", "low"] as const;
+export type QualityPreset = typeof qualityPresets[number];
+
 export interface GameSettings {
   volume: number;
   sensitivity: number;
   tape: number;
   reducedMotion: boolean;
+  quality: QualityPreset;
+  contactShadows: boolean;
+  tapeEffects: boolean;
+  entities: boolean;
 }
 
 export interface SavedSettings extends GameSettings {
@@ -16,6 +23,10 @@ export const defaultSettings: SavedSettings = {
   sensitivity: 1,
   tape: 0.65,
   reducedMotion: false,
+  quality: "auto",
+  contactShadows: true,
+  tapeEffects: true,
+  entities: true,
 };
 
 function numberInRange(value: unknown, fallback: number, min: number, max: number) {
@@ -45,6 +56,18 @@ export function loadSettings(
       reducedMotion: typeof value.reducedMotion === "boolean"
         ? value.reducedMotion
         : defaults.reducedMotion,
+      quality: qualityPresets.includes(value.quality as QualityPreset)
+        ? value.quality as QualityPreset
+        : defaults.quality,
+      contactShadows: typeof value.contactShadows === "boolean"
+        ? value.contactShadows
+        : defaults.contactShadows,
+      tapeEffects: typeof value.tapeEffects === "boolean"
+        ? value.tapeEffects
+        : defaults.tapeEffects,
+      entities: typeof value.entities === "boolean"
+        ? value.entities
+        : defaults.entities,
     };
   } catch {
     return defaults;

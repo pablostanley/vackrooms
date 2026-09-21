@@ -1,4 +1,4 @@
-const MAX_PIXELS = 3840 * 2160;
+import { qualityProfile, type RenderQuality } from "./render-quality";
 const SCALES = [1, 0.85, 0.7, 0.5, 0.35] as const;
 
 /** Bound GPU fill work independently of the native-resolution HTML HUD. */
@@ -9,10 +9,20 @@ export class RenderResolution {
   private frames = 0;
   private stalledFrames = 0;
 
+  constructor(private quality: RenderQuality = "auto") {}
+
+  setQuality(quality: RenderQuality) {
+    if (this.quality === quality) return false;
+    this.quality = quality;
+    this.level = 0;
+    this.resetSampling();
+    return true;
+  }
+
   pixelRatio(width: number, height: number, devicePixelRatio: number) {
-    // Start sharp on capable displays, with a 4K ceiling for oversized windows.
-    const native = Math.min(devicePixelRatio || 1, 2);
-    const budget = Math.sqrt(MAX_PIXELS / Math.max(1, width * height));
+    const profile = qualityProfile(this.quality);
+    const native = Math.min(devicePixelRatio || 1, profile.maxDpr);
+    const budget = Math.sqrt(profile.maxPixels / Math.max(1, width * height));
     return Math.min(native, budget) * SCALES[this.level];
   }
 
@@ -24,6 +34,7 @@ export class RenderResolution {
   }
 
   recordFrame(milliseconds: number, playing: boolean) {
+    if (this.quality !== "auto") return false;
     // Paused previews intentionally run at 30 Hz. Ignore tab switches, initial
     // compilation, and resize gaps; use raw intervals, not the physics dt cap.
     if (

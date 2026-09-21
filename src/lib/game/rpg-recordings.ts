@@ -7,7 +7,7 @@ const water = (step: string) => ({ src: `/audio/water/${step}.ogg`, gain: 0.18, 
 export const WATER_RECORDINGS = ["water", "water2", "water3", "water4", "water5", "water6"] as const;
 
 export const FOOTSTEP_RECORDINGS = {
-  normal: kenney("footstep00", 0.1, 2200),
+  normal: kenney("footstep00", 0.065, 900),
   hard: kenney("footstep04", 0.18, 4200),
   heavy: kenney("footstep08", 0.11, 3200),
   water: water("step01"),
@@ -17,6 +17,12 @@ export const FOOTSTEP_RECORDINGS = {
   water5: water("step05"),
   water6: water("step06"),
 } as const;
+/** Carpet absorbs both the sharp heel impact and the room's reflections. */
+export const FOOTSTEP_SURFACES = {
+  carpet: { attack: 0.018, reflections: 0.16 },
+  hard: { attack: 0.001, reflections: 1.1 },
+  water: { attack: 0.003, reflections: 1.1 },
+} satisfies Record<FootstepSurface, { attack: number; reflections: number }>;
 export const CREAK_RECORDINGS = ["creak1", "creak2", "creak3"] as const;
 export const RPG_RECORDINGS = {
   ...FOOTSTEP_RECORDINGS,
