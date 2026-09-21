@@ -460,12 +460,18 @@ button:disabled {
     appearance: base-select;
   }
   .quality-setting select::picker-icon {
+    content: "";
+    width: 0.5em;
+    height: 0.5em;
+    margin: 0.15em 0.25em 0;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
     color: #e0deb0;
-    font-size: 0.8em;
+    rotate: 45deg;
     transition: rotate 120ms ease;
   }
   .quality-setting select:open::picker-icon {
-    rotate: 180deg;
+    rotate: 225deg;
   }
   .quality-setting select::picker(select) {
     margin-top: calc(var(--hud-unit) * 0.75);
