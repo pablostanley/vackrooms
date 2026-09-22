@@ -1,3 +1,5 @@
+import { interiorSeed, type GenerationVersion } from "./generation";
+
 export const CELL = 4.8;
 export const CHUNK = 12;
 export const SPAN = CELL * CHUNK;
@@ -174,8 +176,12 @@ export function generateChunk(
   z: number,
   seed: number,
   depth = 0,
+  generation: GenerationVersion = 1,
 ): ChunkData {
-  const chunkSeed = hash(x, z, seed + depth * 7919);
+  // Keep global cadence, landmark selection, and shared boundary gates legacy.
+  const chunkSeed = generation === 2
+    ? interiorSeed(x, z, seed + depth * 7919)
+    : hash(x, z, seed + depth * 7919);
   const rng = random(chunkSeed);
   const cells = new Uint8Array(CHUNK * CHUNK);
   const seen = new Set<number>([0]);
