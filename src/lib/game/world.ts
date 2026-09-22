@@ -855,6 +855,9 @@ export function buildSection(
       ownedMaterials.forEach((material) => material.dispose());
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
+          // Three r186 owns per-object WebGPU bindings separately from geometry.
+          // Shared materials outlive sections, so release the retired mesh too.
+          obj.dispose();
           obj.geometry.dispose();
           if (portals.some((p) => p.mesh === obj))
             (obj.material as THREE.Material).dispose();
