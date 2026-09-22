@@ -306,6 +306,13 @@ Third matched GPU run started **08:14:23.296 UTC**, expected completion about **
 
 ### CRT teardown regression corrected
 
-Draft [#66](https://github.com/pablostanley/vackrooms/pull/66), `63dc633`, prevents pending fullscreen callbacks from reviving retired computer UI. Both promise continuations check engine lifetime and station ownership; a late successful fullscreen entry exits the retired surface. Five tests invoke the actual engine methods while stubbing only browser GPU-module loading and lifecycle dependencies. Both post-disposal cases fail against the old code; live success/failure, leave-before-settlement and superseded-station controls pass. All 156 branch tests/types/lint/build pass. Browser verification and independent review are pending.
+Draft [#66](https://github.com/pablostanley/vackrooms/pull/66), `63dc633`, prevents pending fullscreen callbacks from reviving retired computer UI. Both promise continuations check engine lifetime and station ownership; a late successful fullscreen entry exits the retired surface. Five tests invoke the actual engine methods while stubbing only browser GPU-module loading and lifecycle dependencies. Both post-disposal cases fail against the old code; live success/failure, leave-before-settlement and superseded-station controls pass. All 156 branch tests/types/lint/build pass. Independent review reran all five targeted tests cleanly; browser verification remains pending.
 
 Integration `ce5c173` includes this fix without conflicts and passes **225 tests**, typecheck and lint. Its production build also passes; the GPU soak remains pinned to its matched earlier commit and is not a test of #66. At 350 seconds that soak had no errors/failures, with identical-world resource checkpoints still forthcoming.
+
+
+### Final gameplay coverage prepared
+
+The remaining combined QA will explicitly cover active creatures, which the earlier sustained resource-isolation runs disabled. A prepared plan and generator-derived route catalog are in `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-final-gameplay/`. The catalog identifies all twelve base/variant room categories for generation-2 tape 199307 on `ce5c173`; its room centers are not claimed to be collision-safe spawn positions. Planned coverage is one 15-minute WebGPU session and one 15-minute compatible WebGL session after the PR-specific checks, with natural creature scheduling preserved during opening coverage and any later staged encounters labelled separately. These sessions have not started.
+
+PR #66 independent review is clean and all CI/deployment checks pass. The current third GPU comparison remains live; its first identical-world checkpoint has 60 textures, 1,682 uniform buffers, 146 geometries and 36 programs. The retained texture baseline is expected to be higher with reuse; one checkpoint is insufficient to prove stability.
