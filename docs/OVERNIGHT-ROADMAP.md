@@ -45,9 +45,9 @@ User follow-up: improve existing content as well as adding new content. After th
 | Agent | Branch | Scope | Status |
 | --- | --- | --- | --- |
 | Coordinator | `codex/overnight-roadmap` | Research, roadmap, baseline, cross-branch verification | In progress |
-| Rooms | `codex/overnight-rooms` | Maze/landmark office annex and focused tests | In progress |
-| Furniture | `codex/overnight-furniture` | Furniture models/layout and minimal world prop selection | In progress |
-| Sound | `codex/overnight-sound` | Audio and independent room ambience module | In progress |
+| Rooms | `codex/overnight-rooms` | Maze/landmark office annex and focused tests | PR #44, verified |
+| Furniture | `codex/overnight-furniture` | Furniture models/layout and minimal world prop selection | PR #43, verified |
+| Sound | `codex/overnight-sound` | Audio and independent room ambience module | PR #42, verified |
 
 Each implementation uses a separate worktree and PR. Coordinate shared file edits before making them. The coordinator owns browser scheduling. Follow-up batches start only after reviewing the first batch's outcomes.
 
@@ -99,3 +99,14 @@ Next audits assigned: existing creature locomotion smoothing; texture/lighting q
 Combined branch `codex/overnight-integration` is pushed for validation only. First five implementation branches passed 165 combined tests, TypeScript, lint, all shader validation and production build. The refinement batch is now included and undergoing another focused combined pass. All feature PRs remain unmerged.
 
 Local browser evidence is saved under the task's visualization directory in `overnight/`; it includes before/after ceilings, both-renderer annex views, props, warehouse, close-up note, and creature preview recording.
+
+
+### Verification checkpoint, 05:55 UTC
+
+The combined refinement branch passes 172 tests. #50 also passed actual browser corridor crossing through the game loop/Rapier and five programmatic streaming-window relocations. Every observed scene/chunk/navigation/physics map stayed at nine or fewer, and final keys agreed. This confirms streaming behavior, not just the pure helper tests.
+
+The deployed integration preview at commit `0c1fec4` was authenticated through Vercel's connected account, loaded in a real browser, and passed Record/Escape smoke checks with no runtime errors: [verified preview](https://vackrooms-kuxtihfjl-pablostanley.vercel.app/?tape=199307). This particular deployment predates #50; later integrated commits must be reverified before describing them as the same build.
+
+PRs #42–#50 are attached to the main task (subagent attachments alone did not appear there). All checked GitHub test/build/deployment statuses and Vercel agent reviews pass. Main remains unchanged. The only combined source conflict was the office/warehouse union in `maze.ts` and `landmarks.ts`; the pushed integration branch contains the reviewed union resolution.
+
+Remaining active work: WebGL tone-mapping/capability correction; measure whether existing creature skin geometry offers a worthwhile appearance-preserving startup/memory improvement. Do not begin more new room types until these refinements and combined verification are finished.
