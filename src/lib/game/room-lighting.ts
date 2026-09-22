@@ -201,14 +201,19 @@ export function createRoomAmbientSampler(data: ChunkData, plan: RoomLighting) {
   };
 }
 
-/** A section-owned ambient mask, shared by its material batches on both renderers. */
-export function createRoomAmbientMap(data: ChunkData, plan: RoomLighting) {
+/** Bake into fixed-size storage; pooled maps keep their identity across sections. */
+export function createRoomAmbientMap(
+  data: ChunkData, plan: RoomLighting, target?: THREE.DataTexture,
+) {
   // Texels narrower than the wall thickness keep filtering from bleeding the
   // bright side of a partition onto its dark face.
   const texelsPerCell = 48;
   const size = CHUNK * texelsPerCell;
   const sample = createRoomAmbientSampler(data, plan);
-  const pixels = new Uint8Array(size * size * 4).fill(255);
+  const pixels = target
+    ? target.image.data as Uint8Array
+    : new Uint8Array(size * size * 4);
+  pixels.fill(255);
   // Most of the section is unchanged. Sample only the few affected cells.
   for (const cell of plan.cells) {
     const x0 = (cell % CHUNK) * texelsPerCell;
@@ -222,9 +227,51 @@ export function createRoomAmbientMap(data: ChunkData, plan: RoomLighting) {
         pixels[at] = pixels[at + 1] = pixels[at + 2] = value;
       }
   }
-  const texture = new THREE.DataTexture(pixels, size, size);
+  const texture = target ?? new THREE.DataTexture(pixels, size, size);
   texture.channel = 1;
   texture.magFilter = texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
   return texture;
+}
+
+/** One pool per Materials owner. Allocate lazily up to 18: older streaming builds
+ * the incoming nine-section window before evicting the previous one. Eviction-
+ * first streaming needs at most nine identities; neither path preallocates.
+ * Three r186 cached node bindings can retain the first map after its section
+ * retires. Keep these texture identities alive until the whole owner retires;
+ * shared shader states then cannot resurrect disposed section textures.
+ */
+export function createRoomAmbientPool() {
+  const entries: { texture: THREE.DataTexture; leased: boolean }[] = [];
+  let disposed = false;
+  return {
+    acquire(data: ChunkData, plan: RoomLighting) {
+      if (disposed) throw new Error("Ambient texture pool is disposed");
+      let entry = entries.find((candidate) => !candidate.leased);
+      if (entry) {
+        createRoomAmbientMap(data, plan, entry.texture);
+      } else {
+        if (entries.length === 18)
+          throw new Error("Ambient texture pool exceeded eighteen simultaneous sections");
+        entry = { texture: createRoomAmbientMap(data, plan), leased: false };
+        entries.push(entry);
+      }
+      entry.leased = true;
+      let released = false;
+      return {
+        texture: entry.texture,
+        release() {
+          if (released) return;
+          released = true;
+          entry.leased = false;
+        },
+      };
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      entries.forEach(({ texture }) => texture.dispose());
+      entries.length = 0;
+    },
+  };
 }

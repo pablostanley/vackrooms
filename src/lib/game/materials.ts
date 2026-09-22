@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createRoomAmbientPool } from "./room-lighting";
 import { random, type Theme } from "./maze";
 import { drawFunCarpet, drawFunMural } from "./fun-textures";
 import {
@@ -38,6 +39,7 @@ function grain(
   ctx.putImageData(image, 0, 0);
 }
 export function createMaterials() {
+  const ambientMaps = createRoomAmbientPool();
   const textures: THREE.Texture[] = [];
   const texture = (
     draw: (ctx: CanvasRenderingContext2D, size: number) => void,
@@ -302,6 +304,7 @@ export function createMaterials() {
   configureSurfaceSampling(streetGrass);
   configureSurfaceSampling(streetHedge);
   return {
+    ambientMaps,
     wall,
     floor,
     top,
@@ -347,6 +350,7 @@ export function createMaterials() {
       floor,
     }),
     dispose: () => {
+      ambientMaps.dispose();
       textures.forEach((t) => t.dispose());
       [
         wall,

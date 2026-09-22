@@ -18,7 +18,7 @@ import {
   type ChunkData,
 } from "./maze";
 import { buildLandmark } from "./landmarks";
-import { createRoomAmbientMap, planRoomLighting } from "./room-lighting";
+import { planRoomLighting } from "./room-lighting";
 import type { Materials } from "./materials";
 import { configureSurfaceSampling, projectSurfaceUVs } from "./surface-textures";
 import type { ShapedObstacle } from "./physics";
@@ -776,9 +776,10 @@ export function buildSection(
     chair(CELL * 3.5 + 1.4, CELL * 2.5 + 1.4, 0.5);
   for (const source of models.values())
     source.parts.forEach((part) => part.geometry.dispose());
-  const ambientMap = lighting.cells.size
-    ? createRoomAmbientMap(data, lighting)
+  const ambientLease = lighting.cells.size
+    ? mats.ambientMaps.acquire(data, lighting)
     : null;
+  const ambientMap = ambientLease?.texture;
   const ownedMaterials: THREE.Material[] = [];
   for (const [material, geometries] of batches) {
     const merged = mergeGeometries(geometries);
@@ -839,7 +840,6 @@ export function buildSection(
     computers,
     occluders,
     dispose: () => {
-      ambientMap?.dispose();
       ownedMaterials.forEach((material) => material.dispose());
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
@@ -852,6 +852,7 @@ export function buildSection(
         }
       });
       group.removeFromParent();
+      ambientLease?.release();
     },
   };
 }
