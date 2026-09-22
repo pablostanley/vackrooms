@@ -19,6 +19,7 @@ import {
 } from "./maze";
 import { createDiscoveryParts, planDiscovery } from "./discoveries";
 import { buildLandmark } from "./landmarks";
+import { wallContactShadowGeometry } from "./wall-contact-shadow";
 import { createRoomAmbientMap, planRoomLighting } from "./room-lighting";
 import type { Materials } from "./materials";
 import { configureSurfaceSampling, projectSurfaceUVs } from "./surface-textures";
@@ -178,16 +179,14 @@ export function buildSection(
       mats.trim,
     );
     for (const side of [-1, 1]) {
-      // Contact shadows soften the wall-to-carpet and wall-to-ceiling junctions.
-      plane(
-        vertical ? 0.65 : CELL,
-        vertical ? CELL : 0.65,
+      // Soft baked contact shading grounds both sides of each wall on the floor.
+      add(
+        wallContactShadowGeometry(vertical, side),
+        mats.shadow,
         x + (vertical ? side * 0.39 : 0),
         0.006,
         z + (vertical ? 0 : side * 0.39),
-        mats.shadow,
-        -Math.PI / 2,
-        side < 0 ? Math.PI : 0,
+        0,
       );
     }
   }
