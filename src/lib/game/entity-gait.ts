@@ -19,9 +19,10 @@ export function solveEntityLeg(
   const reach = stepLength(speed) * motion;
   const smooth = swing * swing * (3 - 2 * swing);
   const footZ = swinging ? (smooth - 0.5) * reach : (0.5 - phase * 2) * reach;
-  const lift = swinging
-    ? Math.sin(swing * Math.PI) * (0.15 + gaitUrgency(speed) * 0.18) * motion
-    : 0;
+  // Ease vertical velocity to zero at both contacts; a sine alone snaps from
+  // a planted foot to full upward/downward velocity at the swing boundaries.
+  const arc = swinging ? Math.sin(swing * Math.PI) ** 2 : 0;
+  const lift = arc * (0.15 + gaitUrgency(speed) * 0.18) * motion;
   const footY = 0.05 + lift;
   const drop = hipHeight - footY;
   const length = clamp(Math.hypot(drop, footZ), 0.1, LEG_LENGTH * 2 - 0.001);
@@ -34,6 +35,6 @@ export function solveEntityLeg(
   );
   const hip = Math.atan2(-footZ, drop) - knee / 2;
   const ankle =
-    -hip - knee - (swinging ? Math.sin(swing * Math.PI) * 0.16 * motion : 0);
+    -hip - knee - arc * 0.16 * motion;
   return { hip, knee, ankle, footY, footZ, swinging };
 }
