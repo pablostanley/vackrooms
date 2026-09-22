@@ -38,6 +38,8 @@ export type FurnitureKind =
 export interface FurnitureModel {
   parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[];
   bounds: THREE.Box3;
+  /** Optional compact player solids; the full bound still reserves navigation. */
+  playerBounds?: THREE.Box3[];
   /** A point inside solid geometry, used when embedding the object in a wall. */
   anchor: THREE.Vector3;
 }
