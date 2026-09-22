@@ -35,6 +35,7 @@ export interface Landmark {
   office?: "annex";
   warehouse?: boolean;
   corridor?: "hotel";
+  pool?: "colonnade";
 }
 export interface PoolBounds {
   x: number;
@@ -314,6 +315,10 @@ export function generateChunk(
   }
   if (kind === "foodCourt" && hash(x, z, seed + 7211) % 4 === 0)
     landmark.warehouse = true;
+  // New-generation interiors only; the opening pool and all legacy tapes stay familiar.
+  if (generation === 2 && kind === "poolroom" && (x !== 0 || z !== 0) &&
+      interiorSeed(x, z, seed + 0x37c011) % 5 === 0)
+    landmark.pool = "colonnade";
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
   // One choice per three-section run, including negative chunk coordinates.

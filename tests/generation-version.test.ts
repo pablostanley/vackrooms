@@ -33,7 +33,9 @@ test("v2 removes the sampled opposite-coordinate symmetry and remains determinis
     assert.deepEqual(generateChunk(x, z, 48, 0, 2), first);
     assert.deepEqual(generateChunk(x, z, 48, 22, 2), generateChunk(x, z, 48, 22, 2));
     assert.notDeepEqual(generateChunk(x, z, 48, 22, 2).cells, first.cells);
-    assert.deepEqual(first.landmark, generateChunk(x, z, 48, 0, 1).landmark);
+    const shape = { ...first.landmark };
+    delete shape.pool;
+    assert.deepEqual(shape, generateChunk(x, z, 48, 0, 1).landmark);
   }
 });
 
@@ -45,7 +47,9 @@ test("both generations retain shared boundary gates and connected interiors acro
           for (const depth of [0, 22]) {
             const data = generateChunk(x, z, seed, depth, generation);
             const legacy = generateChunk(x, z, seed, depth, 1);
-            assert.deepEqual(data.landmark, legacy.landmark);
+            const shape = { ...data.landmark };
+            delete shape.pool;
+            assert.deepEqual(shape, legacy.landmark);
             for (const neighborGeneration of [1, 2] as const) {
               const east = generateChunk(x + 1, z, seed, 22, neighborGeneration);
               const south = generateChunk(x, z + 1, seed, 33, neighborGeneration);
