@@ -46,6 +46,21 @@ User follow-up: improve existing content as well as adding new content. After th
 | P3 | Models | More convincing creature details or restrained animation polish | Preserve collision, navigation and readable behavior |
 | P3 | Later | Swimming, ledge interactions, larger pool topology | Separate design task; avoid expanding physics scope without thorough validation |
 
+## Next content candidates after the validated batch
+
+Further source checks on September 22 distinguish reusable spatial ideas from larger gameplay changes. These are future candidates, not additional completed features or a promise to implement every idea during this night.
+
+| Candidate | Source and interpretation | Concrete next step and boundary |
+| --- | --- | --- |
+| Apartment alcove | The current [Level 13](https://backrooms-wiki.wikidot.com/level-13) describes bland beige apartment passages and repeated domestic layouts. Its current article differs from the archived Infinite Apartments version. | One sparse sitting/kitchen alcove would add domestic furniture silhouettes. Use original cabinets, a low sofa and a closed refrigerator; retain two clear walking routes. Do not imply working elevators, accessible multi-floor residences or the article's full narrative. |
+| Electrical service bay | Current [Level 3](https://backrooms-wiki.wikidot.com/level-3) is an electrical facility. This is adjacent to the new utility corridor rather than a reason to duplicate it. | Refine one existing closed bay with original switchgear and cable trays, then add a restrained positional transformer tone. Keep bright service lighting and readable clearance; do not copy the article's enemies or convert the game to combat. |
+| Neighborhood composition | [Level 9](https://backrooms-wiki.wikidot.com/level-9) describes varied suburban houses, domestic furniture and sometimes intersecting buildings. | Improve the existing indoor street's lot composition and facade depth before adding another street type. Preserve the warehouse enclosure and its sole sky-blue exception; midnight darkness and inaccessible intersecting collision are not suitable requirements here. |
+| Uncanny staged domestic set | [Level 94](https://backrooms-wiki.wikidot.com/level-94) uses a crafted town appearance and isolated fragments of furnished rooms. | A rare original room set behind a warehouse partition could be a stronger discovery than another prop scatter. First establish visibility, collision and batching costs. Defer outdoor hills, day/night cycles, copied toy characters and castle mechanics. |
+
+The attempted Wikidot Level 188 URL returned 404 during this check. It is not used as evidence for a courtyard proposal. Existing courtyard refinements are grounded in the implemented space and observed texture issue, rather than an unverified lore attribution.
+
+For existing content, the next useful model pass should begin with screenshots of silhouettes at normal playing distance, then improve the weakest of the copier, chairs, cupboards or house fronts. Preserve batching and accurate collision. Audio refinement should follow an actual listening pass with headphones across room transitions; analyser signal alone does not establish subjective mix quality. Larger pool topology, swimming, elevators and traversable house interiors need separate movement designs and cannot be treated as decoration-only changes.
+
 ## Work assignments
 
 | Agent | Branch | Scope | Status |
