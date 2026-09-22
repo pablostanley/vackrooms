@@ -4,9 +4,9 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 08:45 UTC, PRs #42–#60, #62, #63 and #65 have browser verification. The matched 24-minute tests confirm both uniform-buffer and lighting-texture growth are corrected at identical-world checkpoints. PRs #61, #64 and #66 are in their sequential browser-verification batch. Integration `ce5c173` passes **225 tests**, typecheck, lint and production build. Shader sources are unchanged from the fully checked `3a398f7`. Main and production are unchanged.
+At about 09:22 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. The final active-creature gameplay runs have been dispatched. Main and production remain unchanged.
 
-Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
+Room PRs #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
 ## Delivered work at a glance
 
@@ -361,3 +361,14 @@ The utility-corridor browser check has started after explicit release. Furniture
 PR #63 is ready for review. Actual WebGL and WebGPU main/detail views were inspected, including a RECORD-active view. Live browser Rapier movement crossed both section seams and all **47 side exits** out and back; the overhead-pipe jump reached eye height 2.6399m, then landed and retreated successfully. No runtime errors. Evidence includes `/tmp/vackrooms-utility-{webgl,webgpu}.png`, `/tmp/vackrooms-utility-detail-{webgl,webgpu}.png` and `/tmp/vackrooms-utility-recording-webgpu.png`. Temporary hook removed, worktree clean, browser/server closed. Furniture has explicitly started the prepared #61/#64/#66 batch.
 
 The final combined active-creature harness is prepared on clean `ce5c173` without browser/server/hooks yet. It preserves natural creature schedules for the opening eight minutes, records relocations separately, and uses development staging only for labelled later escape/death coverage. It remains queued behind the short PR-specific batch and latest deployed smoke check.
+
+
+### All implementation PRs ready; latest deployed smoke passed
+
+- **#61:** both WebGL/WebGPU pool views pass. Actual Rapier stops at a pier, reaches basin floor eye height 0.255m, and a keyboard jump returns to dry deck at eye height 1.655m. Camera/player setup was staged. Screenshot evidence: `/tmp/pool-colonnade-{webgl,webgpu}.png`. Documentation follow-up `9eabba7` is integrated at `58373e5`; runtime code is unchanged.
+- **#64:** genuine Chromium CDP touch input at 390×844 passed trusted pointer/capture/up/cancel/lost-capture checks. Initial edge press immediately sets movement to 0.888889; a second finger on the same joystick cannot steal or stop it. Owner release/cancel/lost capture clears movement. Simultaneous look changes yaw and Jump changes eye height while movement continues; pause clears movement. The first harness setup incorrectly enabled touch after desktop pointer lock and was corrected by coarse emulation before page load. Final runs had no new errors. This is browser emulation, not physical-device coverage; separate pause/resume coverage is not claimed. Evidence: `/tmp/touch-matrix-results.log`.
+- **#66:** an actual native fullscreen request wrapped with a 150ms promise delay settled after real engine disposal without reopening UI; fullscreen and modal state were false. A separately staged deferred rejection also caused no focus/fallback/modal revival. No errors.
+
+All three PR descriptions were updated and drafts cleared. Their hooks were removed, worktrees clean, browser/server closed. Root verified the deployed runtime `ce5c173` at [the latest checked preview](https://vackrooms-k2po3jvek-pablostanley.vercel.app/?tape=199307&generation=2): Record, Escape, settings, Balanced quality selection and return to paused view passed with no browser errors. Flashlight initially off. Screenshot `/tmp/vackrooms-final-deployed.png` inspected; browser closed.
+
+Sound now has an explicit START for the complementary two 15-minute active-creature runs at `ce5c173`. Record actual starts and completion separately.
