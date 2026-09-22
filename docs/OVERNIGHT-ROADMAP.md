@@ -156,4 +156,18 @@ A further architecture audit reproduced missing neighborhood roof collision: dou
 
 Integration `e27d279` now includes all implementation PRs #42–#55. All 182 combined tests, TypeScript, lint, four shader validations and the production build pass. The approved 20-minute browser soak is live at this exact commit in `/Users/pablostanley/.codex/worktrees/vackrooms-overnight-soak`, browser session `vackrooms-soak`, port 3029. Its harness and results live in `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-soak/`. It uses existing engine pause/rebuildWorld/start lifecycle, nine seeded room variants, and six cycles. Do not restart a live run because an observation call times out. Roadmap PR #41 and all fourteen implementation PRs are attached to the main task. Main and production remain unchanged.
 
-CI checkpoint: all checked statuses on #42–#54 pass; #55 test/build/deployment checks pass while its automated review is pending. No failed checks.
+CI checkpoint: all checked statuses on #42–#54 pass; #55 test/build/deployment checks pass and its automated review now also passes. No failed checks.
+
+
+## Review and integration notes
+
+All implementation PRs target main independently. The validation branch combines them in numerical order, #42 through #55; its tested tip is `e27d279`. No feature depends on merging the roadmap document first.
+
+Two overlapping areas required explicit union resolutions during integration:
+
+- Office and warehouse variants both extend landmark metadata and dispatch. Keep both optional fields, both variant decisions, and both builders/imports. The integration commit `1e9e8a1` records this resolution.
+- Discovery and furniture-collision modules both add an import at the same location in `world.ts`. Keep both imports, as in `4e5b8c0`.
+
+Other overlapping changes merged automatically; the full combined checks validate that result. Use the tested integration source as the resolution reference if merging individual PRs in the morning. Do not infer that separate green PRs alone prove their combination.
+
+The final batch's deployment is ready at [e27d279 preview](https://vackrooms-1n9pz0sdr-pablostanley.vercel.app/?tape=199307). Its deployed browser smoke is still pending until the resource soak releases the browser slot; the earlier documented preview remains the one already browser-verified.
