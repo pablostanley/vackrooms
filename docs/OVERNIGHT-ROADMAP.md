@@ -79,11 +79,11 @@ Initial audit: clean detached checkout at `ce5e024`; no open PRs returned by `gh
 
 ### First batch (in review)
 
-- [#42 Room ambience](https://github.com/pablostanley/vackrooms/pull/42): 154 tests/typecheck/lint/build pass. Browser confirms active audio signal and pause suspends context; mute/resume check ongoing.
+- [#42 Room ambience](https://github.com/pablostanley/vackrooms/pull/42): 154 tests/typecheck/lint/build pass. Browser confirms active audio signal and pause suspends context; mute/resume restores silence and signal correctly.
 - [#43 Office props](https://github.com/pablostanley/vackrooms/pull/43): 152 tests/typecheck/lint/build pass; cooler, copier and archive cartons visually inspected in actual seeded sections. Temporary local camera placement used for QA, removed afterward.
 - [#44 Office annex](https://github.com/pablostanley/vackrooms/pull/44): 153 tests/typecheck/lint/build pass. WebGL and WebGPU inspected; fixed jagged blind shadow artifacts found during browser review.
-- [#45 Environmental discoveries](https://github.com/pablostanley/vackrooms/pull/45): 155 tests/typecheck/lint/build pass; independent code review found no issues; browser legibility check pending.
-- [#46 Warehouse annex](https://github.com/pablostanley/vackrooms/pull/46): 154 tests/typecheck/lint/build pass; browser check pending.
+- [#45 Environmental discoveries](https://github.com/pablostanley/vackrooms/pull/45): 155 tests/typecheck/lint/build pass; independent code review found no issues; close-up browser legibility verified.
+- [#46 Warehouse annex](https://github.com/pablostanley/vackrooms/pull/46): 154 tests/typecheck/lint/build pass; interior browser check passed.
 
 Next audits assigned: existing creature locomotion smoothing; texture/lighting quality; map architecture and streaming performance. Combined integration branch is for validation, not an additional feature PR.
 
@@ -93,7 +93,7 @@ Next audits assigned: existing creature locomotion smoothing; texture/lighting q
 - [#47 Cream acoustic ceilings](https://github.com/pablostanley/vackrooms/pull/47): same-camera WebGL comparison approved; combined WebGPU rendering also inspected.
 - [#48 Exact-output generation optimization](https://github.com/pablostanley/vackrooms/pull/48): original classification and chunk comparison preserved; local 2,000-chunk CPU benchmark median 649 to 116 ms. This is not a whole-game frame-rate claim.
 - [#49 Creature locomotion](https://github.com/pablostanley/vackrooms/pull/49): smoother foot lift/contact and shortest-arc turn interpolation; stalk/attack browser previews still work and attack completes through normal tape reset.
-- [#50 Bounded streaming](https://github.com/pablostanley/vackrooms/pull/50): evict departures before constructing replacements; intermediate allocations remain at most nine. Real-browser seam check in progress.
+- [#50 Bounded streaming](https://github.com/pablostanley/vackrooms/pull/50): evict departures before constructing replacements; intermediate allocations remain at most nine. Real-browser corridor crossing and five relocation checks passed.
 - Confirmed follow-up: WebGL postprocessing omits tone mapping and uses an 8-bit intermediate, causing visible changes when effects toggle. Isolated correction is being checked with actual browser pixel comparisons.
 
 Combined branch `codex/overnight-integration` is pushed for validation only. First five implementation branches passed 165 combined tests, TypeScript, lint, all shader validation and production build. The refinement batch is now included and undergoing another focused combined pass. All feature PRs remain unmerged.
@@ -110,3 +110,19 @@ The deployed integration preview at commit `0c1fec4` was authenticated through V
 PRs #42–#50 are attached to the main task (subagent attachments alone did not appear there). All checked GitHub test/build/deployment statuses and Vercel agent reviews pass. Main remains unchanged. The only combined source conflict was the office/warehouse union in `maze.ts` and `landmarks.ts`; the pushed integration branch contains the reviewed union resolution.
 
 Remaining active work: WebGL tone-mapping/capability correction; measure whether existing creature skin geometry offers a worthwhile appearance-preserving startup/memory improvement. Do not begin more new room types until these refinements and combined verification are finished.
+
+
+### Refinement checkpoint, 06:06 UTC
+
+- [#51 WebGL output consistency](https://github.com/pablostanley/vackrooms/pull/51): correct HDR intermediate/tone mapping and disable unsupported contact AO on devices lacking float render targets. Independent review caught the fluorescent materials’ per-material tone-mapping exception; the follow-up normalizes their authored radiance and tests actual fixtures. Final review ongoing.
+- [#52 Exact creature geometry indexing](https://github.com/pablostanley/vackrooms/pull/52): identical triangle attributes and posed deformation, 8,205,120 to 1,713,528 bytes of geometry buffers (79.1% lower). Adds roughly 0.12 seconds of construction for the pair; no FPS claim. Both creature variants inspected in the integrated browser on WebGL/WebGPU with no errors. Combined branch at `538b153` passes 175 tests before #51.
+
+Further lore research suggests improving existing spaces before creating more categories:
+
+| Reference | Existing space to refine | Candidate, not yet implemented |
+| --- | --- | --- |
+| [Wikidot Level 2](https://backrooms-wiki.wikidot.com/level-2) | Service halls and corridor | More coherent pipe junctions, valves and quiet machinery; preserve navigation clearance and our brighter lighting. |
+| [Wikidot Manila Room](https://backrooms-wiki.wikidot.com/manila-room) | Archive/dead-end office | Rare table-and-document composition using original notes; current environmental discoveries already provide a first small adaptation. Avoid adding another room classification just for this. |
+| [Wikidot Level 6.1](https://backrooms-wiki.wikidot.com/level-6-1) | Existing food court | Improve anonymous vending-machine and shuttered-counter silhouettes. Keep our warm palette and sparse layout; no copied music, branding or article text. |
+
+Next review is an evidence-led texture sampling/seam audit. No new room type is queued while rendering consistency remains under review.
