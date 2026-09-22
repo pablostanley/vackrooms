@@ -1,5 +1,6 @@
+import { PropSoundGate, type PropMaterial, type PropSound } from "./prop-sounds";
 import RAPIER from "@dimforge/rapier3d-compat";
-import type { Box3, Vector3 } from "three";
+import { Box3, Sphere, Vector3, type Object3D } from "three";
 import {
   CELL,
   CHUNK,
@@ -30,6 +31,17 @@ const JUMP_BUFFER = 0.12;
 export interface ShapedObstacle {
   bounds: Box3;
   parts: Float32Array[];
+  movable?: { object: Object3D; mass: number; material?: PropMaterial };
+}
+
+interface PhysicalProp {
+  body: RAPIER.RigidBody;
+  object: Object3D;
+  bounds: Box3;
+  localBounds: Box3;
+  shadow: Sphere;
+  sound: PropSoundGate;
+  material: PropMaterial;
 }
 
 /** Rapier owns capsule sweeps, wall sliding, small steps, and floor contact. */
@@ -40,8 +52,11 @@ export class CharacterMotor {
   private capsule: RAPIER.Collider;
   private sections = new Map<string, {
     colliders: RAPIER.Collider[];
+    props: PhysicalProp[];
     basin: PoolBounds | null;
   }>();
+  readonly movingPropShadows: Sphere[] = [];
+  readonly propSounds: PropSound[] = [];
   private fallSpeed = 0;
   private onGround = false;
   private timeSinceGround = Infinity;
@@ -82,6 +97,8 @@ export class CharacterMotor {
     this.controller.setMaxSlopeClimbAngle(Math.PI / 4);
     this.controller.setMinSlopeSlideAngle(Math.PI / 4);
     this.controller.setSlideEnabled(true);
+    this.controller.setApplyImpulsesToDynamicBodies(true);
+    this.controller.setCharacterMass(75);
   }
   addSection(
     key: string,
@@ -90,6 +107,7 @@ export class CharacterMotor {
     shapedObstacles: ShapedObstacle[] = [],
   ) {
     this.removeSection(key);
+    const props: PhysicalProp[] = [];
     const colliders: RAPIER.Collider[] = [],
       ox = data.x * SPAN,
       oz = data.z * SPAN;
@@ -190,19 +208,46 @@ export class CharacterMotor {
         (b.max.z - b.min.z) / 2,
       );
     }
-    for (const obstacle of shapedObstacles)
+    for (const obstacle of shapedObstacles) {
+      const moving = obstacle.movable;
+      const center = obstacle.bounds.getCenter(new Vector3());
+      const body = moving ? this.world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic()
+          .setTranslation(center.x, center.y, center.z)
+          .setLinearDamping(1.8).setAngularDamping(3)
+          .setCcdEnabled(true).setSleeping(true),
+      ) : undefined;
+      if (body && moving) props.push({
+        body, object: moving.object, bounds: obstacle.bounds,
+        localBounds: obstacle.bounds.clone().translate(center.clone().negate()),
+        shadow: new Sphere(),
+        sound: new PropSoundGate(), material: moving.material ?? "wood",
+      });
       for (const vertices of obstacle.parts) {
-        const shape = RAPIER.ColliderDesc.convexHull(vertices);
+        const local = body ? vertices.slice() : vertices;
+        if (body) for (let i = 0; i < local.length; i += 3) {
+          local[i] -= center.x;
+          local[i + 1] -= center.y;
+          local[i + 2] -= center.z;
+        }
+        const shape = RAPIER.ColliderDesc.convexHull(local);
         if (!shape) throw new Error("Invalid convex furniture collider");
-        colliders.push(this.world.createCollider(shape));
+        if (moving) shape.setMass(moving.mass / obstacle.parts.length)
+          .setFriction(0.65).setRestitution(0);
+        const collider = this.world.createCollider(shape, body);
+        if (!body) colliders.push(collider);
       }
+    }
     this.sections.set(key, {
       colliders,
+      props,
       basin: basin ? { ...basin, x: ox + basin.x, z: oz + basin.z } : null,
     });
     this.world.step();
   }
   removeSection(key: string) {
+    for (const { body } of this.sections.get(key)?.props ?? [])
+      this.world.removeRigidBody(body);
     for (const collider of this.sections.get(key)?.colliders ?? [])
       this.world.removeCollider(collider, true);
     this.sections.delete(key);
@@ -228,6 +273,7 @@ export class CharacterMotor {
     this.world.step();
   }
   move(dx: number, dz: number, dt: number, position: Vector3) {
+    this.propSounds.length = 0;
     if (dt <= 0) return 0;
     let jumped: 0 | 1 | 2 = 0;
     // Bound sweeps at low frame rates without dropping input or elapsed time.
@@ -236,9 +282,57 @@ export class CharacterMotor {
       const accepted = this.step(dx / steps, dz / steps, dt / steps);
       if (accepted) jumped = accepted;
     }
+    this.syncProps();
     const next = this.body.translation();
     position.set(next.x, next.y + EYE_OFFSET, next.z);
     return jumped;
+  }
+  private samplePropSounds(dt: number) {
+    const listener = this.body.translation();
+    for (const { props } of this.sections.values()) for (const prop of props) {
+      const body = prop.body, p = body.translation();
+      if (body.isSleeping() || Math.hypot(p.x - listener.x, p.y - listener.y, p.z - listener.z) > 12) {
+        prop.sound.sample(dt, 0, 0, false);
+        continue;
+      }
+      let impulse = 0, supported = false;
+      for (let c = 0; c < body.numColliders(); c++) {
+        const collider = body.collider(c);
+        this.world.contactPairsWith(collider, (other) => {
+          // The capsule's sweep already applies pushing impulses; do not count
+          // its own contact as carpet support or scrape in midair.
+          if (other.handle === this.capsule.handle || other.parent()?.handle === body.handle) return;
+          this.world.contactPair(collider, other, (manifold) => {
+            let contactImpulse = 0;
+            for (let i = 0; i < manifold.numContacts(); i++)
+              contactImpulse += manifold.contactImpulse(i);
+            impulse += contactImpulse;
+            if (contactImpulse > 0 && Math.abs(manifold.normal().y) > 0.5) supported = true;
+          });
+        });
+      }
+      const v = body.linvel();
+      // Subtract ordinary weight support so resting contacts remain silent.
+      const event = prop.sound.sample(dt, Math.hypot(v.x, v.z),
+        Math.max(0, impulse / body.mass() - 9.81 * dt), supported);
+      if (event && this.propSounds.length < 8)
+        this.propSounds.push({ ...event, material: prop.material, position: { x: p.x, y: p.y, z: p.z } });
+    }
+  }
+  private syncProps() {
+    this.movingPropShadows.length = 0;
+    for (const { props } of this.sections.values()) for (const prop of props) {
+      const p = prop.body.translation(), q = prop.body.rotation();
+      if (prop.object.position.x === p.x && prop.object.position.y === p.y && prop.object.position.z === p.z &&
+          prop.object.quaternion.x === q.x && prop.object.quaternion.y === q.y &&
+          prop.object.quaternion.z === q.z && prop.object.quaternion.w === q.w) continue;
+      prop.object.position.set(p.x, p.y, p.z);
+      prop.object.quaternion.set(q.x, q.y, q.z, q.w);
+      prop.object.updateMatrixWorld(true);
+      // Navigation retains this Box3 by reference, so it follows the moved prop.
+      prop.bounds.copy(prop.localBounds).applyMatrix4(prop.object.matrixWorld);
+      this.movingPropShadows.push(prop.bounds.getBoundingSphere(prop.shadow));
+    }
   }
   private takeoffSpeed() {
     const position = this.body.translation();
@@ -289,6 +383,7 @@ export class CharacterMotor {
     }
     const dy = this.fallSpeed * dt - 0.5 * GRAVITY * dt * dt;
     this.fallSpeed = Math.max(this.fallSpeed - GRAVITY * dt, -18);
+    this.world.timestep = dt;
     this.controller.computeColliderMovement(this.capsule, {
       x: dx,
       y: dy,
@@ -301,8 +396,8 @@ export class CharacterMotor {
       y: current.y + movement.y,
       z: current.z + movement.z,
     });
-    this.world.timestep = dt;
     this.world.step();
+    this.samplePropSounds(dt);
     this.onGround = this.fallSpeed <= 0 && this.controller.computedGrounded();
     if (this.onGround) {
       this.fallSpeed = 0;

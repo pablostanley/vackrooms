@@ -180,6 +180,10 @@ export class EntityNavigation {
     this.chunks.clear();
     this.reindex();
   }
+  /** Rebuild spatial buckets and cached paths after physical furniture moves. */
+  refreshObstacles() {
+    this.reindex();
+  }
   private reindex() {
     this.revision++;
     this.walkable.clear();

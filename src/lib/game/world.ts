@@ -13,6 +13,7 @@ import {
   hash,
   inLandmark,
   ceilingAt,
+  canStand,
   poolBounds,
   courtyardBounds,
   type ChunkData,
@@ -77,6 +78,7 @@ export function buildSection(
     water: THREE.Mesh[] = [];
   const shapedColliders: ShapedObstacle[] = [];
   const computers: ComputerStation[] = [];
+  const looseFurniture: ShapedObstacle[] = [];
   const lampLights: THREE.Vector3[] = [];
   const lighting = planRoomLighting(data);
   group.userData.lighting = lighting;
@@ -204,18 +206,61 @@ export function buildSection(
           .applyMatrix4(pose)
           .add(new THREE.Vector3(ox, 0, oz)),
       );
+    const mass = attachment === "floor" ? (
+      isChairKind(kind) ? (kind === "officeChair" ? 12 : 7)
+        : kind === "sideTable" ? 16
+        : kind === "utilityCart" ? 24
+        : kind === "archiveCartons" ? 18
+        : kind === "bench" ? 38
+        : kind === "table" ? 48 : 0
+    ) : 0;
+    const movable = mass ? new THREE.Group() : null;
+    const worldPose = pose.clone().premultiply(new THREE.Matrix4().makeTranslation(ox, 0, oz));
+    const worldBounds = source.bounds.clone().applyMatrix4(worldPose);
+    const center = worldBounds.getCenter(new THREE.Vector3());
+    if (movable) {
+      movable.position.copy(center);
+      group.add(movable);
+    }
     const shaped = kind === "slide" || kind === "utilityCart" || kind === "computerDesk";
+    const movingBatches = new Map<THREE.Material, THREE.BufferGeometry[]>();
     for (const part of source.parts) {
       const geometry = part.geometry.clone();
       // Furniture grain follows the object when it rotates or hangs from a wall.
       if (part.material.userData.surfaceMeters)
         projectSurfaceUVs(geometry, part.material.userData.surfaceMeters);
       geometry.applyMatrix4(pose).translate(ox, 0, oz);
-      if (!batches.has(part.material)) batches.set(part.material, []);
-      batches.get(part.material)!.push(geometry);
+      if (movable) {
+        geometry.translate(-center.x, -center.y, -center.z);
+        if (!movingBatches.has(part.material)) movingBatches.set(part.material, []);
+        movingBatches.get(part.material)!.push(geometry);
+      } else {
+        if (!batches.has(part.material)) batches.set(part.material, []);
+        batches.get(part.material)!.push(geometry);
+      }
+    }
+    if (movable) for (const [material, geometries] of movingBatches) {
+      const mesh = new THREE.Mesh(mergeGeometries(geometries)!, material);
+      mesh.castShadow = mesh.receiveShadow = true;
+      movable.add(mesh);
+      geometries.forEach((geometry) => geometry.dispose());
     }
     const bounds = source.bounds.clone().applyMatrix4(pose);
     propRecords.push({ kind, attachment, bounds: bounds.clone() });
+    if (movable) {
+      const obstacle: ShapedObstacle = {
+        bounds: worldBounds,
+        parts: furnitureCollisionParts(source, worldPose),
+        movable: { object: movable, mass, material:
+          kind === "utilityCart" || kind === "officeChair" || kind === "foldingChair" ? "metal"
+            : kind === "plasticChair" ? "plastic"
+            : kind === "archiveCartons" ? "cardboard" : "wood" },
+      };
+      colliders.push(worldBounds);
+      shapedColliders.push(obstacle);
+      looseFurniture.push(obstacle);
+      return;
+    }
     if (bounds.min.y < HEIGHT && bounds.max.y > 0.02) {
       if (shaped) {
         // Keep the coarse navigation bound while Rapier follows actual solids.
@@ -779,6 +824,33 @@ export function buildSection(
       geometry.translate(ox, 0, oz);
       if (!batches.has(material)) batches.set(material, []);
       batches.get(material)!.push(geometry);
+    }
+  }
+  // Reject intersecting arrangements only after all props/landmarks are present.
+  // In particular the bottom chair of a deliberately interlocked pile stays fixed.
+  const chunks = new Map([[`${data.x},${data.z}`, data]]);
+  for (const obstacle of looseFurniture) {
+    const b = obstacle.bounds;
+    const interior = b.clone().expandByScalar(-0.025);
+    let clear = Math.abs(b.min.y) < 0.03 && b.max.y < HEIGHT - 0.03;
+    const nx = Math.max(1, Math.ceil((b.max.x - b.min.x) / (CELL / 4)));
+    const nz = Math.max(1, Math.ceil((b.max.z - b.min.z) / (CELL / 4)));
+    for (let ix = 0; ix <= nx; ix++) for (let iz = 0; iz <= nz; iz++) {
+      const x = b.min.x + (b.max.x - b.min.x) * ix / nx;
+      const z = b.min.z + (b.max.z - b.min.z) * iz / nz;
+      if (!canStand(chunks, x, z, 0.02)) clear = false;
+    }
+    if (!clear || colliders.some((other) => other !== b && other.intersectsBox(interior))) {
+      const object = obstacle.movable!.object;
+      for (const child of object.children) {
+        const mesh = child as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+        mesh.geometry.translate(object.position.x, object.position.y, object.position.z);
+        if (!batches.has(mesh.material)) batches.set(mesh.material, []);
+        batches.get(mesh.material)!.push(mesh.geometry);
+        mesh.dispose();
+      }
+      object.removeFromParent();
+      obstacle.movable = undefined;
     }
   }
   const ambientLease = lighting.cells.size

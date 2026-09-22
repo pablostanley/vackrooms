@@ -193,7 +193,7 @@ test("party rooms keep carpet acoustics, bright fixtures, and one floor surface"
             );
           }
         assert.ok(
-          section.group.children.length < 40,
+          section.group.children.length - section.shapedColliders.filter((prop) => prop.movable).length < 40,
           "static details stay batched",
         );
       } finally {

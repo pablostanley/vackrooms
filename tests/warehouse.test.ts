@@ -68,7 +68,7 @@ test("warehouse columns and supplies leave all four section gates connected, inc
           }
         assert.equal(gates.length, 4);
         for (const gate of gates) assert.ok(free[gate] && seen.has(gate), `warehouse ${sx},${sz}: reachable gate`);
-        assert.ok(section.group.children.length < 40, "warehouse shares existing material batches");
+        assert.ok(section.group.children.length - section.shapedColliders.filter((prop) => prop.movable).length < 40, "warehouse shares existing material batches");
         assert.equal(section.group.userData.warehouse.columns, 4);
         assert.ok(section.group.userData.warehouse.supplies <= 4);
         assert.equal(section.water.length, 0);

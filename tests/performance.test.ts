@@ -230,13 +230,11 @@ test("cached section occluders retain exact glass visibility across rooms and po
         // original per-update scene traversal used as the reference.
         for (const section of sections)
           for (const water of section.water) water.material = mats.shadow;
-        const referenceMeshes = sections.flatMap((section) =>
-          section.group.children.filter(
-            (object): object is THREE.Mesh =>
-              object instanceof THREE.Mesh &&
-              !(object.material as THREE.Material).transparent,
-          ),
-        );
+        const referenceMeshes: THREE.Mesh[] = [];
+        for (const section of sections) section.group.traverse((object) => {
+          if (object instanceof THREE.Mesh && !(object.material as THREE.Material).transparent)
+            referenceMeshes.push(object);
+        });
         assert.deepEqual(meshes, referenceMeshes);
         for (const section of sections) {
           assert.ok(
