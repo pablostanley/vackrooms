@@ -2,6 +2,12 @@
 
 Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (05:30–11:30 UTC). The user authorized autonomous research, implementation, separate agents and separate PRs. PRs remain reviewable; no production merge is planned.
 
+## Current checkpoint
+
+At 07:23 UTC, PRs #42–#58 have browser verification; #59 (creature contact) and draft #60 (courtyard UVs) pass automated checks and await their browser turns. Combined integration `5f07647` passes **204 tests**, typecheck, lint and build. The 24-minute WebGPU/CRT run remains pinned to `cb6ddcf`; its result must not be attributed to the two later fixes. Main and production are unchanged.
+
+Two further room refinements are approved for implementation: a utility corridor stacked on hotel PR #57, and a generation-2 pool colonnade stacked on versioning PR #58. Their PRs will name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
+
 ## Direction
 
 Make exploration reward attention: recognizable spaces, believable objects, subtle sound changes, and rare discoveries. Preserve the oppressive fluorescent brightness, warm palette, camcorder-only interface, optional flashlight initially off, and sparse atmosphere. More content should not mean clutter in every room.
@@ -161,7 +167,7 @@ CI checkpoint: all checked statuses on #42–#54 pass; #55 test/build/deployment
 
 ## Review and integration notes
 
-All implementation PRs target main independently. The validation branch combines them in numerical order, #42 through #55; its tested tip is `e27d279`. No feature depends on merging the roadmap document first.
+PRs #42–#60 target main independently. Later room refinements are intentionally stacked on #57 or #58, as recorded in the current checkpoint and their PR descriptions. The initial validation branch combined #42 through #55 at `e27d279`; later tested tips are recorded below. No feature depends on merging the roadmap document first.
 
 Two overlapping areas required explicit union resolutions during integration:
 
