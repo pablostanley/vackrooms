@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 08:12 UTC, PRs #42–#59 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts. Draft #65 bounds the separate lighting-texture lifetime; its matched browser comparison is prepared. PR #60 is in visual verification; #61, #63 and #64 await browser turns. Integration `3a398f7` passes **220 tests**, typecheck, lint and all four shader checks; production build is running. Main and production are unchanged.
+At about 08:18 UTC, PRs #42–#60 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts. Draft #65 bounds the separate lighting-texture lifetime; its matched browser comparison is prepared. PRs #61, #63 and #64 await browser turns. Integration `3a398f7` passes **220 tests**, typecheck, lint, all four shader checks and production build. Main and production are unchanged.
 
 Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -275,6 +275,15 @@ Draft [#64](https://github.com/pablostanley/vackrooms/pull/64), `d26e489`, corre
 
 PR #59 passed an actual WebGL browser check. A staged starting position followed by a normal keyboard W press through Rapier placed the player against a wall; the creature's body clearance failed while the player-sized contact clearance passed, and the staged nearby creature entered grabbing after 0.267 seconds. An across-wall negative stayed out of attack, and an unobstructed control grabbed. This verifies staged contact behavior, not a naturally occurring spawn. Hooks/server/browser were removed and the branch is clean.
 
-Draft [#65](https://github.com/pablostanley/vackrooms/pull/65), `1d8d38f`, implements the material-owner ambient texture pool, stacked on #62. All 157 branch tests/types/lint/build pass, including exact original RGBA hashes for three lighting modes, 120 replacement-window cycles using nine identities, eighteen-live-lease overflow protection, stale-release safety, independent owners and retirement ordering. Independent review reran all five new tests cleanly. Integration `3a398f7` retains discovery/hotel material owners alongside the pool and passes 220 tests/types/lint/all shader checks; build is pending.
+Draft [#65](https://github.com/pablostanley/vackrooms/pull/65), `1d8d38f`, implements the material-owner ambient texture pool, stacked on #62. All 157 branch tests/types/lint/build pass, including exact original RGBA hashes for three lighting modes, 120 replacement-window cycles using nine identities, eighteen-live-lease overflow protection, stale-release safety, independent owners and retirement ordering. Independent review reran all five new tests cleanly. Integration `3a398f7` retains discovery/hotel material owners alongside the pool and passes 220 tests/types/lint/all shader checks and production build.
 
 The third GPU comparison is prepared at `20f9657`: the same `cb6ddcf` baseline plus only #62 and #65. It has not started. Browser scheduling gives the courtyard texture comparison a short turn first, then the matched 24-minute profiling run.
+
+
+### Courtyard texture verification completed
+
+PR #60 now passes actual WebGL and WebGPU before/after cap and close rim views at tape 199307, section `(-3,-2)`. The before condition used the original cylinder UVs with all geometry/materials otherwise fixed. The corrected cap matches surrounding authored wood scale; the rim remains continuous. No runtime errors. Screenshots are `/tmp/vackrooms-courtyard-{before,after,rim}-{webgl,webgpu}.png`. The PR is ready, temporary hooks are removed and the branch is clean.
+
+Integration `3a398f7` is pushed and passes all five check categories including production build. All checks on #42–#64 are green; #65's CI/build pass and its automated review is still pending at this checkpoint. The third 24-minute GPU run has been dispatched after #60 released the browser; record actual start separately.
+
+A read-only audit found a pending-fullscreen teardown race: resolving fullscreen after engine disposal can call focus on the disposed CRT UI. A deterministic harness reproduced this ordering; ordinary pause already clears focus. A narrow independent fix is approved, with real-method regression coverage and later browser verification required.
