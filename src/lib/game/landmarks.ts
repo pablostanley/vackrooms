@@ -14,6 +14,7 @@ import {
 import type { Materials } from "./materials";
 import { buildCourtyard } from "./courtyard";
 import { buildNeighborhood } from "./neighborhood";
+import { buildOfficeAnnex } from "./office-annex";
 
 export interface LandmarkBuilder {
   box: (
@@ -54,6 +55,10 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuild
   const ox = data.x * CHUNK * CELL,
     oz = data.z * CHUNK * CELL;
   b.group.userData.landmark = room;
+  if (room.office === "annex") {
+    buildOfficeAnnex(data, mats, b);
+    return;
+  }
   if (room.kind === "courtyard") {
     buildCourtyard(data, mats, b);
     return;
