@@ -13,6 +13,7 @@ import { hash, random, type ChunkData } from "./maze";
 import { ComputerDialup } from "./computer-dialup";
 import { EntityAudio } from "./entity-audio";
 import { InterfaceAudio, type InterfaceSound } from "./interface-audio";
+import { RoomAmbience } from "./room-ambience";
 import { roomImpulse } from "./room-impulse";
 import { soundPath } from "./sound-path";
 import {
@@ -60,7 +61,7 @@ export class BackroomsAudio {
   private rooms = new Map<RoomSound, RoomBus>();
   private fixtures = new Map<string, FixtureVoice>();
   private transients = new Set<SpatialVoice>();
-  private loops: AudioScheduledSourceNode[] = [];
+  private ambience: RoomAmbience | null = null;
   private volume = 0.65;
   private active = false;
   private disposed = false;
@@ -144,18 +145,7 @@ export class BackroomsAudio {
       samples[i] = brown * 3.5;
     }
     this.noise = buffer;
-    // A quiet air bed joins the localized fixtures without masking their direction.
-    const air = ctx.createBufferSource(),
-      filter = ctx.createBiquadFilter(),
-      level = ctx.createGain();
-    air.buffer = buffer;
-    air.loop = true;
-    filter.type = "lowpass";
-    filter.frequency.value = 380;
-    level.gain.value = 0.035;
-    air.connect(filter).connect(level).connect(this.mix);
-    air.start();
-    this.loops.push(air);
+    this.ambience = new RoomAmbience(ctx, this.mix, this.seed);
   }
 
   private impulse(room: RoomSound) {
@@ -248,6 +238,7 @@ export class BackroomsAudio {
       this.rng = random(seed ^ 0x6a09e667);
     }
     this.entityAudio?.reset();
+    this.ambience?.reset();
     this.stopComputer();
     this.entityWasPresent = false;
     this.pending = null;
@@ -316,6 +307,7 @@ export class BackroomsAudio {
           0.55,
         );
       }
+      this.ambience?.update(room);
       this.updateFixtures(sections);
       for (const voice of this.transients) this.occlude(voice);
     }
@@ -661,11 +653,8 @@ export class BackroomsAudio {
     this.resetSpace(0);
     this.entityAudio?.dispose();
     this.entityAudio = null;
-    for (const source of this.loops) {
-      source.stop();
-      source.disconnect();
-    }
-    this.loops = [];
+    this.ambience?.dispose();
+    this.ambience = null;
     this.rooms.clear();
     this.noise = null;
     this.recordings?.dispose();
