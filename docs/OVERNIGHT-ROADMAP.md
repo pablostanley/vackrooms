@@ -171,3 +171,10 @@ Two overlapping areas required explicit union resolutions during integration:
 Other overlapping changes merged automatically; the full combined checks validate that result. Use the tested integration source as the resolution reference if merging individual PRs in the morning. Do not infer that separate green PRs alone prove their combination.
 
 The final batch's deployment is ready at [e27d279 preview](https://vackrooms-1n9pz0sdr-pablostanley.vercel.app/?tape=199307). Its deployed browser smoke is still pending until the resource soak releases the browser slot; the earlier documented preview remains the one already browser-verified.
+
+
+### Navigation refinement and next content pass
+
+[#56](https://github.com/pablostanley/vackrooms/pull/56) adds a 32-entry exact-endpoint failed-route cache, cleared on every navigation reindex. A real tape-48 pursuing simulation makes the same 33 requests but searches once instead of 33 times; its complete behavior trace is unchanged. A single local CPU sample changed from 533 to 51 ms, not an FPS claim. All 156 branch tests/types/lint/build pass; integration `bf18f40` passes 187 combined tests. The running soak remains pinned to `e27d279`, so its results must not be attributed to this later commit.
+
+The next content pass is an original hotel service corridor within the existing three-section corridor layout, inspired by Level 5 research above. It preserves cadence, cells, heights and gates; adds shallow cream/wood trim, sealed doors, frosted transoms and a shared number atlas; and uses no additional dynamic lights. Implementation is isolated and browser checks will wait for the soak to finish.
