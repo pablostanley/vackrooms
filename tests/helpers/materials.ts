@@ -1,7 +1,9 @@
 import * as THREE from "three";
+import { createRoomAmbientPool } from "../../src/lib/game/room-lighting";
 import type { Materials } from "../../src/lib/game/materials";
 
 export function headlessMaterials(): Materials {
+  const ambientMaps = createRoomAmbientPool();
   const standardNames = [
     "hotelNumbers",
     "wall",
@@ -58,12 +60,14 @@ export function headlessMaterials(): Materials {
   const discoveryNotes = Array.from({ length: 3 }, () => new THREE.MeshStandardMaterial());
   return {
     discoveryNotes,
+    ambientMaps,
     ...standard,
     ...basic,
     funMurals,
     streetSiding,
     forTheme: () => ({ wall: standard.wall, floor: standard.floor }),
     dispose: () => {
+      ambientMaps.dispose();
       for (const material of [
         ...Object.values(standard),
         ...Object.values(basic),

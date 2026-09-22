@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { createDiscoveryNotes } from "./discovery-notes";
 import { createHotelLabels } from "./hotel-labels";
+import { createRoomAmbientPool } from "./room-lighting";
 import { random, type Theme } from "./maze";
 import { drawFunCarpet, drawFunMural } from "./fun-textures";
 import {
@@ -41,6 +42,7 @@ function grain(
 }
 export function createMaterials() {
   const notes = createDiscoveryNotes();
+  const ambientMaps = createRoomAmbientPool();
   const textures: THREE.Texture[] = [];
   const hotelLabels = createHotelLabels();
   const texture = (
@@ -316,6 +318,7 @@ export function createMaterials() {
   return {
     discoveryNotes: notes.materials,
     hotelNumbers: hotelLabels.material,
+    ambientMaps,
     wall,
     floor,
     top,
@@ -363,6 +366,7 @@ export function createMaterials() {
     dispose: () => {
       notes.dispose();
       hotelLabels.dispose();
+      ambientMaps.dispose();
       textures.forEach((t) => t.dispose());
       [
         wall,
