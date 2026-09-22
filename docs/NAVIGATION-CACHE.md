@@ -12,7 +12,7 @@ Reproduction: tape 48, depth 0, resident sections (-1..1, -1..1), staged pursuit
 from (2.4, 55.2) toward the running player at (-2.4, 60), 900 fixed steps of 1/30 s.
 The apparently close destination has a 192 m route through room centers;
 the bounded planner declines it. Before caching, all 33 identical
-requests repeated that search. On the development machine:
+requests repeated that search. One local before/after sample on the development machine:
 
 | Measurement | Before | After |
 | --- | ---: | ---: |
