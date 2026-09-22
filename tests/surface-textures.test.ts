@@ -121,3 +121,29 @@ test("wall relief keeps upward V and consistent scale on every box face", () => 
   }
   box.dispose();
 });
+
+
+test("acoustic ceiling reads as warm cream above ochre paper without losing relief", () => {
+  const ceiling = bakeSurface("ceiling", 128);
+  const wall = bakeSurface("wallpaper", 128);
+  const median = (bytes: Uint8Array, channel: number) => {
+    const samples = Array.from(bytes.filter((_, index) => index % 4 === channel));
+    samples.sort((a, b) => a - b);
+    return samples[Math.floor(samples.length / 2)];
+  };
+  const ceilingRed = median(ceiling.color, 0);
+  const ceilingBlue = median(ceiling.color, 2);
+  const wallRed = median(wall.color, 0);
+  const wallBlue = median(wall.color, 2);
+  assert.ok(ceilingBlue > wallBlue + 30, "cream board separates from yellow wallpaper");
+  assert.ok(ceilingRed - ceilingBlue < (wallRed - wallBlue) * 0.7,
+    "the ceiling is less ochre than the walls");
+  for (let i = 0; i < ceiling.color.length; i += 4) {
+    assert.ok(ceiling.color[i] >= ceiling.color[i + 1] && ceiling.color[i + 1] > ceiling.color[i + 2],
+      "warm fluorescent palette has no blue cast");
+    assert.ok(ceiling.color[i + 2] > 140 && ceiling.color[i] < 245,
+      "fissures remain restrained and board never clips to white");
+  }
+  assert.ok(new Set(ceiling.detail.filter((_, i) => i % 4 === 0)).size > 12,
+    "pores and acoustic-board seams retain surface relief");
+});

@@ -15,7 +15,8 @@ export const SURFACE_SIZE: Record<Surface, number> = {
 const palettes: Record<Surface, readonly [number, number, number]> = {
   wallpaper: [201, 188, 107],
   carpet: [161, 144, 92],
-  ceiling: [190, 181, 121],
+  // Aged mineral board stays warmer than white, but distinct from ochre paper.
+  ceiling: [216, 211, 178],
   // Neutral maps let the existing plaster and furniture colors tint them.
   plaster: [235, 233, 220],
   wood: [229, 217, 197],
