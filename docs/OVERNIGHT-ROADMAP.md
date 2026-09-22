@@ -167,14 +167,26 @@ CI checkpoint: all checked statuses on #42–#54 pass; #55 test/build/deployment
 
 ## Review and integration notes
 
-PRs #42–#60 target main independently. Later room refinements are intentionally stacked on #57 or #58, as recorded in the current checkpoint and their PR descriptions. The initial validation branch combined #42 through #55 at `e27d279`; later tested tips are recorded below. No feature depends on merging the roadmap document first.
+The current combined validation tip is `3a398f7` on `codex/overnight-integration`. PRs #42–#60, #62 and #64 target main independently. Three later PRs have explicit dependencies:
 
-Two overlapping areas required explicit union resolutions during integration:
+| PR | Required parent | Reason |
+| --- | --- | --- |
+| #61 Pool colonnade | #58 Generation v2 | Variant is exclusive to the new generation. |
+| #63 Utility corridor | #57 Hotel corridor | Shares corridor variant metadata; selections remain disjoint. |
+| #65 Ambient texture leases | #62 Mesh disposal | Release a texture lease only after section render objects retire. |
 
-- Office and warehouse variants both extend landmark metadata and dispatch. Keep both optional fields, both variant decisions, and both builders/imports. The integration commit `1e9e8a1` records this resolution.
-- Discovery and furniture-collision modules both add an import at the same location in `world.ts`. Keep both imports, as in `4e5b8c0`.
+No implementation depends on merging the roadmap document. Review foundational correctness changes first (#48, #50–#56, #58–#59, #62, #64–#65), then content/appearance additions; respect the three parent dependencies above. This is a suggested review grouping, not a claim that every ordering merges without conflicts. Browser-pending PRs remain draft.
 
-Other overlapping changes merged automatically; the full combined checks validate that result. Use the tested integration source as the resolution reference if merging individual PRs in the morning. Do not infer that separate green PRs alone prove their combination.
+Use the tested integration source as the conflict-resolution reference. Keep all changes when resolving these known overlaps:
+
+- Office and warehouse metadata/dispatch: both optional fields, variant decisions and builders/imports (`1e9e8a1`).
+- Discovery and furniture collision: both `world.ts` imports (`4e5b8c0`).
+- Hotel materials: preserve discovery-note and hotel-number owners, returned fields and disposal (`2cf2e8f`); retain the shaped-collider fixture compatibility follow-up (`8ca15aa`).
+- Generation v2: pass the selected version at every generation call, retain eviction-first streaming and all development visit aliases (`cb6ddcf`).
+- Pool and utility metadata: retain every existing landmark field, hotel/utility corridor union, and both variant decisions (`749b240`, `be8ebd0`). The pool golden references are deliberately scoped to pool-owned solids (`d4a7b3f`).
+- Ambient pool: retain discovery/hotel imports, material owners and cleanup along with `ambientMaps`; retain the wall-contact helper while removing the obsolete direct ambient-map import (`3a398f7`).
+
+Do not infer that separate green PRs alone prove their combination. The validation branch has complete tests, shader checks, build and separately recorded browser coverage, and contains the deliberate union resolutions. Production and main remain untouched.
 
 The final batch's deployment is ready at [e27d279 preview](https://vackrooms-1n9pz0sdr-pablostanley.vercel.app/?tape=199307). Its deployed browser smoke is still pending until the resource soak releases the browser slot; the earlier documented preview remains the one already browser-verified.
 
