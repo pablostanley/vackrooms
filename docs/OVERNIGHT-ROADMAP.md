@@ -200,3 +200,11 @@ Audit found structural coordinate-hash collisions: 2,328 of 6,912 sampled opposi
 An isolated generation-v2 PR is in progress. It changes only the chunk interior RNG seed using sequential coordinate mixing, retains existing global gate/cadence rules, and carries an explicit version through tape links, next life and compatible-camera retry. Existing tape links without a version retain the legacy generator; fresh visits use v2. The new PR must prove v1 output is unchanged relative to its base. The separate content additions in this overnight batch are not a promise that all historical game versions rendered identical worlds.
 
 Next complementary QA: 24-minute actual WebGPU/live-CRT lifecycle and settings/resize coverage on the final v2 combined commit. It is prepared but has not started; routes must be recomputed for v2.
+
+### Versioned map diversity delivered
+
+[#58](https://github.com/pablostanley/vackrooms/pull/58) fixes opposite-coordinate interior-seed collisions with generation v2. Fresh visits use v2; existing unversioned tape links use v1. Copy, reload, next life and compatible-camera retry carry the version. Shared gates and landmark cadence remain unchanged. Independent complete-chunk comparisons covered 4,410 cases against both the PR base and the pre-v2 integration: implicit and explicit v1 outputs match exactly. Branch browser checks covered both versions, copy/reload, respawn and retry.
+
+Integration `cb6ddcf` combines #42–#58 and passes all 198 tests, typecheck, lint, all four shader validations and production build. Its merge retains both development visit aliases and eviction-before-creation streaming, passing the selected generation through every chunk-generation call. The combined local browser passed Record/Escape for legacy tape 48 and explicit generation 2. The [current verified deployed preview](https://vackrooms-h0hc2u6sx-pablostanley.vercel.app/?tape=48&generation=2) also passed Record/Escape without browser errors.
+
+The 24-minute WebGPU/live-CRT QA has been dispatched against this exact integration commit; it must establish a real start before being called a running or completed test. Two parallel read-only audits now inspect existing texture/material correctness and creature behavior. Further implementation requires a concrete defect and bounded fix, rather than a target PR count.
