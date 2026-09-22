@@ -185,3 +185,18 @@ The next content pass is an original hotel service corridor within the existing 
 The 20-minute WebGL soak of `e27d279` passed: 1,200.003 seconds, 306 snapshots, 54 explicitly programmatic relocations, six existing world rebuilds, and six synthetic-keyboard corridor crossings through normal Rapier movement. All five resident maps peaked at nine and agreed on keys. Of 466 tracked section identities, 457 retired sections were disposed exactly once and nine remained resident. Six identical paused snapshots held 150 geometries, 53 textures and 19 shader programs. Fresh seed/depth equality was explicitly checked on all nine rebuilt chunks in cycles 2–6. Six audio suspend/resume cycles passed; no errors or failures.
 
 Scope limits: entities were disabled, no live CRT screen was active, and this was WebGL. Stable resource counters are not a measurement of total GPU memory or proof about every device. The later navigation-cache commit and in-progress hotel variant are not covered by this exact soak. QA checkout is clean; hooks, browser and server were removed/stopped. Full evidence is in `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-soak/RESULTS.md` and `report-final.json`.
+
+
+### Hotel corridor delivered
+
+[#57](https://github.com/pablostanley/vackrooms/pull/57) adds original numbered doors, frosted transoms, cream/wood joinery and a shallow key cupboard to rare existing corridor runs. Independent review compared another 3,410 chunks; topology is unchanged. Branch 155 tests/types/lint/build and real WebGL/WebGPU visual/traversal checks pass. The fixture follow-up `8ca15aa` accommodates the roof PR’s new shaped-collider field in the combined build.
+
+Integration `3dc53c1` includes #42–#57: 191 runtime tests pass, followed by typecheck, lint, all shader validations and production build. The first combined hotel typecheck caught the fixture mismatch; it was corrected, not bypassed. Hotel integration preserves both development visit aliases, all landmark variant fields, and both note/number material owners and disposers. [Verified deployed preview](https://vackrooms-kcv2v8rx4-pablostanley.vercel.app/?tape=199307) passed Record/Escape with no errors; the local combined hotel view was also inspected.
+
+### Next architecture correction: versioned interior randomness
+
+Audit found structural coordinate-hash collisions: 2,328 of 6,912 sampled opposite-coordinate pairs shared a hash, including all sampled odd/odd pairs. Tape 48 sections `(3,1)` and `(-3,-1)` had identical 144-cell layouts and 44 furniture records. An unversioned shared-hash replacement would also move gates and landmark cadence, so it is not being used.
+
+An isolated generation-v2 PR is in progress. It changes only the chunk interior RNG seed using sequential coordinate mixing, retains existing global gate/cadence rules, and carries an explicit version through tape links, next life and compatible-camera retry. Existing tape links without a version retain the legacy generator; fresh visits use v2. The new PR must prove v1 output is unchanged relative to its base. The separate content additions in this overnight batch are not a promise that all historical game versions rendered identical worlds.
+
+Next complementary QA: 24-minute actual WebGPU/live-CRT lifecycle and settings/resize coverage on the final v2 combined commit. It is prepared but has not started; routes must be recomputed for v2.
