@@ -30,4 +30,18 @@ Tests compare every prototype attribute, bound and material identity with the
 original constructor; compare complete section geometry/material/texture/bounds/
 collider output against fresh models over 18 seeded sections and two depths;
 and exercise independent owners, repeated section teardown and one-time library
-geometry disposal. Browser verification is pending.
+geometry disposal.
+
+Browser verification passed in both confirmed WebGL and WebGPU with real textured
+materials (PR branch, legacy tape 48). Five alternating nine-section samples using
+fresh libraries measured median construction of 224 ms with per-section prototypes
+versus 174.5 ms with owner-local prototypes; model builds fell from 107 to 22.
+Batch, collider and computer counts matched. This is synchronous construction
+profiling in one local browser, not a rendering/frame-rate measurement.
+
+Programmatically streaming to (5,5), (-4,2), then the origin kept nine sections and
+22 prototypes; section eviction disposed no prototype geometries. Actual engine
+teardown disposed all 561 prototype geometries exactly once. Subsequent library
+disposal was inert and reuse rejected. Both renderer screenshots and the returned
+origin scene were inspected, with no page errors. Temporary profiling hooks were
+removed.

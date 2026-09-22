@@ -21,6 +21,7 @@ function geometryHash(geometry: BufferGeometry) {
 function modelState(model: FurnitureModel) {
   return {
     bounds: model.bounds.clone(), anchor: model.anchor.toArray(),
+    ...( "playerBounds" in model ? { playerBounds: model.playerBounds } : {}),
     parts: model.parts.map(({ geometry }) => ({
       geometry: geometryHash(geometry), bounds: geometry.boundingBox?.clone(),
     })),
