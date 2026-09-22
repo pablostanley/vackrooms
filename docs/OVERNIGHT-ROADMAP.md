@@ -137,14 +137,21 @@ The next evidenced fix addresses existing baked floor-contact shadows: some plan
 
 ### Active follow-up refinements
 
-- Floor-contact shadow correction: all four wall sides now face upward and fade away from the wall; the gradient clamps instead of repeating. Before/after browser corner views preserve subtle grounding and bright carpet. [#53](https://github.com/pablostanley/vackrooms/pull/53) passes153 tests, TypeScript, lint, build and all shader validations; integrated at `170d31c`.
-- Existing utility-cart/computer-desk collision: reproduced grounded feet above visible surfaces because whole-object bounds include empty space. An isolated fix keeps broad entity-navigation bounds while using existing solid-part hulls for player collision. Real Rapier landing tests and browser verification are in progress. Review rejected using all98 cosmetic desk parts as physical hulls; the fix will use compact major solids instead.
+- Floor-contact shadow correction: all four wall sides now face upward and fade away from the wall; the gradient clamps instead of repeating. Before/after browser corner views preserve subtle grounding and bright carpet. [#53](https://github.com/pablostanley/vackrooms/pull/53) passes 153 tests, TypeScript, lint, build and all shader validations; integrated at `170d31c`.
+- Existing utility-cart/computer-desk collision: reproduced grounded feet above visible surfaces because whole-object bounds include empty space. An isolated fix keeps broad entity-navigation bounds while using existing solid-part hulls for player collision. Real Rapier landing tests and browser verification are in progress. Review rejected using all 98 cosmetic desk parts as physical hulls; the fix will use compact major solids instead.
 
 These are corrections to existing geometry and physics, not additional room or asset categories.
 
 
 ### Collision refinement checkpoint
 
-[#54](https://github.com/pablostanley/vackrooms/pull/54) fixes existing desk/cart ghost platforms. Desks use9 major physical solids rather than98 decorative parts; carts use15 parts. All155 branch tests, typecheck, lint and build pass. Actual browser Space/W/S input after temporary starting-position setup lands on both visible surfaces and walks back onto the floor. Coarse entity-navigation bounds and rendered geometry are unchanged. Integration `4e5b8c0` resolves an import-only conflict by retaining discovery and collision imports.
+[#54](https://github.com/pablostanley/vackrooms/pull/54) fixes existing desk/cart ghost platforms. Desks use 9 major physical solids rather than 98 decorative parts; carts use 15 parts. All 155 branch tests, typecheck, lint and build pass. Actual browser Space/W/S input after temporary starting-position setup lands on both visible surfaces and walks back onto the floor. Coarse entity-navigation bounds and rendered geometry are unchanged. Integration `4e5b8c0` resolves an import-only conflict by retaining discovery and collision imports.
 
-A further architecture audit reproduced missing neighborhood roof collision: double-jumping onto a house can leave the player grounded on its flat body inside the visible pitched roof. A separate correction is in progress. After it lands, run a20-minute combined browser resource soak: fixed tape, explicitly programmatic route relocations, normal live game loop, pause/resume and existing lifecycle disposal, resident-map limits, section ownership, and comparable renderer-resource counters. Do not equate those counters with measured VRAM.
+A further architecture audit reproduced missing neighborhood roof collision: double-jumping onto a house can leave the player grounded on its flat body inside the visible pitched roof. A separate correction is in progress. After it lands, run a 20-minute combined browser resource soak: fixed tape, explicitly programmatic route relocations, normal live game loop, pause/resume and existing lifecycle disposal, resident-map limits, section ownership, and comparable renderer-resource counters. Do not equate those counters with measured VRAM.
+
+
+### Full batch ready for sustained verification
+
+[#55](https://github.com/pablostanley/vackrooms/pull/55) adds collision matching the existing neighborhood roof slopes. All 152 branch tests, types, lint and build pass, including ten house jump/return cases. Real-browser verification confirms the player lands outside the sealed house and can return to the street; rendered roofs are unchanged.
+
+Integration `e27d279` now includes all implementation PRs #42–#55. Full combined checks are running. The approved 20-minute browser soak will use this exact commit in an isolated QA checkout. Roadmap PR #41 and all fourteen implementation PRs are attached to the main task. Main and production remain unchanged.
