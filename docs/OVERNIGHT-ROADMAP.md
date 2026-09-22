@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 10:56 UTC, all **26 implementation PRs #42–#67 are ready for review** with scoped browser checks complete. Combined integration `ffdbed9` passes **228 tests**, typecheck, lint, all four vgpu shader validations and production build. Its [deployed preview](https://vackrooms-lxht2v8jf-pablostanley.vercel.app/?tape=199307&generation=2) passed the final browser smoke. Earlier matched 24-minute GPU comparisons, two 15-minute active-creature runs, and portal/depth checks are recorded below with their exact commits. Those sustained runs predate the final furniture cache, which has separate equivalence, renderer, streaming and disposal checks. Main and production remain unchanged.
+At the 11:15 UTC closing audit, all **26 implementation PRs #42–#67 are ready for review** with scoped browser checks complete. Combined integration `ffdbed9` passes **228 tests**, typecheck, lint, all four vgpu shader validations and production build. Its [deployed preview](https://vackrooms-lxht2v8jf-pablostanley.vercel.app/?tape=199307&generation=2) passed the final browser smoke. Earlier matched 24-minute GPU comparisons, two 15-minute active-creature runs, and portal/depth checks are recorded below with their exact commits. Those sustained runs predate the final furniture cache, which has separate equivalence, renderer, streaming and disposal checks. Main and production remain unchanged.
 
 Four PRs are stacked: #61 on #58, #63 on #57, #65 on #62, and #67 on #43. The review notes below document dependencies and tested conflict resolutions. Earlier dated sections preserve historical counts and previews; this checkpoint supersedes their pending statuses.
 
@@ -415,3 +415,14 @@ Two initial harness assumptions were corrected and retained in the evidence: che
 Both actual WebGL and WebGPU views were inspected. Browser streaming through (5,5), (-4,2) and origin retained nine sections and 22 prototypes without premature disposal. Real engine disposal freed all 561 cached geometries once; repeat disposal was inert and later get rejected. No page errors. Five alternating textured-browser nine-section samples had medians **224 → 174.5 ms** with identical batch/collider/computer counts. This is construction timing, not FPS. Screenshots: `/tmp/furniture-cache-webgl.png`, `/tmp/furniture-cache-webgpu.png`. Hooks, browser and server were removed; checkout clean.
 
 Combined `ffdbed9` is committed/pushed and passes **228 tests, typecheck, lint, four authored-WGSL validations and production build**. Logs: `/tmp/vackrooms-final-cache-{tests,types,lint,shaders,build}.log`. Root verified the exact READY deployment [here](https://vackrooms-lxht2v8jf-pablostanley.vercel.app/?tape=199307&generation=2): Record, Escape/pause, settings, Balanced quality and Done all passed, flashlight initially off, no browser errors. The warm bright-office screenshot `/tmp/vackrooms-final-cache-deployed.png` was inspected. Browser closed. All #67 CI/review/deployment checks are green.
+
+
+### Closing audit and remaining limits
+
+At 11:15 UTC, all **27 PRs (#41 roadmap and #42–#67 implementation)** were open, ready and attached to the main task; every reported CI/review/deployment check passed. All overnight worktrees were clean, and tracked branches had no unpushed commits. Main remained `ce5e024`; `AGENTS.md` and `vercel.json` have no integration diff. All agents finished, task browser/server sessions were closed and temporary QA hooks removed.
+
+Final logs and screenshots were preserved outside temporary storage in `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-final-handoff/`. The roadmap retains exact earlier evidence locations and commit scopes. The integration branch is a tested conflict-resolution reference, not a production merge.
+
+Remaining useful work requires new evidence rather than more overnight changes: human headphone listening for subjective mix quality; physical mobile-device input/performance checks; human exploration for pacing and readability; and review/merge of the separate PRs with the four documented dependencies. Browser touch emulation does not establish physical-device behavior. Resource counters establish bounded tested lifetimes, not measured VRAM. The sustained gameplay/resource runs predate #67, whose narrower equivalence, disposal and both-renderer checks and final integrated smoke are recorded separately. Deferred apartment/electrical/neighborhood ideas remain proposals, not implemented content.
+
+No further feature batch is warranted before the deadline. The implementation loop is complete and waiting only for the scheduled stop and final handoff.
