@@ -186,17 +186,18 @@ export class BackroomsEngine {
       for (let z = -ring; z <= ring; z++)
         for (let x = -ring; x <= ring; x++) {
           if (Math.max(Math.abs(x), Math.abs(z)) !== ring) continue;
-          const wanted = kind === "officeAnnex" ? "lobby" : kind === "hotelCorridor" ? "corridor" : kind;
+          const wanted = kind === "officeAnnex" ? "lobby" : kind === "hotelCorridor" || kind === "utilityCorridor" ? "corridor" : kind;
           if (landmarkKind(x, z, this.seed) !== wanted) continue;
           const room = generateChunk(x, z, this.seed, 0, this.generationVersion).landmark;
           if (kind === "officeAnnex" && room.office !== "annex") continue;
           if (kind === "hotelCorridor" && room.corridor !== "hotel") continue;
+          if (kind === "utilityCorridor" && room.corridor !== "utility") continue;
           this.position.set(
             x * SPAN + (room.x + room.width / 2) * CELL,
             1.66,
             z * SPAN + (room.z + 0.5) * CELL,
           );
-          this.yaw = kind === "hotelCorridor" ? Math.PI / 2 : Math.PI;
+          this.yaw = kind === "hotelCorridor" || kind === "utilityCorridor" ? Math.PI / 2 : Math.PI;
           return;
         }
   }

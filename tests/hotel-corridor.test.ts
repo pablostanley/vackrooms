@@ -16,7 +16,7 @@ test("hotel selection agrees across complete positive and negative corridor runs
         if (landmarkKind(group * 3, z, seed) !== "corridor") continue;
         const chunks = [0, 1, 2].map((i) => generateChunk(group * 3 + i, z, seed, i * 11));
         const selection = chunks[0].landmark.corridor;
-        if (selection) hotel++; else ordinary++;
+        if (selection === "hotel") hotel++; else ordinary++;
         for (const [i, data] of chunks.entries()) {
           assert.equal(data.landmark.corridor, selection);
           assert.deepEqual(data.landmark, generateChunk(data.x, z, seed).landmark);

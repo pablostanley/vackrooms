@@ -14,6 +14,7 @@ import {
 import type { Materials } from "./materials";
 import type { ShapedObstacle } from "./physics";
 import { buildCourtyard } from "./courtyard";
+import { buildUtilityCorridor } from "./utility-corridor";
 import { buildHotelCorridor } from "./hotel-corridor";
 import { buildNeighborhood } from "./neighborhood";
 import { buildOfficeAnnex } from "./office-annex";
@@ -229,6 +230,7 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuild
 
   if (room.kind === "corridor") {
     if (room.corridor === "hotel") buildHotelCorridor(data, mats, b);
+    if (room.corridor === "utility") buildUtilityCorridor(data, mats, b);
     // Repeated shallow ribs reveal the uninterrupted 172.8m perspective. Every
     // rib stops above head height; the two section seams contain no cross-wall.
     for (let cx = 0; cx < CHUNK; cx += 2)
