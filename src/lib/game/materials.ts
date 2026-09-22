@@ -1,3 +1,4 @@
+import { FurnitureLibrary } from "./furniture-library";
 import * as THREE from "three";
 import { createDiscoveryNotes } from "./discovery-notes";
 import { createHotelLabels } from "./hotel-labels";
@@ -315,7 +316,9 @@ export function createMaterials() {
   streetGrass.userData.surfaceMeters = streetHedge.userData.surfaceMeters = 1.2;
   configureSurfaceSampling(streetGrass);
   configureSurfaceSampling(streetHedge);
-  return {
+  const furniture: FurnitureLibrary = new FurnitureLibrary(() => materials);
+  const materials = {
+    furniture,
     discoveryNotes: notes.materials,
     hotelNumbers: hotelLabels.material,
     ambientMaps,
@@ -367,6 +370,7 @@ export function createMaterials() {
       notes.dispose();
       hotelLabels.dispose();
       ambientMaps.dispose();
+      furniture.dispose();
       textures.forEach((t) => t.dispose());
       [
         wall,
@@ -413,5 +417,6 @@ export function createMaterials() {
       ].forEach((m) => m.dispose());
     },
   };
+  return materials;
 }
 export type Materials = ReturnType<typeof createMaterials>;

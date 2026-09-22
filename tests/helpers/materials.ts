@@ -1,3 +1,4 @@
+import { FurnitureLibrary } from "../../src/lib/game/furniture-library";
 import * as THREE from "three";
 import { createRoomAmbientPool } from "../../src/lib/game/room-lighting";
 import type { Materials } from "../../src/lib/game/materials";
@@ -58,7 +59,9 @@ export function headlessMaterials(): Materials {
     () => new THREE.MeshStandardMaterial(),
   );
   const discoveryNotes = Array.from({ length: 3 }, () => new THREE.MeshStandardMaterial());
-  return {
+  const furniture: FurnitureLibrary = new FurnitureLibrary(() => materials);
+  const materials = {
+    furniture,
     discoveryNotes,
     ambientMaps,
     ...standard,
@@ -68,6 +71,7 @@ export function headlessMaterials(): Materials {
     forTheme: () => ({ wall: standard.wall, floor: standard.floor }),
     dispose: () => {
       ambientMaps.dispose();
+      furniture.dispose();
       for (const material of [
         ...Object.values(standard),
         ...Object.values(basic),
@@ -78,4 +82,5 @@ export function headlessMaterials(): Materials {
         material.dispose();
     },
   };
+  return materials;
 }

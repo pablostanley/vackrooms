@@ -32,12 +32,10 @@ import {
 } from "./computer-models";
 import { COMPUTER_HOMES, type ComputerStation } from "./computers";
 import {
-  createFurniture,
   chairKinds,
   isChairKind,
   type ChairKind,
   type FurnitureKind,
-  type FurnitureModel,
 } from "./furniture-models";
 import {
   anchorPose,
@@ -85,7 +83,6 @@ export function buildSection(
   const theme = mats.forTheme(data.theme);
   const furnitureRng = random(data.seed + 3403);
   const chairRng = random(data.seed + 39217);
-  const models = new Map<string, FurnitureModel>();
   const furnished = new Set<number>();
   const propRecords: {
     kind: FurnitureKind;
@@ -192,9 +189,7 @@ export function buildSection(
     }
   }
   function model(kind: FurnitureKind, lampOn = false) {
-    const key = `${kind}:${lampOn}`;
-    if (!models.has(key)) models.set(key, createFurniture(kind, mats, lampOn));
-    return models.get(key)!;
+    return mats.furniture.get(kind, lampOn);
   }
   function furniture(
     kind: FurnitureKind,
@@ -786,8 +781,6 @@ export function buildSection(
       batches.get(material)!.push(geometry);
     }
   }
-  for (const source of models.values())
-    source.parts.forEach((part) => part.geometry.dispose());
   const ambientLease = lighting.cells.size
     ? mats.ambientMaps.acquire(data, lighting)
     : null;
