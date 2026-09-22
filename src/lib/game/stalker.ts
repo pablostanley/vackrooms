@@ -52,6 +52,7 @@ export class Stalker {
   readonly position = new Vector3();
   private previousPosition = new Vector3();
   private previousGait = 0;
+  private previousHeading = 0;
   phase: StalkerPhase = "isolated";
   speed = 0;
   heading = 0;
@@ -108,6 +109,7 @@ export class Stalker {
     this.position.set(position.x, 0, position.z);
     this.previousPosition.copy(this.position);
     this.heading = Math.atan2(player.x - position.x, player.z - position.z);
+    this.previousHeading = this.heading;
     this.grace = 55;
     this.age = pursuit ? 200 : 0;
     this.attention = this.gait = this.previousGait = this.stuck = 0;
@@ -133,6 +135,11 @@ export class Stalker {
       Math.max(0, this.accumulator / STEP),
     );
   }
+  get renderHeading() {
+    const difference = this.heading - this.previousHeading;
+    return this.previousHeading + Math.atan2(Math.sin(difference), Math.cos(difference))
+      * Math.max(0, Math.min(1, this.accumulator / STEP));
+  }
   get renderGait() {
     return (
       this.previousGait +
@@ -150,11 +157,13 @@ export class Stalker {
       this.time += STEP;
       this.previousPosition.copy(this.position);
       this.previousGait = this.gait;
+      this.previousHeading = this.heading;
       const wasPresent = this.present;
       if (this.tick(input, footstep)) return true;
       if (!wasPresent || !this.present) {
         this.previousPosition.copy(this.position);
         this.previousGait = this.gait;
+        this.previousHeading = this.heading;
       }
     }
     return false;

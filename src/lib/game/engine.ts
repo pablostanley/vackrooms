@@ -943,7 +943,7 @@ export class BackroomsEngine {
       const stalker = this.encounters.stalkers[i];
       entity.visible = stalker.present;
       stalker.renderPosition(entity.position);
-      entity.rotation.y = stalker.heading;
+      entity.rotation.y = stalker.renderHeading;
       const distance = groundDistance(this.position, stalker.position);
       const clear = stalker.present && this.navigation.sight(
         this.position, { x: stalker.position.x, y: 1.5, z: stalker.position.z },
