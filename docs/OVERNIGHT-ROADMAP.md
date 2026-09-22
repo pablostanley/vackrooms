@@ -8,6 +8,20 @@ At about 08:45 UTC, PRs #42–#60, #62, #63 and #65 have browser verification. T
 
 Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
+## Delivered work at a glance
+
+Each item links to its own reviewable PR. Read the checkpoint above for the latest browser-verification status; a draft is not a completed verification claim.
+
+| Area | Changes |
+| --- | --- |
+| Room variety | [Office annex #44](https://github.com/pablostanley/vackrooms/pull/44), [warehouse #46](https://github.com/pablostanley/vackrooms/pull/46), [hotel corridor #57](https://github.com/pablostanley/vackrooms/pull/57), [pool colonnade #61](https://github.com/pablostanley/vackrooms/pull/61), [utility corridor #63](https://github.com/pablostanley/vackrooms/pull/63). |
+| Props and discoveries | [Cooler/copier/cartons #43](https://github.com/pablostanley/vackrooms/pull/43), [rare original notes and VHS finds #45](https://github.com/pablostanley/vackrooms/pull/45). |
+| Sound | [Subtle room-specific machinery and air #42](https://github.com/pablostanley/vackrooms/pull/42). |
+| Existing visuals | [Cream acoustic ceilings #47](https://github.com/pablostanley/vackrooms/pull/47), [WebGL tone mapping #51](https://github.com/pablostanley/vackrooms/pull/51), [wall-contact shadows #53](https://github.com/pablostanley/vackrooms/pull/53), [courtyard wood scale #60](https://github.com/pablostanley/vackrooms/pull/60). |
+| Creatures | [Smoother movement #49](https://github.com/pablostanley/vackrooms/pull/49), [smaller identical geometry #52](https://github.com/pablostanley/vackrooms/pull/52), [failed-route cache #56](https://github.com/pablostanley/vackrooms/pull/56), [wall-contact grab correction #59](https://github.com/pablostanley/vackrooms/pull/59). |
+| Architecture and collision | [Faster identical generation #48](https://github.com/pablostanley/vackrooms/pull/48), [nine-section streaming bound #50](https://github.com/pablostanley/vackrooms/pull/50), [desk/cart collision #54](https://github.com/pablostanley/vackrooms/pull/54), [pitched roof collision #55](https://github.com/pablostanley/vackrooms/pull/55), [versioned map diversity #58](https://github.com/pablostanley/vackrooms/pull/58). |
+| Resource and input reliability | [Retired mesh bindings #62](https://github.com/pablostanley/vackrooms/pull/62), [bounded lighting textures #65](https://github.com/pablostanley/vackrooms/pull/65), [touch pointer ownership #64](https://github.com/pablostanley/vackrooms/pull/64), [fullscreen teardown #66](https://github.com/pablostanley/vackrooms/pull/66). |
+
 ## Direction
 
 Make exploration reward attention: recognizable spaces, believable objects, subtle sound changes, and rare discoveries. Preserve the oppressive fluorescent brightness, warm palette, camcorder-only interface, optional flashlight initially off, and sparse atmosphere. More content should not mean clutter in every room.
