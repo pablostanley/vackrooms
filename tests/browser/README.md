@@ -23,6 +23,8 @@ export default function Check() {
     task ??= (async () => ({
       hdr: await checkWebGLTone(),
       byte: await checkWebGLTone(true),
+      fluorescent: await checkWebGLTone(false, "luminous"),
+      lamp: await checkWebGLTone(false, "lampGlow"),
     }))();
     void task.then(value => setResult(JSON.stringify(value)))
       .catch(error => setResult(String(error)));
@@ -41,3 +43,15 @@ RGB `[170,193,246]` to `[118,179,255]` when contact shadows were enabled.
 After the repair all 16 HDR permutations match exactly, and the 16 byte-target
 permutations also match their direct reference exactly. This numerical check
 complements visual checks of the bright fluorescent opening room.
+
+
+The two real fixture materials are also tested, using a fixed texel of the
+production diffuser map for resolution-independent comparison. Their former
+`toneMapped: false` policy bypassed ACES only during direct rendering; an output
+pass cannot recover that per-material flag. They now use the common tone-mapped
+policy, with warm HDR colors calibrated against the installed Three ACES curve
+to preserve their former direct brightness. The direct path remains cheap.
+Before normalization, the real fluorescent and lamp materials differed by 20
+and 28 channel levels respectively across the contact toggle. After normalization,
+each material's 16 permutations match exactly, and their output remains bright
+and warm. This adds 32 fixture comparisons to the 32 surface/capability checks.
