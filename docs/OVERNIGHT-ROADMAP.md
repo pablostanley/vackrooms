@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 10:17 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. Both complementary active-creature gameplay runs passed. A brief portal/depth check and an evidenced furniture-construction optimization are in progress. Main and production remain unchanged.
+At about 10:17 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. Both complementary active-creature gameplay runs passed. The portal/depth check also passed; an evidenced furniture-construction optimization is in progress. Main and production remain unchanged.
 
 Room PRs #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -397,3 +397,10 @@ Both rendered pair screenshots were inspected. Separately staged prompt Space es
 Read-only profiling found repeated prototype construction dominates more time than final batch merging. After the gameplay browser closed, seven alternating quiet-machine samples measured a nine-section window at **529.36 ms baseline vs 402.69 ms with an experimental owner-local cache**; prototype work fell from 124.04 to 21.74 ms while merge work stayed about 26 ms. Measured geometry/collider hashes matched. This is a local synchronous-construction benchmark, not a whole-game FPS claim.
 
 A bounded implementation is approved: lazy cache per materials owner, canonical kind/lamp-state keys, unchanged section-owned clones, and final owner disposal. The experiment retained about **2.53 MB** of prototype arrays for 22 constructed variants instead of rebuilding 125 prototypes. Exact material/geometry/bounds/collider equivalence, lifetime tests, independent review and real-browser verification are required before it is ready. This work is in progress and does not change the already verified 25 PRs.
+
+
+### Portal and deeper-generation coverage passed
+
+A bounded actual-WebGPU check on `ce5c173` used normal synthetic browser E-hold input from explicitly staged safe portal approaches. Both legacy generation 1 and generation 2 descended **0 → 1 → 2**, preserving tape 199307 and the selected version. At each depth all nine complete chunks matched fresh generator output; shared boundary gates and resident owner maps agreed. Pause held game time and suspended audio, and resumed Rapier movement covered 1.35–1.38m in a verified clear direction. Final reports contain no renderer/invariant failures.
+
+Two initial harness assumptions were corrected and retained in the evidence: checking audio at 250ms contradicted the implementation's intentional 600ms suspension delay, and testing a fixed forward direction at depth 2 ran into a real wall. The final checks use bounded 900ms audio settling and a clear movement direction. Neither was treated as a production defect. Browser/server/hooks removed, QA checkout clean; furniture has the browser slot for its forthcoming cache verification. Evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-portals/RESULTS.md`, `gen1.json`, `gen2.json` and depth-2 screenshots.
