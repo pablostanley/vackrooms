@@ -251,7 +251,10 @@ export function buildSection(
       const obstacle: ShapedObstacle = {
         bounds: worldBounds,
         parts: furnitureCollisionParts(source, worldPose),
-        movable: { object: movable, mass },
+        movable: { object: movable, mass, material:
+          kind === "utilityCart" || kind === "officeChair" || kind === "foldingChair" ? "metal"
+            : kind === "plasticChair" ? "plastic"
+            : kind === "archiveCartons" ? "cardboard" : "wood" },
       };
       colliders.push(worldBounds);
       shapedColliders.push(obstacle);

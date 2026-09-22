@@ -22,11 +22,20 @@ async function push(mass: number, wall = false) {
     const obstacles = [bounds];
     if (wall) obstacles.push(new Box3(new Vector3(10, 0, 14), new Vector3(14, 3, 14.2)));
     motor.addSection("0,0", data, obstacles, [obstacle]);
-    for (let i = 0; i < 100; i++) motor.move(0, 0.035, 1 / 60, position);
+    const sounds: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      motor.move(0, 0.035, 1 / 60, position);
+      sounds.push(...motor.propSounds.map(sound => sound.kind));
+    }
+    assert.ok(sounds.includes("scrape"), "real grounded motion generates scrape events");
+    if (mass === 7) assert.ok(sounds.includes("impact"), "tipping/contact generates impact events");
     const pushed = object.position.clone();
     for (let i = 0; i < 180; i++) motor.move(0, 0, 1 / 60, position);
     const settled = object.position.clone();
-    for (let i = 0; i < 120; i++) motor.move(0, 0, 1 / 60, position);
+    for (let i = 0; i < 120; i++) {
+      motor.move(0, 0, 1 / 60, position);
+      assert.equal(motor.propSounds.length, 0, "settled furniture stays silent");
+    }
     assert.ok(object.position.distanceTo(settled) < 0.03, "friction settles the prop");
     assert.ok(bounds.getCenter(new Vector3()).distanceTo(object.position) < 0.01, "navigation follows the mesh");
     if (wall) assert.ok(bounds.max.z < 14.06, `prop stops at wall: ${bounds.max.z}`);

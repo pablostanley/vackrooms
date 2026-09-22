@@ -707,6 +707,7 @@ export class BackroomsEngine {
       previousZ = this.position.z;
     const jumped = this.motor?.move(dx, dz, dt, this.position);
     if (this.motor?.movingPropShadows.length) this.navigation.refreshObstacles();
+    for (const sound of this.motor?.propSounds ?? []) this.audio.propSound(sound);
     if (jumped) this.audio.jump(this.position, jumped === 2);
     const inWater = footstepSurfaceAt(this.chunks, {
       x: this.position.x, y: this.position.y - 1.66, z: this.position.z,
@@ -1018,6 +1019,7 @@ export class BackroomsEngine {
     // Keep Rapier's gravity and jump rules alive while horizontal walking is held.
     const jumped = this.motor?.move(0, 0, dt, this.position);
     if (this.motor?.movingPropShadows.length) this.navigation.refreshObstacles();
+    for (const sound of this.motor?.propSounds ?? []) this.audio.propSound(sound);
     if (!jumped || !this.encounters.escape()) return;
     this.audio.jump(this.position, jumped === 2);
     this.audio.entityThreat(0, 0, this.seconds, 0);

@@ -27,6 +27,8 @@ import {
   RpgRecordings,
 } from "./rpg-recordings";
 
+import { propSoundSamples, type PropSound } from "./prop-sounds";
+
 interface SpatialVoice {
   position: SoundPosition;
   input: GainNode;
@@ -52,6 +54,8 @@ export class BackroomsAudio {
   private mix: DynamicsCompressorNode | null = null;
   private reflections: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private propBuffers = new Map<string, AudioBuffer>();
+  private nextPropSound = 0;
   private lastWaterRecording = -1;
   private recordings: RpgRecordings | null = null;
   private dialup: ComputerDialup | null = null;
@@ -506,6 +510,31 @@ export class BackroomsAudio {
     );
   }
 
+  propSound(event: PropSound) {
+    if (!this.active || !this.ctx || !this.volume || this.transients.size >= 8) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    if (now < this.nextPropSound) return;
+    this.nextPropSound = now + 0.045;
+    const key = `${event.material}:${event.kind}`;
+    let buffer = this.propBuffers.get(key);
+    if (!buffer) {
+      const samples = propSoundSamples(event.kind, event.material, ctx.sampleRate);
+      buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+      buffer.getChannelData(0).set(samples);
+      this.propBuffers.set(key, buffer);
+    }
+    const voice = this.spatial(event.position, 0.1, 1.4);
+    const strength = Math.max(0, Math.min(1, event.strength));
+    voice.input.gain.value = event.kind === "scrape"
+      ? 0.055 + strength * 0.065 : 0.045 + strength * 0.085;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(voice.input);
+    voice.sources.push(source);
+    this.track(voice);
+    source.start(now);
+  }
+
   jump(position: SoundPosition, boosted: boolean) {
     if (!this.active || !this.ctx || !this.volume || this.transients.size >= 12) return;
     const buffer = this.recordings?.get("jump");
@@ -657,6 +686,7 @@ export class BackroomsAudio {
     this.ambience = null;
     this.rooms.clear();
     this.noise = null;
+    this.propBuffers.clear();
     this.recordings?.dispose();
     this.recordings = null;
     if (this.ctx) void this.ctx.close().catch(() => {});
