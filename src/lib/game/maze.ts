@@ -1,4 +1,7 @@
+import { interiorSeed, type GenerationVersion } from "./generation";
+
 export const CELL = 4.8;
+export const PLAYER_RADIUS = 0.22;
 export const CHUNK = 12;
 export const SPAN = CELL * CHUNK;
 export const HEIGHT = 3.15;
@@ -29,6 +32,10 @@ export interface Landmark {
   length: number;
   height: number;
   courtyard?: "ground" | "overlook";
+  office?: "annex";
+  warehouse?: boolean;
+  corridor?: "hotel" | "utility";
+  pool?: "colonnade";
 }
 export interface PoolBounds {
   x: number;
@@ -107,18 +114,27 @@ function ordinaryLandmarkKind(
   const phase = hash(0, 0, seed + 907);
   // Three adjacent sections share a corridor. Its two internal gates stay aligned
   // even when unseen office branches regenerate at a different depth.
-  if (modulo(Math.floor(x / 3) + z + phase, 4) === 0) return "corridor";
+  if (isCorridor(x, z, phase)) return "corridor";
   // One party room per 24-section band. Pick only non-corridor slots so the
   // three-section hallway runs survive, including at negative coordinates.
   const band = Math.floor(x / 24);
-  const candidates = Array.from({ length: 24 }, (_, i) => band * 24 + i).filter(
-    (cx) => modulo(Math.floor(cx / 3) + z + phase, 4) !== 0,
-  );
-  if (x === candidates[hash(band, z, seed + 1709) % candidates.length])
-    return "levelFun";
+  // Eight groups of three slots contain exactly two corridor groups. Select
+  // among the same 18 surviving slots without allocating/scanning an array on
+  // every nested courtyard and neighborhood lookup. Negative bands align too:
+  // each band advances eight groups, a multiple of the four-group cadence.
+  const rank = hash(band, z, seed + 1709) % 18;
+  const group = Math.floor(rank / 3);
+  const firstCorridor = modulo(-z - phase, 4);
+  const sourceGroup = group + Number(group >= firstCorridor) +
+    Number(group >= firstCorridor + 3);
+  if (x === band * 24 + sourceGroup * 3 + rank % 3) return "levelFun";
   return (["lobby", "foodCourt", "poolroom"] as const)[
     modulo(x + z + phase, 3)
   ];
+}
+/** Later landmark overlays never replace a corridor slot. */
+function isCorridor(x: number, z: number, phase: number) {
+  return modulo(Math.floor(x / 3) + z + phase, 4) === 0;
 }
 export function inLandmark(room: Landmark, x: number, z: number) {
   return (
@@ -174,8 +190,12 @@ export function generateChunk(
   z: number,
   seed: number,
   depth = 0,
+  generation: GenerationVersion = 1,
 ): ChunkData {
-  const chunkSeed = hash(x, z, seed + depth * 7919);
+  // Keep global cadence, landmark selection, and shared boundary gates legacy.
+  const chunkSeed = generation === 2
+    ? interiorSeed(x, z, seed + depth * 7919)
+    : hash(x, z, seed + depth * 7919);
   const rng = random(chunkSeed);
   const cells = new Uint8Array(CHUNK * CHUNK);
   const seen = new Set<number>([0]);
@@ -227,9 +247,10 @@ export function generateChunk(
   const south = 1 + (hash(x, z + 1, seed + 31) % (CHUNK - 2));
   const kind = landmarkKind(x, z, seed);
   const corridorRow = 6;
+  const corridorPhase = hash(0, 0, seed + 907);
   const horizontalGate = (edgeX: number) =>
-    landmarkKind(edgeX - 1, z, seed) === "corridor" &&
-    landmarkKind(edgeX, z, seed) === "corridor"
+    isCorridor(edgeX - 1, z, corridorPhase) &&
+    isCorridor(edgeX, z, corridorPhase)
       ? corridorRow
       : 1 + (hash(edgeX, z, seed + 73) % (CHUNK - 2));
   const west = horizontalGate(x);
@@ -284,8 +305,27 @@ export function generateChunk(
               length: 8 + Math.floor(shape() * 2),
               height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
             };
+  // A low, stripped office variation leaves the established landmark cadence
+  // intact. Its shape is tape-stable even when unseen maze branches regenerate.
+  if (kind === "lobby" && hash(x, z, seed + 3209) % 3 === 0) {
+    landmark.office = "annex";
+    landmark.width = 5;
+    landmark.length = 5;
+    landmark.height = HEIGHT;
+  }
+  if (kind === "foodCourt" && hash(x, z, seed + 7211) % 4 === 0)
+    landmark.warehouse = true;
+  // New-generation interiors only; the opening pool and all legacy tapes stay familiar.
+  if (generation === 2 && kind === "poolroom" && (x !== 0 || z !== 0) &&
+      interiorSeed(x, z, seed + 0x37c011) % 5 === 0)
+    landmark.pool = "colonnade";
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
+  // One choice per three-section run, including negative chunk coordinates.
+  if (kind === "corridor" && hash(Math.floor(x / 3), z, seed + 8117) % 4 === 0)
+    landmark.corridor = "hotel";
+  else if (kind === "corridor" && hash(Math.floor(x / 3), z, seed + 8117) % 8 === 1)
+    landmark.corridor = "utility";
   // Only remove walls: all original maze connections and shared gates survive.
   for (let rz = landmark.z; rz < landmark.z + landmark.length; rz++)
     for (let rx = landmark.x; rx < landmark.x + landmark.width; rx++) {
@@ -320,11 +360,11 @@ export function generateChunk(
     if (kind === "corridor") approach(2, 4, 2, rz);
     else approach(2, 2, rx, rz);
   }
-  if (kind === "levelFun" || kind === "neighborhood") {
-    // Give the party room actual walls. Close only redundant perimeter edges:
-    // never sever an office branch, alter a section gate, or lose the approach
-    // from spawn. Two opposite entrances are always retained. The street also
-    // keeps a doorway at each end, and its sealed sides become house lots.
+  if (kind === "levelFun" || kind === "neighborhood" || landmark.office) {
+    // Enclose authored rooms by closing only redundant perimeter edges: never
+    // sever a branch, change a section gate, or lose the approach from spawn.
+    // Party rooms retain opposite entrances. Streets and office annexes keep
+    // all four approaches; closed sides host house lots or office fixtures.
     for (let cz = rz; cz <= bottom; cz++)
       for (let cx = rx; cx <= right; cx++)
         for (const d of directions) {
@@ -340,7 +380,7 @@ export function generateChunk(
           if (d.bit === E && cz === Math.max(rz, Math.min(bottom, east)))
             continue;
           if (
-            kind === "neighborhood" &&
+            (kind === "neighborhood" || landmark.office) &&
             ((d.bit === N && cx === Math.max(rx, Math.min(right, north))) ||
               (d.bit === S && cx === Math.max(rx, Math.min(right, south))))
           )
@@ -409,7 +449,7 @@ export function canStand(
   chunks: Map<string, ChunkData>,
   x: number,
   z: number,
-  radius = 0.22,
+  radius = PLAYER_RADIUS,
 ) {
   const cell = cellAt(chunks, x, z);
   if (!cell) return false;

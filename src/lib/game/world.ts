@@ -17,8 +17,11 @@ import {
   courtyardBounds,
   type ChunkData,
 } from "./maze";
+import { createDiscoveryParts, planDiscovery } from "./discoveries";
+import { furnitureCollisionParts } from "./furniture-collision";
 import { buildLandmark } from "./landmarks";
-import { createRoomAmbientMap, planRoomLighting } from "./room-lighting";
+import { wallContactShadowGeometry } from "./wall-contact-shadow";
+import { planRoomLighting } from "./room-lighting";
 import type { Materials } from "./materials";
 import { configureSurfaceSampling, projectSurfaceUVs } from "./surface-textures";
 import type { ShapedObstacle } from "./physics";
@@ -29,12 +32,10 @@ import {
 } from "./computer-models";
 import { COMPUTER_HOMES, type ComputerStation } from "./computers";
 import {
-  createFurniture,
   chairKinds,
   isChairKind,
   type ChairKind,
   type FurnitureKind,
-  type FurnitureModel,
 } from "./furniture-models";
 import {
   anchorPose,
@@ -82,7 +83,6 @@ export function buildSection(
   const theme = mats.forTheme(data.theme);
   const furnitureRng = random(data.seed + 3403);
   const chairRng = random(data.seed + 39217);
-  const models = new Map<string, FurnitureModel>();
   const furnished = new Set<number>();
   const propRecords: {
     kind: FurnitureKind;
@@ -177,23 +177,19 @@ export function buildSection(
       mats.trim,
     );
     for (const side of [-1, 1]) {
-      // Contact shadows soften the wall-to-carpet and wall-to-ceiling junctions.
-      plane(
-        vertical ? 0.65 : CELL,
-        vertical ? CELL : 0.65,
+      // Soft baked contact shading grounds both sides of each wall on the floor.
+      add(
+        wallContactShadowGeometry(vertical, side),
+        mats.shadow,
         x + (vertical ? side * 0.39 : 0),
         0.006,
         z + (vertical ? 0 : side * 0.39),
-        mats.shadow,
-        -Math.PI / 2,
-        side < 0 ? Math.PI : 0,
+        0,
       );
     }
   }
   function model(kind: FurnitureKind, lampOn = false) {
-    const key = `${kind}:${lampOn}`;
-    if (!models.has(key)) models.set(key, createFurniture(kind, mats, lampOn));
-    return models.get(key)!;
+    return mats.furniture.get(kind, lampOn);
   }
   function furniture(
     kind: FurnitureKind,
@@ -208,27 +204,26 @@ export function buildSection(
           .applyMatrix4(pose)
           .add(new THREE.Vector3(ox, 0, oz)),
       );
-    const parts: Float32Array[] = [];
+    const shaped = kind === "slide" || kind === "utilityCart" || kind === "computerDesk";
     for (const part of source.parts) {
       const geometry = part.geometry.clone();
       // Furniture grain follows the object when it rotates or hangs from a wall.
       if (part.material.userData.surfaceMeters)
         projectSurfaceUVs(geometry, part.material.userData.surfaceMeters);
       geometry.applyMatrix4(pose).translate(ox, 0, oz);
-      if (kind === "slide")
-        parts.push(new Float32Array(geometry.getAttribute("position").array));
       if (!batches.has(part.material)) batches.set(part.material, []);
       batches.get(part.material)!.push(geometry);
     }
     const bounds = source.bounds.clone().applyMatrix4(pose);
     propRecords.push({ kind, attachment, bounds: bounds.clone() });
     if (bounds.min.y < HEIGHT && bounds.max.y > 0.02) {
-      if (kind === "slide") {
-        // Keep the coarse bound for maze navigation, but let the player walk
-        // on the actual chute. Each convex part preserves rails and supports.
+      if (shaped) {
+        // Keep the coarse navigation bound while Rapier follows actual solids.
+        // Desks/carts must support their surfaces, not air at CRT/handle height.
         bounds.translate(new THREE.Vector3(ox, 0, oz));
         colliders.push(bounds);
-        shapedColliders.push({ bounds, parts });
+        const worldPose = pose.clone().premultiply(new THREE.Matrix4().makeTranslation(ox, 0, oz));
+        shapedColliders.push({ bounds, parts: furnitureCollisionParts(source, worldPose) });
         return;
       }
       // Seats need their real solid parts: a whole-chair/sofa box fills the air
@@ -378,7 +373,7 @@ export function buildSection(
     floor(0, z, x, length);
     floor(x + width, z, SPAN - x - width, length);
   } else floor(0, 0, SPAN, SPAN);
-  buildLandmark(data, mats, { box, plane, lights, colliders, water, group });
+  buildLandmark(data, mats, { box, plane, lights, colliders, shapedColliders, water, group });
   if (lighting.lampCell !== null) {
     const at = lighting.lampCell;
     // Place the only lamp before clutter so its pool of light stays readable.
@@ -622,6 +617,9 @@ export function buildSection(
     "bench",
     "sideTable",
     "utilityCart",
+    "waterCooler",
+    "photocopier",
+    "archiveCartons",
   ];
   if (data.x === 0 && data.z === 0) {
     // Each tape begins with its own small selection of familiar objects.
@@ -774,11 +772,19 @@ export function buildSection(
   // One solitary chair in the opening vista makes scale immediately familiar.
   if (data.x === 0 && data.z === 0)
     chair(CELL * 3.5 + 1.4, CELL * 2.5 + 1.4, 0.5);
-  for (const source of models.values())
-    source.parts.forEach((part) => part.geometry.dispose());
-  const ambientMap = lighting.cells.size
-    ? createRoomAmbientMap(data, lighting)
+  const discovery = planDiscovery(data, available, furnished, colliders);
+  group.userData.discoveries = discovery ? [discovery] : [];
+  if (discovery) {
+    for (const { geometry, material } of createDiscoveryParts(discovery, mats)) {
+      geometry.translate(ox, 0, oz);
+      if (!batches.has(material)) batches.set(material, []);
+      batches.get(material)!.push(geometry);
+    }
+  }
+  const ambientLease = lighting.cells.size
+    ? mats.ambientMaps.acquire(data, lighting)
     : null;
+  const ambientMap = ambientLease?.texture;
   const ownedMaterials: THREE.Material[] = [];
   for (const [material, geometries] of batches) {
     const merged = mergeGeometries(geometries);
@@ -839,16 +845,19 @@ export function buildSection(
     computers,
     occluders,
     dispose: () => {
-      ambientMap?.dispose();
       ownedMaterials.forEach((material) => material.dispose());
       group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
+          // Three r186 owns per-object WebGPU bindings separately from geometry.
+          // Shared materials outlive sections, so release the retired mesh too.
+          obj.dispose();
           obj.geometry.dispose();
           if (portals.some((p) => p.mesh === obj))
             (obj.material as THREE.Material).dispose();
         }
       });
       group.removeFromParent();
+      ambientLease?.release();
     },
   };
 }

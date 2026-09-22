@@ -116,6 +116,7 @@ export class EntityNavigation {
   private sections = new Map<string, NavSection>();
   private buckets = new Map<string, { furniture: Box3[]; walls: Box3[] }>();
   private walkable = new Map<string, boolean>();
+  private failedRoutes = new Set<string>();
 
   addSection(key: string, data: ChunkData, furniture: readonly Box3[]) {
     const walls: Box3[] = [];
@@ -182,6 +183,7 @@ export class EntityNavigation {
   private reindex() {
     this.revision++;
     this.walkable.clear();
+    this.failedRoutes.clear();
     this.buckets.clear();
     for (const section of this.sections.values())
       for (const kind of ["furniture", "walls"] as const)
@@ -236,7 +238,7 @@ export class EntityNavigation {
     }
     return true;
   }
-  clearSegment(a: GroundPoint, b: GroundPoint) {
+  clearSegment(a: GroundPoint, b: GroundPoint, radius = ENTITY_RADIUS) {
     const steps = Math.max(1, Math.ceil(groundDistance(a, b) / 0.18));
     for (let i = 0; i <= steps; i++) {
       if (
@@ -244,15 +246,15 @@ export class EntityNavigation {
           this.chunks,
           a.x + ((b.x - a.x) * i) / steps,
           a.z + ((b.z - a.z) * i) / steps,
-          ENTITY_RADIUS,
+          radius,
         )
       )
         return false;
     }
-    for (const box of this.boxes(a, b, "furniture", ENTITY_RADIUS)) {
+    for (const box of this.boxes(a, b, "furniture", radius)) {
       if (box.max.y < 0.08 || box.min.y > 2.75) continue;
       const y = Math.max(0.08, box.min.y);
-      if (segmentHitsBox({ ...a, y }, { ...b, y }, box, ENTITY_RADIUS))
+      if (segmentHitsBox({ ...a, y }, { ...b, y }, box, radius))
         return false;
     }
     return true;
@@ -321,11 +323,21 @@ export class EntityNavigation {
         (!connect || this.clearSegment(p, this.point(n.x, n.z))),
     );
   }
+  private rememberFailedRoute(key: string): GroundPoint[] {
+    // FIFO cap keeps retries bounded without retaining paths or streamed sections.
+    if (this.failedRoutes.size >= 32)
+      this.failedRoutes.delete(this.failedRoutes.values().next().value!);
+    this.failedRoutes.add(key);
+    return [];
+  }
   route(from: GroundPoint, to: GroundPoint): GroundPoint[] {
+    // Only exact endpoint repeats can reuse failure. Any geometry mutation clears it.
+    const failedKey = `${from.x},${from.z}:${to.x},${to.z}`;
+    if (this.failedRoutes.has(failedKey)) return [];
     if (this.clearSegment(from, to)) return [{ x: to.x, z: to.z }];
     const start = this.nearest(from, true),
       goal = this.nearest(to, false);
-    if (!start || !goal) return [];
+    if (!start || !goal) return this.rememberFailedRoute(failedKey);
     const frontier = new Frontier(),
       costs = new Map<string, number>();
     const rank = (x: number, z: number) =>
@@ -382,6 +394,6 @@ export class EntityNavigation {
         });
       }
     }
-    return [];
+    return this.rememberFailedRoute(failedKey);
   }
 }

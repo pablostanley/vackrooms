@@ -4,6 +4,7 @@ import {
   CELL,
   CHUNK,
   HEIGHT,
+  PLAYER_RADIUS,
   N,
   SPAN,
   W,
@@ -73,7 +74,7 @@ export class CharacterMotor {
       ),
     );
     this.capsule = this.world.createCollider(
-      RAPIER.ColliderDesc.capsule(0.65, 0.22),
+      RAPIER.ColliderDesc.capsule(0.65, PLAYER_RADIUS),
       this.body,
     );
     this.controller.enableAutostep(0.28, 0.25, false);

@@ -1,4 +1,8 @@
+import { FurnitureLibrary } from "./furniture-library";
 import * as THREE from "three";
+import { createDiscoveryNotes } from "./discovery-notes";
+import { createHotelLabels } from "./hotel-labels";
+import { createRoomAmbientPool } from "./room-lighting";
 import { random, type Theme } from "./maze";
 import { drawFunCarpet, drawFunMural } from "./fun-textures";
 import {
@@ -38,7 +42,10 @@ function grain(
   ctx.putImageData(image, 0, 0);
 }
 export function createMaterials() {
+  const notes = createDiscoveryNotes();
+  const ambientMaps = createRoomAmbientPool();
   const textures: THREE.Texture[] = [];
+  const hotelLabels = createHotelLabels();
   const texture = (
     draw: (ctx: CanvasRenderingContext2D, size: number) => void,
     size?: number,
@@ -74,6 +81,9 @@ export function createMaterials() {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, s, s);
   }, 128);
+  // This one-shot fade is not periodic: wrapping leaks its dark edge back into
+  // the transparent outer edge when bilinear/mipmap filtering samples it.
+  ao.wrapS = ao.wrapT = THREE.ClampToEdgeWrapping;
   const wall = new THREE.MeshStandardMaterial({
     ...wallpaper,
     roughness: 0.97,
@@ -91,7 +101,7 @@ export function createMaterials() {
     ...ceiling,
     roughness: 1,
     color: "#ffffff",
-    emissive: "#c4b976",
+    emissive: "#d4ceb1",
     emissiveIntensity: 0.075,
   });
   const tileWall = new THREE.MeshStandardMaterial({
@@ -119,14 +129,19 @@ export function createMaterials() {
   });
   const luminous = new THREE.MeshBasicMaterial({
     map: lightMap,
-    color: "#ffffdd",
-    toneMapped: false,
+    // Authored HDR radiance keeps warm panels bright through the same ACES
+    // output as the room. Bypassing tone mapping only on the direct path made
+    // fixture brightness jump when post effects were enabled. Rounded radiance
+    // values preserve the former diffuser output under Three's ACES curve.
+    color: new THREE.Color(1.65, 1.61, 0.35),
   });
   const deadLight = new THREE.MeshStandardMaterial({
     color: "#b2ad78",
     roughness: 0.8,
   });
-  const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe0a0", toneMapped: false });
+  const lampGlow = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(2.46, 0.855, 0.144),
+  });
   const shadow = new THREE.MeshBasicMaterial({
     map: ao,
     transparent: true,
@@ -301,7 +316,12 @@ export function createMaterials() {
   streetGrass.userData.surfaceMeters = streetHedge.userData.surfaceMeters = 1.2;
   configureSurfaceSampling(streetGrass);
   configureSurfaceSampling(streetHedge);
-  return {
+  const furniture: FurnitureLibrary = new FurnitureLibrary(() => materials);
+  const materials = {
+    furniture,
+    discoveryNotes: notes.materials,
+    hotelNumbers: hotelLabels.material,
+    ambientMaps,
     wall,
     floor,
     top,
@@ -347,6 +367,10 @@ export function createMaterials() {
       floor,
     }),
     dispose: () => {
+      notes.dispose();
+      hotelLabels.dispose();
+      ambientMaps.dispose();
+      furniture.dispose();
       textures.forEach((t) => t.dispose());
       [
         wall,
@@ -393,5 +417,6 @@ export function createMaterials() {
       ].forEach((m) => m.dispose());
     },
   };
+  return materials;
 }
 export type Materials = ReturnType<typeof createMaterials>;

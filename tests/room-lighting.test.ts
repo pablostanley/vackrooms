@@ -205,7 +205,7 @@ test("outages remove actual fixtures, lamps illuminate from the shade, and secti
       });
       section.dispose();
       assert.deepEqual(disposed, owned);
-      assert.ok(textureDisposed);
+      assert.equal(textureDisposed, false, "retired map remains owned by its pool");
       assert.equal(
         mats.wall.aoMap,
         null,

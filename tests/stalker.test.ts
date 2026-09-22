@@ -542,6 +542,8 @@ test("fixed-step playback repeats across render rates and resets grant isolation
     b.stalker.update(1 / 60, b.input, () => stepsB++);
   assert.deepEqual(a.stalker.position, b.stalker.position);
   assert.equal(a.stalker.gait, b.stalker.gait);
+  assert.equal(a.stalker.heading, b.stalker.heading);
+  assert.ok(Math.abs(a.stalker.renderHeading - b.stalker.renderHeading) < 1e-8);
   assert.equal(stepsA, stepsB);
   a.stalker.reset();
   for (let i = 0; i < 440; i++)
@@ -660,4 +662,33 @@ test("real furnished tapes produce hidden arrivals and traversable stalking rout
     assert.equal(nav.chunks.size, 0);
   }
   materials.dispose();
+});
+
+
+test("rendered creature turns interpolate between fixed steps and stage without a spin", () => {
+  const stalker = new Stalker(1, openWorld());
+  const input = { view: view(28, 20), playerSpeed: 0, canGrab: false };
+  stalker.stage({ x: 20, z: 20 }, { x: 20, z: 28 }, true);
+  assert.equal(stalker.renderHeading, stalker.heading, "staging snaps to the new intended heading");
+  // The new player bearing forces a real navigation turn on the next simulation tick.
+  stalker.update(1 / 30, input, () => {});
+  const before = stalker.renderHeading;
+  const next = stalker.heading;
+  assert.ok(Math.abs(next - before) > 0.01, "fixture exercises an actual turn");
+  stalker.update(1 / 120, input, () => {});
+  const quarter = stalker.renderHeading;
+  stalker.update(1 / 120, input, () => {});
+  const halfway = stalker.renderHeading;
+  assert.equal(stalker.heading, next, "render samples do not change simulation state");
+  assert.ok(Math.abs(quarter - (before + (next - before) * 0.25)) < 1e-8);
+  assert.ok(Math.abs(halfway - (before + (next - before) * 0.5)) < 1e-8);
+  assert.notEqual(quarter, halfway, "high-refresh frames get distinct visible headings");
+  stalker.stage({ x: 20, z: 20 }, { x: 20, z: 10 }, true);
+  assert.equal(stalker.renderHeading, stalker.heading, "new encounter does not interpolate from the old one");
+  // Headings on either side of the signed-angle seam represent nearby bearings.
+  const seam = new Stalker(1, openWorld());
+  seam.stage({ x: 20, z: 20 }, { x: 20.001, z: 10 }, true);
+  seam.heading = -Math.PI + 0.0001;
+  seam.update(1 / 60, input, () => {});
+  assert.ok(Math.abs(seam.renderHeading - Math.PI) < 0.001, "turn crosses the angle seam without a full spin");
 });

@@ -21,7 +21,7 @@ Built with Next.js, Three.js, Rapier, and [vgpu](https://github.com/vercel-labs/
 | ![A sealed courtyard surrounded by windowed walls, seen from the office maze](docs/media/courtyard.jpg) | ![A shuttered food court with a long empty floor](docs/media/food-court.jpg) |
 | **Covered courtyards.** Sealed upper-floor overlooks you can never quite reach. | **Landmarks.** Lobbies, food courts, and 170m corridors between the offices. |
 
-- **Endless and seeded.** Every visit draws a new tape. Add `?tape=199307` to the URL to replay a specific maze, or use Cassette settings → COPY TAPE LINK to share yours.
+- **Endless and seeded.** New visits draw a generation-2 tape; existing unversioned links such as `?tape=199307` use generation 1. Cassette settings → COPY TAPE LINK shares both the tape seed and generation so others replay the same starting maze. [How generation versions work](docs/GENERATION-VERSIONS.md).
 - **Rooms change when you are not looking.** Unseen sections mutate; landmarks stay put.
 - **Noclip.** Hold E on an unstable wall to fall to a deeper level.
 - **Spatial sound.** HRTF panning, traced wall occlusion, per-room reverb, and footsteps that are sometimes not yours.

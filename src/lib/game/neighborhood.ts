@@ -212,6 +212,14 @@ export function buildNeighborhood(
       geometry.translate(ox + edge + inward * from, y, oz + center);
       list.push(geometry);
     }
+    // The slope vertices enclose a triangular prism. Reuse the transformed
+    // roof itself so both ridge orientations and their eaves block jumping.
+    // Keep the ground-level house box for navigation and wall collision.
+    roof.computeBoundingBox();
+    b.shapedColliders.push({
+      bounds: roof.boundingBox!.clone(),
+      parts: [new Float32Array(roof.getAttribute("position").array)],
+    });
     const eaveY = EAVE - slope * over - 0.03;
     if (gableFront)
       for (const end of [-1, 1])

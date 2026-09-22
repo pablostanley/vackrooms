@@ -1,8 +1,11 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { CharacterMotor } from "./physics";
+import { updateResidentSections } from "./resident-sections";
 import { BackroomsAudio } from "./audio";
 import { footstepSurfaceAt } from "./acoustics";
+import { nextTape, type Tape } from "./tape";
+import type { GenerationVersion } from "./generation";
 import { CELL, generateChunk, landmarkKind, SPAN, type ChunkData } from "./maze";
 import { createMaterials } from "./materials";
 import { createRenderer, type GameRenderer } from "./renderer";
@@ -11,7 +14,7 @@ import { buildSection, type Portal, type Section } from "./world";
 import { EntityNavigation, groundDistance } from "./entity-navigation";
 import { EntityModel } from "./entity-model";
 import { Encounters } from "./encounters";
-import { crushEnvelope, DEATH_HOLD, nextLifeSeed } from "./encounter-effects";
+import { crushEnvelope, DEATH_HOLD } from "./encounter-effects";
 import { ComputerScreens } from "./computer-screens";
 import { computerFocus, type ComputerStation } from "./computers";
 import { ShadowCache } from "./shadow-cache";
@@ -45,7 +48,7 @@ interface Callbacks {
   gamepadMenu: (input: GamepadFrame) => boolean;
   stats: (stats: GameStats) => void;
   message: (text: string) => void;
-  tape: (seed: number) => void;
+  tape: (tape: Tape) => void;
   error: (text: string) => void;
 }
 export class BackroomsEngine {
@@ -135,6 +138,7 @@ export class BackroomsEngine {
     private callbacks: Callbacks,
     settings: GameSettings,
     overlayCanvas: HTMLCanvasElement | null = null,
+    private readonly generationVersion: GenerationVersion = 1,
   ) {
     this.settings = settings;
     this.audio = new BackroomsAudio(seed);
@@ -174,7 +178,7 @@ export class BackroomsEngine {
     this.resizeObserver.observe(container);
     void this.initialize();
   }
-  /** Development only: `?visit=neighborhood` begins inside the nearest one. */
+  /** Development only: `?visit=` starts inside a landmark or named room variant. */
   private visitLandmark() {
     const kind = new URLSearchParams(location.search).get("visit");
     if (!kind) return;
@@ -182,14 +186,18 @@ export class BackroomsEngine {
       for (let z = -ring; z <= ring; z++)
         for (let x = -ring; x <= ring; x++) {
           if (Math.max(Math.abs(x), Math.abs(z)) !== ring) continue;
-          if (landmarkKind(x, z, this.seed) !== kind) continue;
-          const room = generateChunk(x, z, this.seed).landmark;
+          const wanted = kind === "officeAnnex" ? "lobby" : kind === "hotelCorridor" || kind === "utilityCorridor" ? "corridor" : kind;
+          if (landmarkKind(x, z, this.seed) !== wanted) continue;
+          const room = generateChunk(x, z, this.seed, 0, this.generationVersion).landmark;
+          if (kind === "officeAnnex" && room.office !== "annex") continue;
+          if (kind === "hotelCorridor" && room.corridor !== "hotel") continue;
+          if (kind === "utilityCorridor" && room.corridor !== "utility") continue;
           this.position.set(
             x * SPAN + (room.x + room.width / 2) * CELL,
             1.66,
             z * SPAN + (room.z + 0.5) * CELL,
           );
-          this.yaw = Math.PI;
+          this.yaw = kind === "hotelCorridor" || kind === "utilityCorridor" ? Math.PI / 2 : Math.PI;
           return;
         }
   }
@@ -492,13 +500,14 @@ export class BackroomsEngine {
       void surface
         .requestFullscreen({ navigationUI: "hide" })
         .then(() => {
-          if (!this.focusedComputer && document.fullscreenElement === surface)
+          if ((!this.alive || !this.focusedComputer) && document.fullscreenElement === surface)
             void document.exitFullscreen().catch(() => {});
-          else if (this.focusedComputer === station)
+          else if (this.alive && this.focusedComputer === station)
             // Add the modal after fullscreen, keeping HTML above the canvas.
             this.computerScreens?.focus(station);
         })
         .catch(() => {
+          if (!this.alive || this.focusedComputer !== station) return;
           this.ownsComputerFullscreen = false;
           if (this.focusedComputer === station) {
             this.computerScreens?.focus(station);
@@ -618,11 +627,17 @@ export class BackroomsEngine {
     if (cx === this.streamedX && cz === this.streamedZ) return;
     this.streamedX = cx;
     this.streamedZ = cz;
-    for (let z = cz - 1; z <= cz + 1; z++)
-      for (let x = cx - 1; x <= cx + 1; x++) {
-        const key = `${x},${z}`;
-        if (this.chunks.has(key)) continue;
-        const data = generateChunk(x, z, this.seed, this.depth);
+    updateResidentSections(
+      this.chunks, cx, cz,
+      (key) => {
+        this.sections.get(key)?.dispose();
+        this.motor?.removeSection(key);
+        this.sections.delete(key);
+        this.navigation.removeSection(key);
+        this.chunks.delete(key);
+      },
+      (key, x, z) => {
+        const data = generateChunk(x, z, this.seed, this.depth, this.generationVersion);
         this.chunks.set(key, data);
         const section = buildSection(data, this.materials, this.depth);
         this.prepareWater(section);
@@ -630,15 +645,8 @@ export class BackroomsEngine {
         this.navigation.addSection(key, data, section.colliders);
         this.motor?.addSection(key, data, section.colliders, section.shapedColliders);
         this.scene.add(section.group);
-      }
-    for (const [key, data] of this.chunks)
-      if (Math.abs(data.x - cx) > 1 || Math.abs(data.z - cz) > 1) {
-        this.sections.get(key)?.dispose();
-        this.motor?.removeSection(key);
-        this.sections.delete(key);
-        this.navigation.removeSection(key);
-        this.chunks.delete(key);
-      }
+      },
+    );
     this.shadows.invalidate();
     this.lastLights = -10;
     this.lastScreens = -1;
@@ -808,7 +816,8 @@ export class BackroomsEngine {
     this.updateLights();
   }
   private respawn() {
-    this.seed = nextLifeSeed(this.seed);
+    const next = nextTape({ seed: this.seed, generation: this.generationVersion });
+    this.seed = next.seed;
     this.depth = this.seconds = this.distance = this.stepDistance = this.clipProgress = 0;
     this.lastChange = this.mutation = 0;
     this.stress = this.tapeBurst = this.deathHold = 0;
@@ -828,7 +837,7 @@ export class BackroomsEngine {
     this.camera.fov = 68;
     this.camera.updateProjectionMatrix();
     if (this.controls) this.controls.enabled = this.active;
-    this.callbacks.tape(this.seed);
+    this.callbacks.tape(next);
     this.callbacks.message("You died. Another tape. The same nightmare.");
   }
   /** Development-only shortcut; replay from the camcorder OSD or reload the URL. */
@@ -903,6 +912,7 @@ export class BackroomsEngine {
         data.z,
         this.seed,
         this.depth + ++this.mutation * 11,
+        this.generationVersion,
       );
       this.sections.get(key)?.dispose();
       this.chunks.set(key, revised);
@@ -943,7 +953,7 @@ export class BackroomsEngine {
       const stalker = this.encounters.stalkers[i];
       entity.visible = stalker.present;
       stalker.renderPosition(entity.position);
-      entity.rotation.y = stalker.heading;
+      entity.rotation.y = stalker.renderHeading;
       const distance = groundDistance(this.position, stalker.position);
       const clear = stalker.present && this.navigation.sight(
         this.position, { x: stalker.position.x, y: 1.5, z: stalker.position.z },

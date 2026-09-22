@@ -28,10 +28,12 @@ export async function createRenderer(
 ): Promise<GameRenderer> {
   const resolution = new RenderResolution(initialSettings.quality);
   let settings = initialSettings;
+  let contactAvailable = true;
+  const contactEnabled = () => contactAvailable && contactShadowsEnabled(settings);
   const diagnostics = (canvas: HTMLCanvasElement) => {
     if (process.env.NODE_ENV !== "development") return;
     canvas.dataset.quality = settings.quality;
-    canvas.dataset.contactShadows = String(contactShadowsEnabled(settings));
+    canvas.dataset.contactShadows = String(contactEnabled());
     canvas.dataset.tapeEffects = String(settings.tapeEffects);
   };
   let width = 1,
@@ -190,18 +192,29 @@ export async function createRenderer(
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  const target = new THREE.WebGLRenderTarget(1, 1);
-  const contactShadows = createGLContactShadows(scene, camera, target);
+  // Three leaves offscreen scene color linear and untone-mapped. Preserve
+  // highlights until the output pass when float color attachments are usable;
+  // keep the byte target for WebGL2 implementations without that extension.
+  const floatColor = renderer.extensions.has("EXT_color_buffer_float");
+  contactAvailable = floatColor;
+  const target = new THREE.WebGLRenderTarget(1, 1, {
+    type: floatColor
+      ? THREE.HalfFloatType
+      : THREE.UnsignedByteType,
+  });
+  // GTAO also uses half-float attachments. Unsupported devices keep the
+  // playable byte/tape path without attempting incomplete AO framebuffers.
+  const contactShadows = floatColor ? createGLContactShadows(scene, camera, target) : null;
   const postScene = new THREE.Scene(),
     postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const material = new THREE.ShaderMaterial({
     uniforms: {
       image: { value: target.texture },
-      contactOcclusion: { value: contactShadows.texture },
+      contactOcclusion: { value: contactShadows?.texture ?? null },
       seconds: { value: 0 },
       damage: { value: 0.7 },
       anomaly: { value: 0 },
-      contactEnabled: { value: contactShadowsEnabled(settings) },
+      contactEnabled: { value: contactEnabled() },
       tapeEnabled: { value: settings.tapeEffects },
     },
     depthTest: false,
@@ -222,6 +235,7 @@ export async function createRenderer(
       if(tapeEnabled){float v=pow(clamp(vUv.x*(1.-vUv.x)*vUv.y*(1.-vUv.y)*16.,0.,1.),.065);color*=mix(1.,v*.97,damage*.8);
       float grain=noise(floor(vUv*vec2(1280.,960.))+floor(seconds*29.97))-.5;color+=grain*(.013+anomaly*.08)*damage;
       float loss=step(.86,noise(vec2(floor(vUv.y*240.),frame)));color*=1.-loss*anomaly*damage*.18;}gl_FragColor=vec4(color,1.);
+      #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`,
   });
@@ -236,7 +250,7 @@ export async function createRenderer(
       Math.max(1, Math.floor(width * ratio)),
       Math.max(1, Math.floor(height * ratio)),
     );
-    contactShadows.resize(target.width, target.height);
+    contactShadows?.resize(target.width, target.height);
   };
   return {
     canvas: renderer.domElement,
@@ -250,7 +264,7 @@ export async function createRenderer(
     },
     updateSettings: (next) => {
       settings = next;
-      material.uniforms.contactEnabled.value = contactShadowsEnabled(next);
+      material.uniforms.contactEnabled.value = contactEnabled();
       material.uniforms.tapeEnabled.value = next.tapeEffects;
       if (resolution.setQuality(next.quality)) resize();
       diagnostics(renderer.domElement);
@@ -263,14 +277,14 @@ export async function createRenderer(
       material.uniforms.seconds.value = t;
       material.uniforms.damage.value = d;
       material.uniforms.anomaly.value = s;
-      if (!settings.tapeEffects && !contactShadowsEnabled(settings)) {
+      if (!settings.tapeEffects && !contactEnabled()) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
         return;
       }
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);
-      if (contactShadowsEnabled(settings)) contactShadows.render(renderer);
+      if (contactEnabled()) contactShadows?.render(renderer);
       renderer.setRenderTarget(null);
       renderer.render(postScene, postCamera);
     },
@@ -279,7 +293,7 @@ export async function createRenderer(
       quad.geometry.dispose();
       material.dispose();
       target.dispose();
-      contactShadows.dispose();
+      contactShadows?.dispose();
       renderer.dispose();
     },
   };

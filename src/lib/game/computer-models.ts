@@ -33,6 +33,12 @@ export function createComputerModel(
 ): FurnitureModel {
   const parts: FurnitureModel["parts"] = [];
   const bounds = new THREE.Box3();
+  const playerBounds: THREE.Box3[] = [];
+  const retainSolid = (start = parts.length - 1) => {
+    const solid = new THREE.Box3();
+    for (let i = start; i < parts.length; i++) solid.union(parts[i].geometry.boundingBox!);
+    playerBounds.push(solid);
+  };
   type Point = [number, number, number];
   const box = (size: Point, at: Point, mat: THREE.Material, round = 0) => {
     const geometry = round
@@ -57,15 +63,20 @@ export function createComputerModel(
   const width = hutch ? 2 : desk ? 1.85 : 1.48;
   box([width, 0.075, 0.98], [0, 0.77, 0], wood, 0.012);
   if (desk) {
+    retainSolid(); // desktop
     // Institutional laminate desk with one modest pedestal of drawers.
     box([0.43, 0.72, 0.85], [-0.66, 0.36, -0.025], mats.cream);
+    retainSolid();
     for (let i = 0; i < 3; i++) {
       box([0.39, 0.205, 0.025], [-0.66, 0.13 + i * 0.23, 0.407], mats.paper);
       box([0.14, 0.022, 0.035], [-0.66, 0.19 + i * 0.23, 0.433], mats.metal);
     }
-    for (const z of [-0.39, 0.39])
+    for (const z of [-0.39, 0.39]) {
       box([0.055, 0.735, 0.055], [0.82, 0.3675, z], mats.metal);
+      retainSolid();
+    }
     box([1.45, 0.3, 0.035], [0.1, 0.52, -0.42], mats.cream);
+    retainSolid();
   } else {
     for (const x of [-width / 2 + 0.065, width / 2 - 0.065]) {
       box([0.09, 0.735, 0.91], [x, 0.3675, 0], wood);
@@ -88,6 +99,7 @@ export function createComputerModel(
   const towerX = hutch ? 0.7 : -0.48;
   if (desk) {
     box([0.91, 0.18, 0.67], [0, 0.9, -0.1], mats.cream, 0.008);
+    retainSolid();
     box([0.31, 0.052, 0.016], [0.23, 0.933, 0.242], mats.paper);
     box([0.24, 0.01, 0.02], [0.23, 0.936, 0.251], mats.metal);
     for (let i = 0; i < 7; i++)
@@ -101,6 +113,7 @@ export function createComputerModel(
     for (let i = 0; i < 6; i++)
       box([0.22, 0.012, 0.016], [towerX, 0.1 + i * 0.029, 0.238], mats.metal);
   }
+  const crtStart = parts.length;
   const { position: screen } = computerScreen(kind);
   const y = screen.y;
   box([0.48, 0.055, 0.4], [0, y - 0.406, -0.09], mats.cream, 0.018);
@@ -122,7 +135,9 @@ export function createComputerModel(
       [-0.28 + i * 0.068, y + 0.04, -0.455],
       mats.metal,
     );
+  if (desk) retainSolid(crtStart); // CRT enclosure and stand, not each vent/button
   // Chunky keycaps and a wired mouse; no textures or logos needed.
+  const keyboardStart = parts.length;
   const ky = desk ? 0.83 : 0.724;
   const kz = desk ? 0.34 : 0.43;
   box([0.71, 0.04, 0.235], [-0.05, ky, kz], mats.cream, 0.008);
@@ -140,13 +155,16 @@ export function createComputerModel(
     mats.cream,
     0.003,
   );
+  if (desk) retainSolid(keyboardStart);
+  const mouseStart = parts.length;
   box([0.14, 0.014, 0.2], [0.48, ky - 0.01, kz], mats.fabric, 0.008);
   box([0.081, 0.042, 0.122], [0.48, ky + 0.016, kz], mats.cream, 0.016);
   box([0.004, 0.007, 0.045], [0.48, ky + 0.038, kz - 0.029], mats.paper);
+  if (desk) retainSolid(mouseStart);
   if (!desk)
     for (const x of [-0.56, 0.56]) {
       box([0.14, 0.25, 0.15], [x, 0.93, -0.015], mats.cream, 0.009);
       box([0.104, 0.17, 0.012], [x, 0.95, 0.066], mats.fabric, 0.006);
     }
-  return { parts, bounds, anchor: new THREE.Vector3(0, 0.77, 0) };
+  return { parts, bounds, playerBounds: desk ? playerBounds : undefined, anchor: new THREE.Vector3(0, 0.77, 0) };
 }

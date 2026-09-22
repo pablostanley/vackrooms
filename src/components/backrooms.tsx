@@ -5,6 +5,7 @@ import type {
   GameStats,
 } from "@/lib/game/engine";
 import { defaultSettings, loadSettings, qualityPresets, saveSettings, setVolume, toggleMute, type QualityPreset, type SavedSettings } from "@/lib/game/settings";
+import { parseTape, tapeUrl, type Tape } from "@/lib/game/tape";
 import { PAD, type GamepadFrame } from "@/lib/game/gamepad";
 const qualityDescriptions: Record<QualityPreset, string> = {
   auto: "Adjusts resolution while you play to keep movement smooth.",
@@ -39,6 +40,7 @@ export default function Backrooms() {
   const container = useRef<HTMLDivElement>(null),
     tapeOverlay = useRef<HTMLCanvasElement>(null),
     engine = useRef<BackroomsEngine | null>(null),
+    currentTape = useRef<Tape | null>(null),
     dialog = useRef<HTMLDialogElement>(null);
   const [ready, setReady] = useState(false),
     [started, setStarted] = useState(false),
@@ -60,20 +62,19 @@ export default function Backrooms() {
   useEffect(() => {
     let disposed = false;
     let instance: BackroomsEngine | undefined;
-    const provided = new URLSearchParams(window.location.search).get("tape");
-    const tape =
-      provided && /^\d{1,9}$/.test(provided)
-        ? Number(provided)
-        : 100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000);
+    const tape = parseTape(new URLSearchParams(window.location.search), () =>
+      100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000),
+    );
+    currentTape.current = tape;
     void import("@/lib/game/engine")
       .then(({ BackroomsEngine }) => {
         if (disposed || !container.current) return;
         const initial = loadSettings(matchMedia("(prefers-reduced-motion: reduce)").matches);
-        setSeed(tape);
+        setSeed(tape.seed);
         setSettings(initial);
         instance = new BackroomsEngine(
           container.current,
-          tape,
+          tape.seed,
           {
             ready: () => setReady(true),
             play: () => {
@@ -96,15 +97,16 @@ export default function Backrooms() {
             stats: setStats,
             message: announce,
             tape: (next) => {
-              setSeed(next);
-              const url = new URL(location.href);
-              url.searchParams.set("tape", String(next));
+              currentTape.current = next;
+              setSeed(next.seed);
+              const url = tapeUrl(location.href, next);
               history.replaceState(null, "", url);
             },
             error: setError,
           },
           initial,
           tapeOverlay.current,
+          tape.generation,
         );
         engine.current = instance;
       })
@@ -141,20 +143,24 @@ export default function Backrooms() {
       contactShadows: false,
       tapeEffects: false,
     });
-    const url = new URL(location.href);
+    const url = currentTape.current
+      ? tapeUrl(location.href, currentTape.current)
+      : new URL(location.href);
     url.searchParams.set("renderer", "webgl");
-    if (seed) url.searchParams.set("tape", String(seed));
     location.assign(url.toString());
   }
   async function copyTape() {
     try {
-      const url = new URL(location.href);
-      url.searchParams.set("tape", String(seed));
+      if (!currentTape.current) return;
+      const url = tapeUrl(location.href, currentTape.current);
       await navigator.clipboard.writeText(url.toString());
       setCopied(true);
       copyTimer.current = setTimeout(() => setCopied(false), 2500);
     } catch {
-      setMessage("Could not copy the link. Tape number: " + seed);
+      const tape = currentTape.current;
+      setMessage(tape
+        ? `Could not copy the link. Tape ${tape.seed}, generation ${tape.generation}.`
+        : "Could not copy the link. Try again.");
     }
   }
   const battery = Math.max(2, 22 - Math.floor(stats.seconds / 90));
@@ -614,8 +620,27 @@ function TouchControls({
   engine: React.RefObject<BackroomsEngine | null>;
   portal: boolean;
 }) {
-  const origin = useRef<{ x: number; y: number; radius: number } | null>(null);
+  const origin = useRef<{ pointerId: number; x: number; y: number; radius: number } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  function movePointer(e: React.PointerEvent<HTMLDivElement>) {
+    if (!origin.current || origin.current.pointerId !== e.pointerId) return;
+    let x = e.clientX - origin.current.x,
+      y = e.clientY - origin.current.y;
+    const length = Math.hypot(x, y);
+    const radius = origin.current.radius;
+    if (length > radius) {
+      x = (x / length) * radius;
+      y = (y / length) * radius;
+    }
+    setOffset({ x, y });
+    engine.current?.move(x / radius, y / radius);
+  }
+  function endPointer(e: React.PointerEvent<HTMLDivElement>) {
+    if (origin.current?.pointerId !== e.pointerId) return;
+    origin.current = null;
+    setOffset({ x: 0, y: 0 });
+    engine.current?.move(0, 0);
+  }
   return (
     <div className="touch-controls">
       <div
@@ -623,37 +648,21 @@ function TouchControls({
         role="group"
         aria-label="Movement joystick"
         onPointerDown={(e) => {
+          if (origin.current) return;
           e.currentTarget.setPointerCapture(e.pointerId);
           const r = e.currentTarget.getBoundingClientRect();
           origin.current = {
+            pointerId: e.pointerId,
             x: r.x + r.width / 2,
             y: r.y + r.height / 2,
             radius: r.width * 0.36,
           };
+          movePointer(e);
         }}
-        onPointerMove={(e) => {
-          if (!origin.current) return;
-          let x = e.clientX - origin.current.x,
-            y = e.clientY - origin.current.y;
-          const length = Math.hypot(x, y);
-          const radius = origin.current.radius;
-          if (length > radius) {
-            x = (x / length) * radius;
-            y = (y / length) * radius;
-          }
-          setOffset({ x, y });
-          engine.current?.move(x / radius, y / radius);
-        }}
-        onPointerUp={() => {
-          origin.current = null;
-          setOffset({ x: 0, y: 0 });
-          engine.current?.move(0, 0);
-        }}
-        onPointerCancel={() => {
-          origin.current = null;
-          setOffset({ x: 0, y: 0 });
-          engine.current?.move(0, 0);
-        }}
+        onPointerMove={movePointer}
+        onPointerUp={endPointer}
+        onPointerCancel={endPointer}
+        onLostPointerCapture={endPointer}
       >
         <span style={{ transform: `translate(${offset.x}px,${offset.y}px)` }} />
       </div>
