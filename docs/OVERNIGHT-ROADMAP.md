@@ -137,7 +137,7 @@ The next evidenced fix addresses existing baked floor-contact shadows: some plan
 
 ### Active follow-up refinements
 
-- Floor-contact shadow correction: all four wall sides now face upward and fade away from the wall; the gradient clamps instead of repeating. Before/after browser corner views preserve subtle grounding and bright carpet. Full checks/PR pending.
-- Existing utility-cart/computer-desk collision: reproduced grounded feet above visible surfaces because whole-object bounds include empty space. An isolated fix keeps broad entity-navigation bounds while using existing solid-part hulls for player collision. Real Rapier landing tests and browser verification are in progress.
+- Floor-contact shadow correction: all four wall sides now face upward and fade away from the wall; the gradient clamps instead of repeating. Before/after browser corner views preserve subtle grounding and bright carpet. [#53](https://github.com/pablostanley/vackrooms/pull/53) passes153 tests, TypeScript, lint, build and all shader validations; integrated at `170d31c`.
+- Existing utility-cart/computer-desk collision: reproduced grounded feet above visible surfaces because whole-object bounds include empty space. An isolated fix keeps broad entity-navigation bounds while using existing solid-part hulls for player collision. Real Rapier landing tests and browser verification are in progress. Review rejected using all98 cosmetic desk parts as physical hulls; the fix will use compact major solids instead.
 
 These are corrections to existing geometry and physics, not additional room or asset categories.
