@@ -208,3 +208,16 @@ Next complementary QA: 24-minute actual WebGPU/live-CRT lifecycle and settings/r
 Integration `cb6ddcf` combines #42–#58 and passes all 198 tests, typecheck, lint, all four shader validations and production build. Its merge retains both development visit aliases and eviction-before-creation streaming, passing the selected generation through every chunk-generation call. The combined local browser passed Record/Escape for legacy tape 48 and explicit generation 2. The [current verified deployed preview](https://vackrooms-h0hc2u6sx-pablostanley.vercel.app/?tape=48&generation=2) also passed Record/Escape without browser errors.
 
 The 24-minute WebGPU/live-CRT QA has been dispatched against this exact integration commit; it must establish a real start before being called a running or completed test. Two parallel read-only audits now inspect existing texture/material correctness and creature behavior. Further implementation requires a concrete defect and bounded fix, rather than a target PR count.
+
+### Live GPU run and next existing-content fixes
+
+The corrected WebGPU/CRT run started at **07:12:00.891 UTC** on `cb6ddcf`, generation 2, tape 199307. Actual WebGPU backend/device and initial E/focus, parent CRT Home/Reload, invalid-address rejection, and viewport resizing were verified. An earlier one-second attempt failed because the harness camera faced the wrong direction; it is retained as a setup failure and excluded from timed evidence. The live report is `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-webgpu-crt/report-live.json`. Completion is still pending.
+
+PR #58's documentation-only follow-up `78d33a7` updates the existing README and architecture tape-sharing descriptions. Integration `704787b` adds only those two paragraphs to the tested `cb6ddcf` code; the running QA pin is unchanged. All checks on #57 and #58 passed at this checkpoint.
+
+Two new bounded corrections are in progress:
+
+- Courtyard wood texture density: the existing 5.8m circular surface uses one texture repeat, while adjacent wood uses the authored 1.2m scale. Apply consistent cap UVs and retain a continuous cylindrical rim; preserve positions, normals and physics.
+- Creature contact: a real Rapier wall-hugging position remains ungrabbable for 30 seconds with a creature 0.65m away and clear sight. Contact incorrectly demands that the larger creature capsule fit at the player center. Use player-radius clearance only for contact, retaining larger navigation clearance and testing wall/desk/corner/elevation obstruction.
+
+Both corrections require separate PRs and real-browser verification after the GPU run releases the browser slot.
