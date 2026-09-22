@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 09:22 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. The final active-creature gameplay runs have been dispatched. Main and production remain unchanged.
+At about 09:21 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. The final active-creature gameplay runs have been dispatched. Main and production remain unchanged.
 
 Room PRs #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -372,3 +372,6 @@ The final combined active-creature harness is prepared on clean `ce5c173` withou
 All three PR descriptions were updated and drafts cleared. Their hooks were removed, worktrees clean, browser/server closed. Root verified the deployed runtime `ce5c173` at [the latest checked preview](https://vackrooms-k2po3jvek-pablostanley.vercel.app/?tape=199307&generation=2): Record, Escape, settings, Balanced quality selection and return to paused view passed with no browser errors. Flashlight initially off. Screenshot `/tmp/vackrooms-final-deployed.png` inspected; browser closed.
 
 Sound now has an explicit START for the complementary two 15-minute active-creature runs at `ce5c173`. Record actual starts and completion separately.
+
+
+Final combined **WebGPU gameplay started 09:20:42.232 UTC** on `ce5c173`, with actual GPU backend/device confirmed and entities enabled. Duration is 900 seconds, expected completion about 09:35:42 UTC; WebGL follows. Live evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-final-gameplay/webgpu/report-live.json`. This is a live run, not yet a completed result.
