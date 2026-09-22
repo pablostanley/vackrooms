@@ -20,6 +20,10 @@ Backrooms fiction has multiple community canons and revisions. The references be
 | [Wikidot Level 5](https://backrooms-wiki.wikidot.com/level-5) | Old hotel, decorated halls and boiler spaces, distant sound | Later hotel service/reception wing using warm materials and original sound; no copied music or characters. |
 | [Wikidot Level 37](https://backrooms-wiki.wikidot.com/level-37) | Interconnected pools with impossible proportions | Later improve basin/column silhouettes and dry circulation. Retain our palette and no-grid-texture rule despite the source's tiled surfaces. |
 
+## Refinement emphasis
+
+User follow-up: improve existing content as well as adding new content. After the initial additions, prioritize audits of creature animation/model quality, texture repetition and sampling, existing room proportions, shadow quality, and generation/streaming costs. Implement evidenced improvements in separate PRs; do not inflate room or asset counts for their own sake.
+
 ## Ordered backlog
 
 | Priority | Track | Concrete deliverable | Acceptance |
@@ -71,3 +75,14 @@ The task heartbeat runs every 20 minutes, attached to this task, and stops start
 ## Results
 
 Initial audit: clean detached checkout at `ce5e024`; no open PRs returned by `gh pr list`. Dependencies installed successfully with no reported vulnerabilities. Implementation agents started in isolated worktrees. Baseline verification is running.
+
+
+### First batch (in review)
+
+- [#42 Room ambience](https://github.com/pablostanley/vackrooms/pull/42): 154 tests/typecheck/lint/build pass. Browser confirms active audio signal and pause suspends context; mute/resume check ongoing.
+- [#43 Office props](https://github.com/pablostanley/vackrooms/pull/43): 152 tests/typecheck/lint/build pass; cooler, copier and archive cartons visually inspected in actual seeded sections. Temporary local camera placement used for QA, removed afterward.
+- [#44 Office annex](https://github.com/pablostanley/vackrooms/pull/44): 153 tests/typecheck/lint/build pass. WebGL and WebGPU inspected; fixed jagged blind shadow artifacts found during browser review.
+- [#45 Environmental discoveries](https://github.com/pablostanley/vackrooms/pull/45): 155 tests/typecheck/lint/build pass; independent code review found no issues; browser legibility check pending.
+- [#46 Warehouse annex](https://github.com/pablostanley/vackrooms/pull/46): 154 tests/typecheck/lint/build pass; browser check pending.
+
+Next audits assigned: existing creature locomotion smoothing; texture/lighting quality; map architecture and streaming performance. Combined integration branch is for validation, not an additional feature PR.
