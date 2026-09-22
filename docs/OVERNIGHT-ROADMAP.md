@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 08:40 UTC, PRs #42–#60, #62 and #65 have browser verification. The matched 24-minute tests confirm both uniform-buffer and lighting-texture growth are corrected at identical-world checkpoints. PR #63 is in browser verification; #61, #64 and #66 remain queued. Integration `ce5c173` passes **225 tests**, typecheck, lint and production build. Shader sources are unchanged from the fully checked `3a398f7`. Main and production are unchanged.
+At about 08:45 UTC, PRs #42–#60, #62, #63 and #65 have browser verification. The matched 24-minute tests confirm both uniform-buffer and lighting-texture growth are corrected at identical-world checkpoints. PRs #61, #64 and #66 are in their sequential browser-verification batch. Integration `ce5c173` passes **225 tests**, typecheck, lint and production build. Shader sources are unchanged from the fully checked `3a398f7`. Main and production are unchanged.
 
 Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -340,3 +340,10 @@ The third matched run completed **1,440.0008 seconds** on `20f9657` (baseline `c
 There were 329 snapshots, 25 explicitly programmatic relocations, five keyboard/Rapier crossings, 80 settings records and 229 section identities. All five resident maps peaked at nine; no runtime/device/assert errors. Entities were disabled and only one live CRT was exercised. These counters are not measured VRAM. Evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-webgpu-crt/pool-comparison/report-final.json` and `final.png`. Browser/server are closed, hooks removed and the QA checkout is clean. PR #65 is now ready for review with the complete comparison scope in its description.
 
 The utility-corridor browser check has started after explicit release. Furniture's pool/touch/fullscreen checks follow, then root's latest deployed preview, then complementary active-creature gameplay. The latest `ce5c173` deployment is READY at `vackrooms-k2po3jvek-pablostanley.vercel.app`, but has not yet been browser-verified. Earlier roof/hotel preview servers on 3010/3011 were confirmed task-owned and stopped; an audit found only the five expected QA worktrees dirty with temporary observation hooks.
+
+
+### Utility corridor browser checks passed
+
+PR #63 is ready for review. Actual WebGL and WebGPU main/detail views were inspected, including a RECORD-active view. Live browser Rapier movement crossed both section seams and all **47 side exits** out and back; the overhead-pipe jump reached eye height 2.6399m, then landed and retreated successfully. No runtime errors. Evidence includes `/tmp/vackrooms-utility-{webgl,webgpu}.png`, `/tmp/vackrooms-utility-detail-{webgl,webgpu}.png` and `/tmp/vackrooms-utility-recording-webgpu.png`. Temporary hook removed, worktree clean, browser/server closed. Furniture has explicitly started the prepared #61/#64/#66 batch.
+
+The final combined active-creature harness is prepared on clean `ce5c173` without browser/server/hooks yet. It preserves natural creature schedules for the opening eight minutes, records relocations separately, and uses development staging only for labelled later escape/death coverage. It remains queued behind the short PR-specific batch and latest deployed smoke check.
