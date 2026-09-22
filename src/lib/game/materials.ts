@@ -121,14 +121,19 @@ export function createMaterials() {
   });
   const luminous = new THREE.MeshBasicMaterial({
     map: lightMap,
-    color: "#ffffdd",
-    toneMapped: false,
+    // Authored HDR radiance keeps warm panels bright through the same ACES
+    // output as the room. Bypassing tone mapping only on the direct path made
+    // fixture brightness jump when post effects were enabled. Rounded radiance
+    // values preserve the former diffuser output under Three's ACES curve.
+    color: new THREE.Color(1.65, 1.61, 0.35),
   });
   const deadLight = new THREE.MeshStandardMaterial({
     color: "#b2ad78",
     roughness: 0.8,
   });
-  const lampGlow = new THREE.MeshBasicMaterial({ color: "#ffe0a0", toneMapped: false });
+  const lampGlow = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(2.46, 0.855, 0.144),
+  });
   const shadow = new THREE.MeshBasicMaterial({
     map: ao,
     transparent: true,
