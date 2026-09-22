@@ -29,4 +29,8 @@ with a pier and pass between the rows, classify dry/wet footsteps, and enter/esc
 every pool edge and corner at 30/60/144 Hz.
 
 Review fixture: tape 199307, generation 2, section (-2,-2), with another at (1,1).
-Browser verification of both renderers is pending the shared GPU test slot.
+Browser review passed in WebGL and WebGPU at the (1,1) fixture, using temporary
+programmatic positioning. Both show the piers, overhead beams, and open dry deck.
+With DOM keyboard input driving the real Rapier motor, the player stopped against
+a pier and jumped from the basin near its rim onto the dry deck. No browser errors
+were observed; temporary staging hooks were removed.
