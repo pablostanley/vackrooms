@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 08:15 UTC, PRs #42–#60 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts. Draft #65 bounds the separate lighting-texture lifetime; its matched browser comparison is prepared. PRs #61, #63 and #64 await browser turns. Integration `3a398f7` passes **220 tests**, typecheck, lint, all four shader checks and production build. Main and production are unchanged.
+At about 08:21 UTC, PRs #42–#60 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts. Draft #65 bounds the separate lighting-texture lifetime; its matched browser comparison is prepared. PRs #61, #63, #64 and #66 await browser turns. Integration `ce5c173` passes **225 tests**, typecheck and lint; its build is pending. The prior `3a398f7` passed all shader checks and build. Main and production are unchanged.
 
 Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -167,7 +167,7 @@ CI checkpoint: all checked statuses on #42–#54 pass; #55 test/build/deployment
 
 ## Review and integration notes
 
-The current combined validation tip is `3a398f7` on `codex/overnight-integration`. PRs #42–#60, #62 and #64 target main independently. Three later PRs have explicit dependencies:
+The current combined validation tip is `ce5c173` on `codex/overnight-integration`. PRs #42–#60, #62, #64 and #66 target main independently. Three later PRs have explicit dependencies:
 
 | PR | Required parent | Reason |
 | --- | --- | --- |
@@ -302,3 +302,10 @@ A read-only audit found a pending-fullscreen teardown race: resolving fullscreen
 
 
 Third matched GPU run started **08:14:23.296 UTC**, expected completion about **08:38:23 UTC**, on `20f9657`. Actual WebGPU, initial CRT focus, parent Home/Reload and matched viewport resize passed. Live evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-webgpu-crt/pool-comparison/report-live.json`. Same 1,440-second protocol, generation-2 tape 199307 and passive texture trace. Entities remain disabled, one CRT is exercised, and resource counts are not a VRAM measurement. Utility corridor browser setup is prepared without opening a competing browser.
+
+
+### CRT teardown regression corrected
+
+Draft [#66](https://github.com/pablostanley/vackrooms/pull/66), `63dc633`, prevents pending fullscreen callbacks from reviving retired computer UI. Both promise continuations check engine lifetime and station ownership; a late successful fullscreen entry exits the retired surface. Five tests invoke the actual engine methods while stubbing only browser GPU-module loading and lifecycle dependencies. Both post-disposal cases fail against the old code; live success/failure, leave-before-settlement and superseded-station controls pass. All 156 branch tests/types/lint/build pass. Browser verification and independent review are pending.
+
+Integration `ce5c173` includes this fix without conflicts and passes **225 tests**, typecheck and lint. Its production build is running; the GPU soak remains pinned to its matched earlier commit and is not a test of #66. At 350 seconds that soak had no errors/failures, with identical-world resource checkpoints still forthcoming.
