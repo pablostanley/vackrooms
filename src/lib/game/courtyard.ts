@@ -10,6 +10,7 @@ import {
 } from "./maze";
 import type { Materials } from "./materials";
 import type { LandmarkBuilder } from "./landmarks";
+import { projectSurfaceUVs, SURFACE_SIZE } from "./surface-textures";
 
 /** A roofed, five-storey lightwell, with a real ground entrance or sealed gallery. */
 export function buildCourtyard(
@@ -69,6 +70,24 @@ export function buildCourtyard(
     mats.courtyardWood,
   );
   circle.position.set(ox + x, floorY + 0.03, oz + z);
+  // Match the nearby wood strip without baking the mesh transform twice.
+  // Project a temporary world-space copy, leaving positions/normals intact.
+  const projected = circle.geometry.clone().translate(...circle.position.toArray());
+  projectSurfaceUVs(projected, SURFACE_SIZE.wood);
+  const uv = circle.geometry.getAttribute("uv");
+  const worldUV = projected.getAttribute("uv");
+  const normals = circle.geometry.getAttribute("normal");
+  const { radiusTop, height } = circle.geometry.parameters;
+  for (let i = 0; i < uv.count; i++) {
+    if (Math.abs(normals.getY(i)) > 0.5) uv.setXY(i, worldUV.getX(i), worldUV.getY(i));
+    // Keep the rim unwrapped continuously; box-face projection would jump at
+    // each quadrant. Both its arc length and height use the same meter scale.
+    else uv.setXY(i,
+      uv.getX(i) * Math.PI * 2 * radiusTop / SURFACE_SIZE.wood,
+      (uv.getY(i) * height + circle.position.y - height / 2) / SURFACE_SIZE.wood,
+    );
+  }
+  projected.dispose();
   circle.receiveShadow = true;
   b.group.add(circle);
 
