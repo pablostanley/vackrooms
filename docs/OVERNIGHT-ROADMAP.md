@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 08:04 UTC, PRs #42–#58 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts; separate lighting-texture growth is being corrected. PRs #59–#61, #63 and #64 await their gameplay/visual turns. Integration `c6d23d5` passes **215 tests**, typecheck, lint, all shader checks and build. Current `45a4e7e` adds only #64's touch handlers and also passes types/lint/build. Main and production are unchanged.
+At about 08:12 UTC, PRs #42–#59 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts. Draft #65 bounds the separate lighting-texture lifetime; its matched browser comparison is prepared. PR #60 is in visual verification; #61, #63 and #64 await browser turns. Integration `3a398f7` passes **220 tests**, typecheck, lint and all four shader checks; production build is running. Main and production are unchanged.
 
 Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -269,3 +269,12 @@ Textures still rose 57 / 59 / 61 / 63 / 65. Passive UUID traces identify 576×57
 A second lifecycle correction is underway: a per-material-owner lighting-map lease pool, refilling the same pixel storage and disposing textures with their owner. It uses a lazy hard cap of 18 to support the independent pre-#50 branch's temporary replacement window; the full eviction-first integration should require at most nine identities. No preallocation, live-lease eviction, private renderer patch, or per-texture shader recompilation. Exact pixel equivalence, ownership, reset, bounds and matched browser verification are required.
 
 Draft [#64](https://github.com/pablostanley/vackrooms/pull/64), `d26e489`, corrects touch joystick pointer ownership and immediate movement on initial press. It changes no HUD layout; types/lint/build pass. Its multitouch browser matrix is pending. The browser has been released from profiling, and #59's real contact check is starting before #60's texture comparison.
+
+
+### Contact verified; bounded lighting-map ownership integrated
+
+PR #59 passed an actual WebGL browser check. A staged starting position followed by a normal keyboard W press through Rapier placed the player against a wall; the creature's body clearance failed while the player-sized contact clearance passed, and the staged nearby creature entered grabbing after 0.267 seconds. An across-wall negative stayed out of attack, and an unobstructed control grabbed. This verifies staged contact behavior, not a naturally occurring spawn. Hooks/server/browser were removed and the branch is clean.
+
+Draft [#65](https://github.com/pablostanley/vackrooms/pull/65), `1d8d38f`, implements the material-owner ambient texture pool, stacked on #62. All 157 branch tests/types/lint/build pass, including exact original RGBA hashes for three lighting modes, 120 replacement-window cycles using nine identities, eighteen-live-lease overflow protection, stale-release safety, independent owners and retirement ordering. Independent review reran all five new tests cleanly. Integration `3a398f7` retains discovery/hotel material owners alongside the pool and passes 220 tests/types/lint/all shader checks; build is pending.
+
+The third GPU comparison is prepared at `20f9657`: the same `cb6ddcf` baseline plus only #62 and #65. It has not started. Browser scheduling gives the courtyard texture comparison a short turn first, then the matched 24-minute profiling run.
