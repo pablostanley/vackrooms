@@ -614,8 +614,27 @@ function TouchControls({
   engine: React.RefObject<BackroomsEngine | null>;
   portal: boolean;
 }) {
-  const origin = useRef<{ x: number; y: number; radius: number } | null>(null);
+  const origin = useRef<{ pointerId: number; x: number; y: number; radius: number } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  function movePointer(e: React.PointerEvent<HTMLDivElement>) {
+    if (!origin.current || origin.current.pointerId !== e.pointerId) return;
+    let x = e.clientX - origin.current.x,
+      y = e.clientY - origin.current.y;
+    const length = Math.hypot(x, y);
+    const radius = origin.current.radius;
+    if (length > radius) {
+      x = (x / length) * radius;
+      y = (y / length) * radius;
+    }
+    setOffset({ x, y });
+    engine.current?.move(x / radius, y / radius);
+  }
+  function endPointer(e: React.PointerEvent<HTMLDivElement>) {
+    if (origin.current?.pointerId !== e.pointerId) return;
+    origin.current = null;
+    setOffset({ x: 0, y: 0 });
+    engine.current?.move(0, 0);
+  }
   return (
     <div className="touch-controls">
       <div
@@ -623,37 +642,21 @@ function TouchControls({
         role="group"
         aria-label="Movement joystick"
         onPointerDown={(e) => {
+          if (origin.current) return;
           e.currentTarget.setPointerCapture(e.pointerId);
           const r = e.currentTarget.getBoundingClientRect();
           origin.current = {
+            pointerId: e.pointerId,
             x: r.x + r.width / 2,
             y: r.y + r.height / 2,
             radius: r.width * 0.36,
           };
+          movePointer(e);
         }}
-        onPointerMove={(e) => {
-          if (!origin.current) return;
-          let x = e.clientX - origin.current.x,
-            y = e.clientY - origin.current.y;
-          const length = Math.hypot(x, y);
-          const radius = origin.current.radius;
-          if (length > radius) {
-            x = (x / length) * radius;
-            y = (y / length) * radius;
-          }
-          setOffset({ x, y });
-          engine.current?.move(x / radius, y / radius);
-        }}
-        onPointerUp={() => {
-          origin.current = null;
-          setOffset({ x: 0, y: 0 });
-          engine.current?.move(0, 0);
-        }}
-        onPointerCancel={() => {
-          origin.current = null;
-          setOffset({ x: 0, y: 0 });
-          engine.current?.move(0, 0);
-        }}
+        onPointerMove={movePointer}
+        onPointerUp={endPointer}
+        onPointerCancel={endPointer}
+        onLostPointerCapture={endPointer}
       >
         <span style={{ transform: `translate(${offset.x}px,${offset.y}px)` }} />
       </div>
