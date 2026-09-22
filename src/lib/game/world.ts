@@ -178,7 +178,7 @@ export function buildSection(
       mats.trim,
     );
     for (const side of [-1, 1]) {
-      // Contact shadows soften the wall-to-carpet and wall-to-ceiling junctions.
+      // Soft baked contact shading grounds both sides of each wall on the floor.
       add(
         wallContactShadowGeometry(vertical, side),
         mats.shadow,
