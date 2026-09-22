@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 09:21 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. The final WebGPU active-creature gameplay run passed; the complementary WebGL run is live. Main and production remain unchanged.
+At about 10:17 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. Both complementary active-creature gameplay runs passed. A brief portal/depth check and an evidenced furniture-construction optimization are in progress. Main and production remain unchanged.
 
 Room PRs #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -384,3 +384,16 @@ The WebGPU run completed **901.4421 seconds**, with 903 snapshots and no runtime
 The first automatic natural-creature screenshot was occluded by a wall and is not silhouette proof. A later explicitly staged pair screenshot (`vackrooms-final-gameplay/webgpu/pair.png`) visibly confirms both creature silhouettes. The original delayed escape window missed its grab; a separate labelled prompt Space attempt at 624–628 seconds changed grabbing to staggered and released the player. The staged no-escape window changed tape 592168 to 260872. Pause/resume control checks passed. Input was synthetic browser KeyboardEvent through normal engine handlers, and room positioning was programmatic; this is not uninterrupted human exploration or a physical-device test.
 
 Full evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-final-gameplay/webgpu/report-final.json`. The fresh **WebGL run started 09:36:32.181 UTC**, with the same integration runtime and 15-minute protocol; expected completion about 09:51:32 UTC. At 331 seconds it was live with no errors/failures.
+
+
+### Both integrated gameplay runs completed
+
+WebGL completed **900.5051 seconds** without errors/failures, complementing the completed WebGPU run. Each run had 903 samples and all five resident maps peaked at nine. WebGL observed 218 section identities: 209 retired once, nine remained. Both creature types naturally reached stalking/pursuing/grabbing/dead phases; the initial eight-minute segments had seven WebGPU and eight WebGL tape transitions. No automatic resume was required. Audio peaks were eight fixtures and two transients. Both runs visited the intended eight room categories with actual metadata recorded.
+
+Both rendered pair screenshots were inspected. Separately staged prompt Space escapes changed grabbing to staggered on both backends; original delayed-window misses remain disclosed. The WebGL no-escape stage changed tape 260872 to 100852, then pause/resume passed. Depth remained zero during these runs. Full results and limitations: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-final-gameplay/RESULTS.md`. Browser/server closed, hooks removed, checkout clean. A short normal E-hold portal test now addresses the remaining depth-transition gap.
+
+### Final measured refinement: furniture construction
+
+Read-only profiling found repeated prototype construction dominates more time than final batch merging. After the gameplay browser closed, seven alternating quiet-machine samples measured a nine-section window at **529.36 ms baseline vs 402.69 ms with an experimental owner-local cache**; prototype work fell from 124.04 to 21.74 ms while merge work stayed about 26 ms. Measured geometry/collider hashes matched. This is a local synchronous-construction benchmark, not a whole-game FPS claim.
+
+A bounded implementation is approved: lazy cache per materials owner, canonical kind/lamp-state keys, unchanged section-owned clones, and final owner disposal. The experiment retained about **2.53 MB** of prototype arrays for 22 constructed variants instead of rebuilding 125 prototypes. Exact material/geometry/bounds/collider equivalence, lifetime tests, independent review and real-browser verification are required before it is ready. This work is in progress and does not change the already verified 25 PRs.
