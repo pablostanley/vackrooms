@@ -29,6 +29,8 @@ export interface Landmark {
   length: number;
   height: number;
   courtyard?: "ground" | "overlook";
+  office?: "annex";
+  warehouse?: boolean;
 }
 export interface PoolBounds {
   x: number;
@@ -284,6 +286,16 @@ export function generateChunk(
               length: 8 + Math.floor(shape() * 2),
               height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
             };
+  // A low, stripped office variation leaves the established landmark cadence
+  // intact. Its shape is tape-stable even when unseen maze branches regenerate.
+  if (kind === "lobby" && hash(x, z, seed + 3209) % 3 === 0) {
+    landmark.office = "annex";
+    landmark.width = 5;
+    landmark.length = 5;
+    landmark.height = HEIGHT;
+  }
+  if (kind === "foodCourt" && hash(x, z, seed + 7211) % 4 === 0)
+    landmark.warehouse = true;
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
   // Only remove walls: all original maze connections and shared gates survive.
@@ -320,11 +332,11 @@ export function generateChunk(
     if (kind === "corridor") approach(2, 4, 2, rz);
     else approach(2, 2, rx, rz);
   }
-  if (kind === "levelFun" || kind === "neighborhood") {
-    // Give the party room actual walls. Close only redundant perimeter edges:
-    // never sever an office branch, alter a section gate, or lose the approach
-    // from spawn. Two opposite entrances are always retained. The street also
-    // keeps a doorway at each end, and its sealed sides become house lots.
+  if (kind === "levelFun" || kind === "neighborhood" || landmark.office) {
+    // Enclose authored rooms by closing only redundant perimeter edges: never
+    // sever a branch, change a section gate, or lose the approach from spawn.
+    // Party rooms retain opposite entrances. Streets and office annexes keep
+    // all four approaches; closed sides host house lots or office fixtures.
     for (let cz = rz; cz <= bottom; cz++)
       for (let cx = rx; cx <= right; cx++)
         for (const d of directions) {
@@ -340,7 +352,7 @@ export function generateChunk(
           if (d.bit === E && cz === Math.max(rz, Math.min(bottom, east)))
             continue;
           if (
-            kind === "neighborhood" &&
+            (kind === "neighborhood" || landmark.office) &&
             ((d.bit === N && cx === Math.max(rx, Math.min(right, north))) ||
               (d.bit === S && cx === Math.max(rx, Math.min(right, south))))
           )

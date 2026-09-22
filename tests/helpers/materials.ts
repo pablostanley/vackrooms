@@ -54,7 +54,9 @@ export function headlessMaterials(): Materials {
     { length: 5 },
     () => new THREE.MeshStandardMaterial(),
   );
+  const discoveryNotes = Array.from({ length: 3 }, () => new THREE.MeshStandardMaterial());
   return {
+    discoveryNotes,
     ...standard,
     ...basic,
     funMurals,
@@ -65,6 +67,7 @@ export function headlessMaterials(): Materials {
         ...Object.values(standard),
         ...Object.values(basic),
         ...funMurals,
+        ...discoveryNotes,
         ...streetSiding,
       ])
         material.dispose();

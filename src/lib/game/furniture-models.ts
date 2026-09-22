@@ -24,6 +24,9 @@ export type FurnitureKind =
   | "bench"
   | "sideTable"
   | "utilityCart"
+  | "waterCooler"
+  | "photocopier"
+  | "archiveCartons"
   | "sofa"
   | "table"
   | "lamp"
@@ -342,6 +345,73 @@ export function createFurniture(
       }
       strut([0.39, 0.94, -0.23], [0.39, 0.94, 0.23], 0.027, mats.metal);
       anchor.set(0, 0.68, 0);
+      break;
+    }
+    case "waterCooler": {
+      // An opaque aged bottle keeps the silhouette warm under fluorescent light.
+      box([0.46, 0.075, 0.45], [0, 0.0375, 0], mats.metal);
+      cushion([0.49, 0.88, 0.46], [0, 0.5, 0], mats.cream, 0.025);
+      box([0.35, 0.27, 0.025], [0, 0.67, -0.235], mats.enamel);
+      box([0.32, 0.035, 0.12], [0, 0.52, -0.26], mats.metal);
+      for (const x of [-0.1, 0.1]) {
+        cylinder(0.026, 0.026, 0.065, [x, 0.67, -0.28], mats.cream);
+        box([0.045, 0.025, 0.08], [x, 0.714, -0.263],
+          x < 0 ? mats.fadedRed : mats.metal);
+      }
+      cylinder(0.095, 0.095, 0.085, [0, 0.9675, 0], mats.enamel);
+      cylinder(0.205, 0.09, 0.12, [0, 1.055, 0], mats.enamel);
+      cylinder(0.205, 0.205, 0.36, [0, 1.295, 0], mats.enamel);
+      cylinder(0.15, 0.205, 0.07, [0, 1.51, 0], mats.enamel);
+      for (const y of [1.17, 1.27, 1.4])
+        cylinder(0.217, 0.217, 0.025, [0, y, 0], mats.enamel);
+      // A side-mounted sleeve of stacked paper cups, with no labels or branding.
+      cylinder(0.043, 0.038, 0.25, [0.283, 0.75, 0.025], mats.cream);
+      for (const y of [0.66, 0.7, 0.74, 0.78, 0.82, 0.86])
+        cylinder(0.045, 0.045, 0.008, [0.283, y, 0.025], mats.paper);
+      anchor.set(0, 0.5, 0);
+      break;
+    }
+    case "photocopier": {
+      for (const x of [-0.35, 0.35])
+        for (const z of [-0.28, 0.28])
+          box([0.1, 0.1, 0.1], [x, 0.05, z], mats.metal);
+      box([0.85, 0.68, 0.73], [0, 0.44, 0], mats.enamel);
+      for (const y of [0.25, 0.49]) {
+        box([0.75, 0.215, 0.025], [0, y, -0.378], mats.cream);
+        box([0.22, 0.035, 0.045], [0, y + 0.035, -0.403], mats.metal);
+      }
+      box([0.94, 0.19, 0.8], [0, 0.865, 0], mats.cream);
+      box([0.86, 0.02, 0.69], [0, 0.97, 0.025], mats.metal);
+      cushion([0.88, 0.075, 0.7], [0, 1.0175, 0.025], mats.enamel, 0.016);
+      box([0.31, 0.04, 0.15], [0.23, 0.976, -0.325], mats.metal);
+      box([0.11, 0.008, 0.066], [0.15, 1, -0.325], mats.fabric);
+      for (let row = 0; row < 3; row++)
+        for (let col = 0; col < 3; col++)
+          box([0.022, 0.012, 0.02], [0.24 + col * 0.035, 1.004, -0.363 + row * 0.035], mats.cream);
+      cylinder(0.028, 0.028, 0.012, [0.38, 1.005, -0.29], mats.enamel);
+      // A low output tray projects from the side; bounds include the whole tray.
+      box([0.32, 0.035, 0.51], [-0.57, 0.69, 0.04], mats.metal);
+      box([0.025, 0.075, 0.51], [-0.719, 0.71, 0.04], mats.enamel);
+      box([0.23, 0.026, 0.32], [-0.575, 0.72, 0.04], mats.paper);
+      for (let i = 0; i < 5; i++)
+        box([0.026, 0.14, 0.012], [0.2 + i * 0.042, 0.65, -0.377], mats.metal);
+      anchor.set(0, 0.44, 0);
+      break;
+    }
+    case "archiveCartons": {
+      // Two boxes with separate lids, tape seams, and blank inventory labels.
+      for (const [x, bottom, z, width, depth] of [
+        [0, 0, 0, 0.69, 0.53],
+        [0.075, 0.44, 0.025, 0.55, 0.46],
+      ]) {
+        const height = 0.4;
+        box([width, height, depth], [x, bottom + height / 2, z], mats.wood);
+        box([width + 0.025, 0.055, depth + 0.025], [x, bottom + 0.4125, z], mats.cream);
+        box([0.065, 0.009, depth + 0.027], [x, bottom + 0.443, z], mats.enamel);
+        box([0.19, 0.09, 0.01], [x - 0.11, bottom + 0.2, z - depth / 2 - 0.006], mats.paper);
+        box([0.13, 0.035, 0.012], [x + 0.11, bottom + 0.3, z - depth / 2 - 0.007], mats.metal);
+      }
+      anchor.set(0, 0.2, 0);
       break;
     }
     case "lamp": {

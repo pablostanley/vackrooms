@@ -113,11 +113,14 @@ test("origin rooms vary a small furniture selection across tape seeds", () => {
     "bench",
     "sideTable",
     "utilityCart",
+    "waterCooler",
+    "photocopier",
+    "archiveCartons",
   ];
   const seenKinds = new Set<FurnitureKind>();
   const selections = new Set<string>();
   try {
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 199307, 882731]) {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 199307, 882731]) {
       for (const depth of [0, 1, 4]) {
         const section = buildSection(
           generateChunk(0, 0, seed, depth),
