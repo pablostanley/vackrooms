@@ -4,9 +4,9 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 10:17 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. Both complementary active-creature gameplay runs passed. The portal/depth check also passed; an evidenced furniture-construction optimization is in progress. Main and production remain unchanged.
+At about 10:56 UTC, all **26 implementation PRs #42–#67 are ready for review** with scoped browser checks complete. Combined integration `ffdbed9` passes **228 tests**, typecheck, lint, all four vgpu shader validations and production build. Its [deployed preview](https://vackrooms-lxht2v8jf-pablostanley.vercel.app/?tape=199307&generation=2) passed the final browser smoke. Earlier matched 24-minute GPU comparisons, two 15-minute active-creature runs, and portal/depth checks are recorded below with their exact commits. Those sustained runs predate the final furniture cache, which has separate equivalence, renderer, streaming and disposal checks. Main and production remain unchanged.
 
-Room PRs #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
+Four PRs are stacked: #61 on #58, #63 on #57, #65 on #62, and #67 on #43. The review notes below document dependencies and tested conflict resolutions. Earlier dated sections preserve historical counts and previews; this checkpoint supersedes their pending statuses.
 
 ## Delivered work at a glance
 
@@ -20,7 +20,7 @@ Each item links to its own reviewable PR. Read the checkpoint above for the late
 | Existing visuals | [Cream acoustic ceilings #47](https://github.com/pablostanley/vackrooms/pull/47), [WebGL tone mapping #51](https://github.com/pablostanley/vackrooms/pull/51), [wall-contact shadows #53](https://github.com/pablostanley/vackrooms/pull/53), [courtyard wood scale #60](https://github.com/pablostanley/vackrooms/pull/60). |
 | Creatures | [Smoother movement #49](https://github.com/pablostanley/vackrooms/pull/49), [smaller identical geometry #52](https://github.com/pablostanley/vackrooms/pull/52), [failed-route cache #56](https://github.com/pablostanley/vackrooms/pull/56), [wall-contact grab correction #59](https://github.com/pablostanley/vackrooms/pull/59). |
 | Architecture and collision | [Faster identical generation #48](https://github.com/pablostanley/vackrooms/pull/48), [nine-section streaming bound #50](https://github.com/pablostanley/vackrooms/pull/50), [desk/cart collision #54](https://github.com/pablostanley/vackrooms/pull/54), [pitched roof collision #55](https://github.com/pablostanley/vackrooms/pull/55), [versioned map diversity #58](https://github.com/pablostanley/vackrooms/pull/58). |
-| Resource and input reliability | [Retired mesh bindings #62](https://github.com/pablostanley/vackrooms/pull/62), [bounded lighting textures #65](https://github.com/pablostanley/vackrooms/pull/65), [touch pointer ownership #64](https://github.com/pablostanley/vackrooms/pull/64), [fullscreen teardown #66](https://github.com/pablostanley/vackrooms/pull/66). |
+| Resource and input reliability | [Retired mesh bindings #62](https://github.com/pablostanley/vackrooms/pull/62), [bounded lighting textures #65](https://github.com/pablostanley/vackrooms/pull/65), [touch pointer ownership #64](https://github.com/pablostanley/vackrooms/pull/64), [fullscreen teardown #66](https://github.com/pablostanley/vackrooms/pull/66), [bounded furniture prototypes #67](https://github.com/pablostanley/vackrooms/pull/67). |
 
 ## Direction
 
@@ -196,15 +196,16 @@ CI checkpoint: all checked statuses on #42–#54 pass; #55 test/build/deployment
 
 ## Review and integration notes
 
-The current combined validation tip is `ce5c173` on `codex/overnight-integration`. PRs #42–#60, #62, #64 and #66 target main independently. Three later PRs have explicit dependencies:
+The current combined validation tip is `ffdbed9` on `codex/overnight-integration`. PRs #42–#60, #62, #64 and #66 target main independently. Four later PRs have explicit dependencies:
 
 | PR | Required parent | Reason |
 | --- | --- | --- |
 | #61 Pool colonnade | #58 Generation v2 | Variant is exclusive to the new generation. |
 | #63 Utility corridor | #57 Hotel corridor | Shares corridor variant metadata; selections remain disjoint. |
 | #65 Ambient texture leases | #62 Mesh disposal | Release a texture lease only after section render objects retire. |
+| #67 Furniture prototypes | #43 Furniture models | Cache the complete authored prop inventory per material owner. |
 
-No implementation depends on merging the roadmap document. Review foundational correctness changes first (#48, #50–#56, #58–#59, #62, #64–#65), then content/appearance additions; respect the three parent dependencies above. This is a suggested review grouping, not a claim that every ordering merges without conflicts. Browser-pending PRs remain draft.
+No implementation depends on merging the roadmap document. Review foundational correctness changes first (#48, #50–#56, #58–#59, #62, #64–#65), then content/appearance additions; respect the four parent dependencies above. This is a suggested review grouping, not a claim that every ordering merges without conflicts. All current implementation PRs are ready for review.
 
 Use the tested integration source as the conflict-resolution reference. Keep all changes when resolving these known overlaps:
 
@@ -213,6 +214,7 @@ Use the tested integration source as the conflict-resolution reference. Keep all
 - Hotel materials: preserve discovery-note and hotel-number owners, returned fields and disposal (`2cf2e8f`); retain the shaped-collider fixture compatibility follow-up (`8ca15aa`).
 - Generation v2: pass the selected version at every generation call, retain eviction-first streaming and all development visit aliases (`cb6ddcf`).
 - Pool and utility metadata: retain every existing landmark field, hotel/utility corridor union, and both variant decisions (`749b240`, `be8ebd0`). The pool golden references are deliberately scoped to pool-owned solids (`d4a7b3f`).
+- Furniture cache: retain discovery/hotel/ambient owners while adding the lazy furniture library; keep section-owned clones and remove obsolete per-section prototype disposal (`ffdbed9`).
 - Ambient pool: retain discovery/hotel imports, material owners and cleanup along with `ambientMaps`; retain the wall-contact helper while removing the obsolete direct ambient-map import (`3a398f7`).
 
 Do not infer that separate green PRs alone prove their combination. The validation branch has complete tests, shader checks, build and separately recorded browser coverage, and contains the deliberate union resolutions. Production and main remain untouched.
@@ -404,3 +406,12 @@ A bounded implementation is approved: lazy cache per materials owner, canonical 
 A bounded actual-WebGPU check on `ce5c173` used normal synthetic browser E-hold input from explicitly staged safe portal approaches. Both legacy generation 1 and generation 2 descended **0 → 1 → 2**, preserving tape 199307 and the selected version. At each depth all nine complete chunks matched fresh generator output; shared boundary gates and resident owner maps agreed. Pause held game time and suspended audio, and resumed Rapier movement covered 1.35–1.38m in a verified clear direction. Final reports contain no renderer/invariant failures.
 
 Two initial harness assumptions were corrected and retained in the evidence: checking audio at 250ms contradicted the implementation's intentional 600ms suspension delay, and testing a fixed forward direction at depth 2 ran into a real wall. The final checks use bounded 900ms audio settling and a clear movement direction. Neither was treated as a production defect. Browser/server/hooks removed, QA checkout clean; furniture has the browser slot for its forthcoming cache verification. Evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-portals/RESULTS.md`, `gen1.json`, `gen2.json` and depth-2 screenshots.
+
+
+### Final cache and combined deployment verified
+
+[#67](https://github.com/pablostanley/vackrooms/pull/67), runtime `3190e4a` plus validation follow-up `a9989c1`, is ready after independent review. The materials owner lazily retains at most **22 prototypes / 2,533,968 bytes (~2.42 MiB)** of CPU geometry arrays. Section geometry and bounds remain cloned; the owner disposes source geometry once. Three targeted tests cover the finite inventory, material identity, exact geometry/texture/bounds/collider output across 18 sections, and disposal, including the optional player bounds used by #54. Branch tests, types, lint and build pass.
+
+Both actual WebGL and WebGPU views were inspected. Browser streaming through (5,5), (-4,2) and origin retained nine sections and 22 prototypes without premature disposal. Real engine disposal freed all 561 cached geometries once; repeat disposal was inert and later get rejected. No page errors. Five alternating textured-browser nine-section samples had medians **224 → 174.5 ms** with identical batch/collider/computer counts. This is construction timing, not FPS. Screenshots: `/tmp/furniture-cache-webgl.png`, `/tmp/furniture-cache-webgpu.png`. Hooks, browser and server were removed; checkout clean.
+
+Combined `ffdbed9` is committed/pushed and passes **228 tests, typecheck, lint, four authored-WGSL validations and production build**. Logs: `/tmp/vackrooms-final-cache-{tests,types,lint,shaders,build}.log`. Root verified the exact READY deployment [here](https://vackrooms-lxht2v8jf-pablostanley.vercel.app/?tape=199307&generation=2): Record, Escape/pause, settings, Balanced quality and Done all passed, flashlight initially off, no browser errors. The warm bright-office screenshot `/tmp/vackrooms-final-cache-deployed.png` was inspected. Browser closed. All #67 CI/review/deployment checks are green.
