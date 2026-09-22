@@ -12,6 +12,7 @@ import {
   type ChunkData,
 } from "./maze";
 import type { Materials } from "./materials";
+import type { ShapedObstacle } from "./physics";
 import { buildCourtyard } from "./courtyard";
 import { buildNeighborhood } from "./neighborhood";
 import { buildOfficeAnnex } from "./office-annex";
@@ -41,6 +42,7 @@ export interface LandmarkBuilder {
   group: THREE.Group;
   lights: THREE.Vector3[];
   colliders: THREE.Box3[];
+  shapedColliders: ShapedObstacle[];
   water: THREE.Mesh[];
 }
 
