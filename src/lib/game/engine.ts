@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { CharacterMotor } from "./physics";
+import { updateResidentSections } from "./resident-sections";
 import { BackroomsAudio } from "./audio";
 import { footstepSurfaceAt } from "./acoustics";
 import { CELL, generateChunk, landmarkKind, SPAN, type ChunkData } from "./maze";
@@ -619,10 +620,16 @@ export class BackroomsEngine {
     if (cx === this.streamedX && cz === this.streamedZ) return;
     this.streamedX = cx;
     this.streamedZ = cz;
-    for (let z = cz - 1; z <= cz + 1; z++)
-      for (let x = cx - 1; x <= cx + 1; x++) {
-        const key = `${x},${z}`;
-        if (this.chunks.has(key)) continue;
+    updateResidentSections(
+      this.chunks, cx, cz,
+      (key) => {
+        this.sections.get(key)?.dispose();
+        this.motor?.removeSection(key);
+        this.sections.delete(key);
+        this.navigation.removeSection(key);
+        this.chunks.delete(key);
+      },
+      (key, x, z) => {
         const data = generateChunk(x, z, this.seed, this.depth);
         this.chunks.set(key, data);
         const section = buildSection(data, this.materials, this.depth);
@@ -631,15 +638,8 @@ export class BackroomsEngine {
         this.navigation.addSection(key, data, section.colliders);
         this.motor?.addSection(key, data, section.colliders, section.shapedColliders);
         this.scene.add(section.group);
-      }
-    for (const [key, data] of this.chunks)
-      if (Math.abs(data.x - cx) > 1 || Math.abs(data.z - cz) > 1) {
-        this.sections.get(key)?.dispose();
-        this.motor?.removeSection(key);
-        this.sections.delete(key);
-        this.navigation.removeSection(key);
-        this.chunks.delete(key);
-      }
+      },
+    );
     this.shadows.invalidate();
     this.lastLights = -10;
     this.lastScreens = -1;
