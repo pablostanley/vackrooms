@@ -500,13 +500,14 @@ export class BackroomsEngine {
       void surface
         .requestFullscreen({ navigationUI: "hide" })
         .then(() => {
-          if (!this.focusedComputer && document.fullscreenElement === surface)
+          if ((!this.alive || !this.focusedComputer) && document.fullscreenElement === surface)
             void document.exitFullscreen().catch(() => {});
-          else if (this.focusedComputer === station)
+          else if (this.alive && this.focusedComputer === station)
             // Add the modal after fullscreen, keeping HTML above the canvas.
             this.computerScreens?.focus(station);
         })
         .catch(() => {
+          if (!this.alive || this.focusedComputer !== station) return;
           this.ownsComputerFullscreen = false;
           if (this.focusedComputer === station) {
             this.computerScreens?.focus(station);
