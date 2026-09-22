@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { indexEntityGeometry } from "./entity-index";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 
 export type Tissue = {
@@ -107,6 +108,7 @@ export function sculptEntitySkin(tissue: Tissue[], bones: THREE.Bone[], material
   geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
   geometry.setAttribute("skinIndex", new THREE.BufferAttribute(indices, 4));
   geometry.setAttribute("skinWeight", new THREE.BufferAttribute(weights, 4));
+  indexEntityGeometry(geometry);
   const skin = new THREE.SkinnedMesh(geometry, material);
   skin.name = "continuous-void-skin";
   skin.castShadow = skin.receiveShadow = true;
