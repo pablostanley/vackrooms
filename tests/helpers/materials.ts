@@ -1,3 +1,4 @@
+import { FurnitureLibrary } from "../../src/lib/game/furniture-library";
 import * as THREE from "three";
 import type { Materials } from "../../src/lib/game/materials";
 
@@ -54,13 +55,16 @@ export function headlessMaterials(): Materials {
     { length: 5 },
     () => new THREE.MeshStandardMaterial(),
   );
-  return {
+  const furniture: FurnitureLibrary = new FurnitureLibrary(() => materials);
+  const materials = {
+    furniture,
     ...standard,
     ...basic,
     funMurals,
     streetSiding,
     forTheme: () => ({ wall: standard.wall, floor: standard.floor }),
     dispose: () => {
+      furniture.dispose();
       for (const material of [
         ...Object.values(standard),
         ...Object.values(basic),
@@ -70,4 +74,5 @@ export function headlessMaterials(): Materials {
         material.dispose();
     },
   };
+  return materials;
 }

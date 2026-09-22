@@ -1,3 +1,4 @@
+import { FurnitureLibrary } from "./furniture-library";
 import * as THREE from "three";
 import { random, type Theme } from "./maze";
 import { drawFunCarpet, drawFunMural } from "./fun-textures";
@@ -301,7 +302,9 @@ export function createMaterials() {
   streetGrass.userData.surfaceMeters = streetHedge.userData.surfaceMeters = 1.2;
   configureSurfaceSampling(streetGrass);
   configureSurfaceSampling(streetHedge);
-  return {
+  const furniture: FurnitureLibrary = new FurnitureLibrary(() => materials);
+  const materials = {
+    furniture,
     wall,
     floor,
     top,
@@ -347,6 +350,7 @@ export function createMaterials() {
       floor,
     }),
     dispose: () => {
+      furniture.dispose();
       textures.forEach((t) => t.dispose());
       [
         wall,
@@ -393,5 +397,6 @@ export function createMaterials() {
       ].forEach((m) => m.dispose());
     },
   };
+  return materials;
 }
 export type Materials = ReturnType<typeof createMaterials>;
