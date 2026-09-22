@@ -74,6 +74,9 @@ export function createMaterials() {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, s, s);
   }, 128);
+  // This one-shot fade is not periodic: wrapping leaks its dark edge back into
+  // the transparent outer edge when bilinear/mipmap filtering samples it.
+  ao.wrapS = ao.wrapT = THREE.ClampToEdgeWrapping;
   const wall = new THREE.MeshStandardMaterial({
     ...wallpaper,
     roughness: 0.97,
