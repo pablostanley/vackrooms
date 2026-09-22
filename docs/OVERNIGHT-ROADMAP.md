@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 08:18 UTC, PRs #42–#60 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts. Draft #65 bounds the separate lighting-texture lifetime; its matched browser comparison is prepared. PRs #61, #63 and #64 await browser turns. Integration `3a398f7` passes **220 tests**, typecheck, lint, all four shader checks and production build. Main and production are unchanged.
+At about 08:15 UTC, PRs #42–#60 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts. Draft #65 bounds the separate lighting-texture lifetime; its matched browser comparison is prepared. PRs #61, #63 and #64 await browser turns. Integration `3a398f7` passes **220 tests**, typecheck, lint, all four shader checks and production build. Main and production are unchanged.
 
 Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -287,3 +287,6 @@ PR #60 now passes actual WebGL and WebGPU before/after cap and close rim views a
 Integration `3a398f7` is pushed and passes all five check categories including production build. All checks on #42–#64 are green; #65's CI/build pass and its automated review is still pending at this checkpoint. The third 24-minute GPU run has been dispatched after #60 released the browser; record actual start separately.
 
 A read-only audit found a pending-fullscreen teardown race: resolving fullscreen after engine disposal can call focus on the disposed CRT UI. A deterministic harness reproduced this ordering; ordinary pause already clears focus. A narrow independent fix is approved, with real-method regression coverage and later browser verification required.
+
+
+Third matched GPU run started **08:14:23.296 UTC**, expected completion about **08:38:23 UTC**, on `20f9657`. Actual WebGPU, initial CRT focus, parent Home/Reload and matched viewport resize passed. Live evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-webgpu-crt/pool-comparison/report-live.json`. Same 1,440-second protocol, generation-2 tape 199307 and passive texture trace. Entities remain disabled, one CRT is exercised, and resource counts are not a VRAM measurement. Utility corridor browser setup is prepared without opening a competing browser.
