@@ -5,6 +5,7 @@ import { CELL, CHUNK, SPAN, N, S, E, W, generateChunk, landmarkKind } from "../s
 import { buildHotelCorridor, hotelBays } from "../src/lib/game/hotel-corridor";
 import { buildSection } from "../src/lib/game/world";
 import { CharacterMotor } from "../src/lib/game/physics";
+import type { LandmarkBuilder } from "../src/lib/game/landmarks";
 import { headlessMaterials } from "./helpers/materials";
 
 test("hotel selection agrees across complete positive and negative corridor runs and regeneration", () => {
@@ -41,10 +42,11 @@ test("hotel joinery stays inside closed bays and a worst-case section remains wi
   const materials = new Set<THREE.Material>();
   let triangles = 0;
   try {
-    buildHotelCorridor(data, mats, {
-      group, colliders, lights: [], water: [], plane: () => {},
+    const builder: LandmarkBuilder & { shapedColliders: [] } = {
+      group, colliders, shapedColliders: [], lights: [], water: [], plane: () => {},
       box: (_w, _h, _d, _x, _y, _z, material) => { triangles += 12; materials.add(material); },
-    });
+    };
+    buildHotelCorridor(data, mats, builder);
     group.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         triangles += (object.geometry.index?.count ?? object.geometry.getAttribute("position").count) / 3;
