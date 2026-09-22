@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { Mesh, Vector3 } from "three";
+import { Box3, Group, Mesh, Vector3 } from "three";
 import { SPAN, generateChunk, poolBounds } from "../src/lib/game/maze";
+import { buildLandmark } from "../src/lib/game/landmarks";
 import { buildSection } from "../src/lib/game/world";
 import { CharacterMotor } from "../src/lib/game/physics";
 import { footstepSurfaceAt } from "../src/lib/game/acoustics";
@@ -31,22 +32,30 @@ test("colonnades are rare, depth-stable v2 poolrooms and never replace the openi
   assert.equal(fixture().landmark.pool, "colonnade");
 });
 
-test("v1 pool chunk output and every collider retain their pre-variant goldens", () => {
+test("v1 full pool chunks and pool-owned colliders retain their pre-variant goldens", () => {
+  // Captured from the actual buildLandmark at pre-colonnade commit 78d33a7.
+  // Keep all pool solids; unrelated world furniture has its own regression tests.
   const mats = headlessMaterials();
   try {
     for (const [seed, x, golden] of [
-      [2, 2, "0030d8fc48c51dcbf7bf6a496a60adc586cd22df07b3a702d7a402fd1b8b2297"],
-      [48, -3, "b962b8034bcecd9b22b064b6a1433dc8884de4921949088aea90bdf71ecb8af6"],
-      [199307, 1, "1b5c3ed5c80987ddc36ebd05952966928f880dac36571ef8aa03706938cf61fd"],
+      [2, 2, "acee089dd489e4cb49f0d4b9f1897688295dbaadfcdac7f65ab233689e56e2c9"],
+      [48, -3, "680f0b3e75d370e798f45ecc63c023997c26508ef23168bdff9c3cf0c807d742"],
+      [199307, 1, "4a36f34cd10aa7cf3501ce7453792fba8d6aa642b1956fe23b6fd2943cf45005"],
     ] as const) {
-      const data = generateChunk(x, 1, seed, 0, 1), section = buildSection(data, mats, 0);
+      const data = generateChunk(x, 1, seed, 0, 1), group = new Group();
+      const colliders: Box3[] = [];
       try {
         assert.equal(data.landmark.kind, "poolroom");
+        const builder = { group, colliders, shapedColliders: [], lights: [], water: [], box: () => {}, plane: () => {} };
+        buildLandmark(data, mats, builder);
+        assert.equal(colliders.length, 6, "all four coping edges and both benches are retained");
         const digest = createHash("sha256").update(JSON.stringify([
-          data, section.colliders.map((box) => [...box.min.toArray(), ...box.max.toArray()]),
+          data, colliders.map((box) => [...box.min.toArray(), ...box.max.toArray()]),
         ])).digest("hex");
         assert.equal(digest, golden);
-      } finally { section.dispose(); }
+      } finally {
+        group.traverse((object) => { if (object instanceof Mesh) object.geometry.dispose(); });
+      }
     }
   } finally { mats.dispose(); }
 });

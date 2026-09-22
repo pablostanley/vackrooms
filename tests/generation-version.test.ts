@@ -17,6 +17,10 @@ test("explicit and default v1 preserve pre-versioning chunk goldens", () => {
   for (const [x, z, seed, depth, golden] of fixtures) {
     const legacy = generateChunk(x, z, seed, depth);
     assert.deepEqual(generateChunk(x, z, seed, depth, 1), legacy);
+    // The later utility dressing adds only this marker; retain the original
+    // seed, cells, dimensions, and every other field in the compatibility hash.
+    if (Reflect.get(legacy.landmark, "corridor") === "utility")
+      Reflect.deleteProperty(legacy.landmark, "corridor");
     assert.equal(createHash("sha256").update(JSON.stringify(legacy)).digest("hex"), golden);
   }
 });
