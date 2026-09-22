@@ -4,7 +4,7 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At about 09:21 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. The final active-creature gameplay runs have been dispatched. Main and production remain unchanged.
+At about 09:21 UTC, all implementation PRs **#42–#66 are ready for review** with their scoped browser checks complete. The two GPU lifetime fixes pass matched 24-minute comparisons. Runtime integration `ce5c173` passes **225 tests**, typecheck, lint and build; all four unchanged shaders passed at `3a398f7`. Current `58373e5` adds only pool-verification documentation. The final WebGPU active-creature gameplay run passed; the complementary WebGL run is live. Main and production remain unchanged.
 
 Room PRs #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Ready PR #65 is stacked on #62. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
@@ -375,3 +375,12 @@ Sound now has an explicit START for the complementary two 15-minute active-creat
 
 
 Final combined **WebGPU gameplay started 09:20:42.232 UTC** on `ce5c173`, with actual GPU backend/device confirmed and entities enabled. Duration is 900 seconds, expected completion about 09:35:42 UTC; WebGL follows. Live evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-final-gameplay/webgpu/report-live.json`. This is a live run, not yet a completed result.
+
+
+### Combined WebGPU creature gameplay completed
+
+The WebGPU run completed **901.4421 seconds**, with 903 snapshots and no runtime/device/invariant errors. All eight planned room categories were generated and visited, with routes recomputed after natural tape changes and actual landmark metadata recorded. Natural scheduling produced stalking, searching, pursuit, grabbing, death and tape reset. All five resident maps peaked at nine; 175 section identities were observed, 166 retired once and nine remained resident.
+
+The first automatic natural-creature screenshot was occluded by a wall and is not silhouette proof. A later explicitly staged pair screenshot (`vackrooms-final-gameplay/webgpu/pair.png`) visibly confirms both creature silhouettes. The original delayed escape window missed its grab; a separate labelled prompt Space attempt at 624–628 seconds changed grabbing to staggered and released the player. The staged no-escape window changed tape 592168 to 260872. Pause/resume control checks passed. Input was synthetic browser KeyboardEvent through normal engine handlers, and room positioning was programmatic; this is not uninterrupted human exploration or a physical-device test.
+
+Full evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-final-gameplay/webgpu/report-final.json`. The fresh **WebGL run started 09:36:32.181 UTC**, with the same integration runtime and 15-minute protocol; expected completion about 09:51:32 UTC. At 331 seconds it was live with no errors/failures.
