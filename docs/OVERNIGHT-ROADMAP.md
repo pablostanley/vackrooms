@@ -4,9 +4,9 @@ Work window: September 21, 2026, 10:30 p.m. to September 22, 4:30 a.m. Pacific (
 
 ## Current checkpoint
 
-At 07:23 UTC, PRs #42–#58 have browser verification; #59 (creature contact) and draft #60 (courtyard UVs) pass automated checks and await their browser turns. Combined integration `5f07647` passes **204 tests**, typecheck, lint and build. The 24-minute WebGPU/CRT run remains pinned to `cb6ddcf`; its result must not be attributed to the two later fixes. Main and production are unchanged.
+At about 08:04 UTC, PRs #42–#58 and #62 have browser verification. The matched 24-minute test confirms #62 fixes growing uniform-buffer counts; separate lighting-texture growth is being corrected. PRs #59–#61, #63 and #64 await their gameplay/visual turns. Integration `c6d23d5` passes **215 tests**, typecheck, lint, all shader checks and build. Current `45a4e7e` adds only #64's touch handlers and also passes types/lint/build. Main and production are unchanged.
 
-Two further room refinements are approved for implementation: a utility corridor stacked on hotel PR #57, and a generation-2 pool colonnade stacked on versioning PR #58. Their PRs will name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
+Room drafts #63 (utility corridor) and #61 (pool colonnade) are stacked on #57 and #58 respectively. Their PRs name those dependencies explicitly. Earlier fixes have priority for browser verification. The sections below preserve dated evidence from earlier batches; their older counts and preview links are historical checkpoints.
 
 ## Direction
 
@@ -259,3 +259,13 @@ Integration `c6d23d5` now includes #42–#63 and passes **215 tests**, typecheck
 The baseline WebGPU/CRT run completed **1,440.0014 seconds** with no functional/device/assert errors, but failed the resource-stability objective: comparable uniform buffers were 3,212 / 4,322 / 5,636 / 6,911 / 8,188, and textures 57 / 59 / 61 / 63 / 65. Geometries stayed 146, programs 56 and render targets 17. Evidence is `vackrooms-webgpu-crt/baseline-final.json` and `baseline-final.png` under the dated visualization directory. Do not summarize this as an unqualified pass.
 
 The matched fix-only run started **07:38:39.324 UTC** on `16129351` (baseline `cb6ddcf` plus only mesh-disposal commit `2fd26ee`). Same generation-2 tape, route, settings matrix, viewport changes and 24-minute duration; it additionally records passive texture create/destroy metadata to identify any remaining growth. Live evidence: `/Users/pablostanley/.codex/visualizations/2026/09/22/vackrooms-webgpu-crt/comparison/report-live.json`. Expected completion is about 08:03 UTC. No later room or physics changes are included in this comparison.
+
+### Mesh-disposal comparison completed; lighting textures isolated
+
+The fix-only comparison completed **1,440.0061 seconds**. Five identical checkpoints held **1,682 uniform buffers**, **36 programs**, **146 geometries** and **17 render targets**. There were no runtime/device/assert errors. The baseline's uniform-buffer growth is corrected; PR #62 is now ready for review. Its new regression was also run with the production fix temporarily removed and failed as expected; the worktree was restored clean afterward.
+
+Textures still rose 57 / 59 / 61 / 63 / 65. Passive UUID traces identify 576×576 section lighting maps that were disposed, then uploaded again; they are absent from all current section/global material slots. An isolated reproduction using the installed Three classes confirms cached `NodeSampledTexture` clones retain an old texture that `Bindings._createBindings` uploads before normal binding update selects the current one.
+
+A second lifecycle correction is underway: a per-material-owner lighting-map lease pool, refilling the same pixel storage and disposing textures with their owner. It uses a lazy hard cap of 18 to support the independent pre-#50 branch's temporary replacement window; the full eviction-first integration should require at most nine identities. No preallocation, live-lease eviction, private renderer patch, or per-texture shader recompilation. Exact pixel equivalence, ownership, reset, bounds and matched browser verification are required.
+
+Draft [#64](https://github.com/pablostanley/vackrooms/pull/64), `d26e489`, corrects touch joystick pointer ownership and immediate movement on initial press. It changes no HUD layout; types/lint/build pass. Its multitouch browser matrix is pending. The browser has been released from profiling, and #59's real contact check is starting before #60's texture comparison.
