@@ -29,6 +29,7 @@ export interface Landmark {
   length: number;
   height: number;
   courtyard?: "ground" | "overlook";
+  warehouse?: boolean;
 }
 export interface PoolBounds {
   x: number;
@@ -284,6 +285,8 @@ export function generateChunk(
               length: 8 + Math.floor(shape() * 2),
               height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
             };
+  if (kind === "foodCourt" && hash(x, z, seed + 7211) % 4 === 0)
+    landmark.warehouse = true;
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
   // Only remove walls: all original maze connections and shared gates survive.
