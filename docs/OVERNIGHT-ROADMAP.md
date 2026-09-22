@@ -133,3 +133,11 @@ Next review is an evidence-led texture sampling/seam audit. No new room type is 
 Integration commit `cec6d48` includes #42–#52. It passes TypeScript, lint, all four required shader checks and production build. The 175-test combined suite passed immediately before #51, whose own final 151-test suite also passed. Real-browser settings toggles preserve warm, bright fixtures; both effects can be turned off and back on. The new [deployed preview](https://vackrooms-n8552slou-pablostanley.vercel.app/?tape=199307) passed Record/Escape with no browser errors. #51 and #52 CI/deployment/review checks pass.
 
 The next evidenced fix addresses existing baked floor-contact shadows: some planes face down, vertical-wall fades use the wrong axis, and the nonperiodic gradient repeats at its edge. This is isolated from the completed tone-mapping change. An independent furniture/collider audit is also underway.
+
+
+### Active follow-up refinements
+
+- Floor-contact shadow correction: all four wall sides now face upward and fade away from the wall; the gradient clamps instead of repeating. Before/after browser corner views preserve subtle grounding and bright carpet. Full checks/PR pending.
+- Existing utility-cart/computer-desk collision: reproduced grounded feet above visible surfaces because whole-object bounds include empty space. An isolated fix keeps broad entity-navigation bounds while using existing solid-part hulls for player collision. Real Rapier landing tests and browser verification are in progress.
+
+These are corrections to existing geometry and physics, not additional room or asset categories.
