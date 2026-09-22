@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import { stepLength } from "./entity-gait";
-import { CELL, random } from "./maze";
+import { CELL, PLAYER_RADIUS, random } from "./maze";
 import { wallsBetween } from "./acoustics";
 import { CRUSH_DURATION, watchedSpeedLimit } from "./encounter-effects";
 import {
@@ -472,7 +472,8 @@ export class Stalker {
       this.nextPlan = this.nextDestination = 0;
       this.stuck = 0;
     }
-    // Contact needs a fresh, unobstructed body ray and capsule route: no grabs through desks/walls.
+    // Reach needs a fresh body ray and player-sized clearance: the creature need
+    // not fit at a wall-hugging player's center. Movement keeps its larger capsule.
     if (
       (this.phase === "pursuing" || this.phase === "stalking") &&
       input.canGrab !== false &&
@@ -482,7 +483,7 @@ export class Stalker {
         { x: this.position.x, y: 1.45, z: this.position.z },
         input.view.position,
       ) &&
-      this.nav.clearSegment(this.position, input.view.position)
+      this.nav.clearSegment(this.position, input.view.position, PLAYER_RADIUS)
     ) {
       this.heading = Math.atan2(input.view.position.x - this.position.x, input.view.position.z - this.position.z);
       this.speed = 0;

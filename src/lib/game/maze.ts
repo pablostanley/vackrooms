@@ -1,6 +1,7 @@
 import { interiorSeed, type GenerationVersion } from "./generation";
 
 export const CELL = 4.8;
+export const PLAYER_RADIUS = 0.22;
 export const CHUNK = 12;
 export const SPAN = CELL * CHUNK;
 export const HEIGHT = 3.15;
@@ -441,7 +442,7 @@ export function canStand(
   chunks: Map<string, ChunkData>,
   x: number,
   z: number,
-  radius = 0.22,
+  radius = PLAYER_RADIUS,
 ) {
   const cell = cellAt(chunks, x, z);
   if (!cell) return false;

@@ -238,7 +238,7 @@ export class EntityNavigation {
     }
     return true;
   }
-  clearSegment(a: GroundPoint, b: GroundPoint) {
+  clearSegment(a: GroundPoint, b: GroundPoint, radius = ENTITY_RADIUS) {
     const steps = Math.max(1, Math.ceil(groundDistance(a, b) / 0.18));
     for (let i = 0; i <= steps; i++) {
       if (
@@ -246,15 +246,15 @@ export class EntityNavigation {
           this.chunks,
           a.x + ((b.x - a.x) * i) / steps,
           a.z + ((b.z - a.z) * i) / steps,
-          ENTITY_RADIUS,
+          radius,
         )
       )
         return false;
     }
-    for (const box of this.boxes(a, b, "furniture", ENTITY_RADIUS)) {
+    for (const box of this.boxes(a, b, "furniture", radius)) {
       if (box.max.y < 0.08 || box.min.y > 2.75) continue;
       const y = Math.max(0.08, box.min.y);
-      if (segmentHitsBox({ ...a, y }, { ...b, y }, box, ENTITY_RADIUS))
+      if (segmentHitsBox({ ...a, y }, { ...b, y }, box, radius))
         return false;
     }
     return true;
