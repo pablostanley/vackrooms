@@ -622,6 +622,9 @@ export function buildSection(
     "bench",
     "sideTable",
     "utilityCart",
+    "waterCooler",
+    "photocopier",
+    "archiveCartons",
   ];
   if (data.x === 0 && data.z === 0) {
     // Each tape begins with its own small selection of familiar objects.
