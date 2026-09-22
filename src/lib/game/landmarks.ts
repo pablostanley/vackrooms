@@ -300,8 +300,18 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuild
         mats.cream,
       );
     }
-    // Pool-bottom lane marks give the water depth and human scale.
-    for (let lane = -2; lane <= 2; lane++) {
+    if (room.pool === "colonnade") {
+      // Oversized, purposeless supports divide the water without narrowing the
+      // dry deck or changing the shared basin, water, coping, or ceiling bounds.
+      for (const dz of [-7, 0, 7]) {
+        for (const dx of [-4, 4])
+          solid(1.1, room.height + 1.4, 1.1, x + dx, (room.height - 1.4) / 2, z + dz, mats.cream);
+        solid(9.1, 0.4, 1.1, x, 6, z + dz, mats.cream);
+      }
+    }
+    // The ordinary pool keeps its human-scale swimming lanes; the colonnade
+    // has no sporting markings underneath its intrusive architecture.
+    for (let lane = -2; room.pool !== "colonnade" && lane <= 2; lane++) {
       b.plane(0.13, 21, x + lane * 2.5, -1.385, z, mats.trim, -Math.PI / 2);
       for (const side of [-1, 1])
         b.plane(

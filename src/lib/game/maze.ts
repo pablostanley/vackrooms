@@ -31,6 +31,7 @@ export interface Landmark {
   length: number;
   height: number;
   courtyard?: "ground" | "overlook";
+  pool?: "colonnade";
 }
 export interface PoolBounds {
   x: number;
@@ -290,6 +291,10 @@ export function generateChunk(
               length: 8 + Math.floor(shape() * 2),
               height: kind === "lobby" ? 8.4 : kind === "poolroom" ? 6.8 : 5.5,
             };
+  // New-generation interiors only; the opening pool and all legacy tapes stay familiar.
+  if (generation === 2 && kind === "poolroom" && (x !== 0 || z !== 0) &&
+      interiorSeed(x, z, seed + 0x37c011) % 5 === 0)
+    landmark.pool = "colonnade";
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
   // Only remove walls: all original maze connections and shared gates survive.
