@@ -93,7 +93,7 @@ export function createMaterials() {
     ...ceiling,
     roughness: 1,
     color: "#ffffff",
-    emissive: "#c4b976",
+    emissive: "#d4ceb1",
     emissiveIntensity: 0.075,
   });
   const tileWall = new THREE.MeshStandardMaterial({
