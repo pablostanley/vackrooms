@@ -175,7 +175,7 @@ export class BackroomsEngine {
     this.resizeObserver.observe(container);
     void this.initialize();
   }
-  /** Development only: `?visit=neighborhood` or `?visit=officeAnnex` starts inside. */
+  /** Development only: `?visit=` starts inside a landmark or named room variant. */
   private visitLandmark() {
     const kind = new URLSearchParams(location.search).get("visit");
     if (!kind) return;
@@ -183,15 +183,17 @@ export class BackroomsEngine {
       for (let z = -ring; z <= ring; z++)
         for (let x = -ring; x <= ring; x++) {
           if (Math.max(Math.abs(x), Math.abs(z)) !== ring) continue;
-          if (landmarkKind(x, z, this.seed) !== (kind === "officeAnnex" ? "lobby" : kind)) continue;
+          const wanted = kind === "officeAnnex" ? "lobby" : kind === "hotelCorridor" ? "corridor" : kind;
+          if (landmarkKind(x, z, this.seed) !== wanted) continue;
           const room = generateChunk(x, z, this.seed).landmark;
           if (kind === "officeAnnex" && room.office !== "annex") continue;
+          if (kind === "hotelCorridor" && room.corridor !== "hotel") continue;
           this.position.set(
             x * SPAN + (room.x + room.width / 2) * CELL,
             1.66,
             z * SPAN + (room.z + 0.5) * CELL,
           );
-          this.yaw = Math.PI;
+          this.yaw = kind === "hotelCorridor" ? Math.PI / 2 : Math.PI;
           return;
         }
   }

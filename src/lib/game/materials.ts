@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { createDiscoveryNotes } from "./discovery-notes";
+import { createHotelLabels } from "./hotel-labels";
 import { random, type Theme } from "./maze";
 import { drawFunCarpet, drawFunMural } from "./fun-textures";
 import {
@@ -41,6 +42,7 @@ function grain(
 export function createMaterials() {
   const notes = createDiscoveryNotes();
   const textures: THREE.Texture[] = [];
+  const hotelLabels = createHotelLabels();
   const texture = (
     draw: (ctx: CanvasRenderingContext2D, size: number) => void,
     size?: number,
@@ -313,6 +315,7 @@ export function createMaterials() {
   configureSurfaceSampling(streetHedge);
   return {
     discoveryNotes: notes.materials,
+    hotelNumbers: hotelLabels.material,
     wall,
     floor,
     top,
@@ -359,6 +362,7 @@ export function createMaterials() {
     }),
     dispose: () => {
       notes.dispose();
+      hotelLabels.dispose();
       textures.forEach((t) => t.dispose());
       [
         wall,

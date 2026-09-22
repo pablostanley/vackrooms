@@ -31,6 +31,7 @@ export interface Landmark {
   courtyard?: "ground" | "overlook";
   office?: "annex";
   warehouse?: boolean;
+  corridor?: "hotel";
 }
 export interface PoolBounds {
   x: number;
@@ -308,6 +309,9 @@ export function generateChunk(
     landmark.warehouse = true;
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
+  // One choice per three-section run, including negative chunk coordinates.
+  if (kind === "corridor" && hash(Math.floor(x / 3), z, seed + 8117) % 4 === 0)
+    landmark.corridor = "hotel";
   // Only remove walls: all original maze connections and shared gates survive.
   for (let rz = landmark.z; rz < landmark.z + landmark.length; rz++)
     for (let rx = landmark.x; rx < landmark.x + landmark.width; rx++) {

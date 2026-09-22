@@ -3,6 +3,7 @@ import type { Materials } from "../../src/lib/game/materials";
 
 export function headlessMaterials(): Materials {
   const standardNames = [
+    "hotelNumbers",
     "wall",
     "floor",
     "top",
