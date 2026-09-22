@@ -221,3 +221,9 @@ Two new bounded corrections are in progress:
 - Creature contact: a real Rapier wall-hugging position remains ungrabbable for 30 seconds with a creature 0.65m away and clear sight. Contact incorrectly demands that the larger creature capsule fit at the player center. Use player-radius clearance only for contact, retaining larger navigation clearance and testing wall/desk/corner/elevation obstruction.
 
 Both corrections require separate PRs and real-browser verification after the GPU run releases the browser slot.
+
+### Further lore-informed refinement candidates
+
+A fresh comparison of the current [Level 37 article](https://backrooms-wiki.wikidot.com/level-37) with our pool builder highlights a useful future direction: vary spatial composition with oversized columns and unusual proportions rather than merely recoloring the same rectangular swimming pool. Our design deliberately keeps smooth warm surfaces, clear exits and shallow traversable water; the source's tile grids, blue water and dangerous deep pits are not requirements for this game. Any pool variant should retain a complete dry route, tested entry/exit jumps and consistent water/physics/acoustic bounds.
+
+The current [Level 2 article](https://backrooms-wiki.wikidot.com/level-2) also supports improving existing service spaces with coherent utility pipework, valves and ventilation. Prefer a small original procedural assembly with connected joints and bounded material batches. Keep side gates visibly open, ceiling clearance intact and lighting bright. These are research-backed candidates, not implemented features or promises of a single authoritative Backrooms canon. Finish the current texture/contact corrections and GPU validation before selecting the next content change.
