@@ -17,6 +17,7 @@ import {
   courtyardBounds,
   type ChunkData,
 } from "./maze";
+import { createDiscoveryParts, planDiscovery } from "./discoveries";
 import { buildLandmark } from "./landmarks";
 import { createRoomAmbientMap, planRoomLighting } from "./room-lighting";
 import type { Materials } from "./materials";
@@ -774,6 +775,15 @@ export function buildSection(
   // One solitary chair in the opening vista makes scale immediately familiar.
   if (data.x === 0 && data.z === 0)
     chair(CELL * 3.5 + 1.4, CELL * 2.5 + 1.4, 0.5);
+  const discovery = planDiscovery(data, available, furnished, colliders);
+  group.userData.discoveries = discovery ? [discovery] : [];
+  if (discovery) {
+    for (const { geometry, material } of createDiscoveryParts(discovery, mats)) {
+      geometry.translate(ox, 0, oz);
+      if (!batches.has(material)) batches.set(material, []);
+      batches.get(material)!.push(geometry);
+    }
+  }
   for (const source of models.values())
     source.parts.forEach((part) => part.geometry.dispose());
   const ambientMap = lighting.cells.size
