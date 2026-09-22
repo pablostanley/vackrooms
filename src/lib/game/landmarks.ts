@@ -13,6 +13,7 @@ import {
 } from "./maze";
 import type { Materials } from "./materials";
 import { buildCourtyard } from "./courtyard";
+import { buildHotelCorridor } from "./hotel-corridor";
 import { buildNeighborhood } from "./neighborhood";
 
 export interface LandmarkBuilder {
@@ -215,6 +216,7 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuild
   }
 
   if (room.kind === "corridor") {
+    if (room.corridor === "hotel") buildHotelCorridor(data, mats, b);
     // Repeated shallow ribs reveal the uninterrupted 172.8m perspective. Every
     // rib stops above head height; the two section seams contain no cross-wall.
     for (let cx = 0; cx < CHUNK; cx += 2)

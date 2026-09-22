@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createHotelLabels } from "./hotel-labels";
 import { random, type Theme } from "./maze";
 import { drawFunCarpet, drawFunMural } from "./fun-textures";
 import {
@@ -39,6 +40,7 @@ function grain(
 }
 export function createMaterials() {
   const textures: THREE.Texture[] = [];
+  const hotelLabels = createHotelLabels();
   const texture = (
     draw: (ctx: CanvasRenderingContext2D, size: number) => void,
     size?: number,
@@ -302,6 +304,7 @@ export function createMaterials() {
   configureSurfaceSampling(streetGrass);
   configureSurfaceSampling(streetHedge);
   return {
+    hotelNumbers: hotelLabels.material,
     wall,
     floor,
     top,
@@ -347,6 +350,7 @@ export function createMaterials() {
       floor,
     }),
     dispose: () => {
+      hotelLabels.dispose();
       textures.forEach((t) => t.dispose());
       [
         wall,
