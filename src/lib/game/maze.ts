@@ -109,18 +109,27 @@ function ordinaryLandmarkKind(
   const phase = hash(0, 0, seed + 907);
   // Three adjacent sections share a corridor. Its two internal gates stay aligned
   // even when unseen office branches regenerate at a different depth.
-  if (modulo(Math.floor(x / 3) + z + phase, 4) === 0) return "corridor";
+  if (isCorridor(x, z, phase)) return "corridor";
   // One party room per 24-section band. Pick only non-corridor slots so the
   // three-section hallway runs survive, including at negative coordinates.
   const band = Math.floor(x / 24);
-  const candidates = Array.from({ length: 24 }, (_, i) => band * 24 + i).filter(
-    (cx) => modulo(Math.floor(cx / 3) + z + phase, 4) !== 0,
-  );
-  if (x === candidates[hash(band, z, seed + 1709) % candidates.length])
-    return "levelFun";
+  // Eight groups of three slots contain exactly two corridor groups. Select
+  // among the same 18 surviving slots without allocating/scanning an array on
+  // every nested courtyard and neighborhood lookup. Negative bands align too:
+  // each band advances eight groups, a multiple of the four-group cadence.
+  const rank = hash(band, z, seed + 1709) % 18;
+  const group = Math.floor(rank / 3);
+  const firstCorridor = modulo(-z - phase, 4);
+  const sourceGroup = group + Number(group >= firstCorridor) +
+    Number(group >= firstCorridor + 3);
+  if (x === band * 24 + sourceGroup * 3 + rank % 3) return "levelFun";
   return (["lobby", "foodCourt", "poolroom"] as const)[
     modulo(x + z + phase, 3)
   ];
+}
+/** Later landmark overlays never replace a corridor slot. */
+function isCorridor(x: number, z: number, phase: number) {
+  return modulo(Math.floor(x / 3) + z + phase, 4) === 0;
 }
 export function inLandmark(room: Landmark, x: number, z: number) {
   return (
@@ -229,9 +238,10 @@ export function generateChunk(
   const south = 1 + (hash(x, z + 1, seed + 31) % (CHUNK - 2));
   const kind = landmarkKind(x, z, seed);
   const corridorRow = 6;
+  const corridorPhase = hash(0, 0, seed + 907);
   const horizontalGate = (edgeX: number) =>
-    landmarkKind(edgeX - 1, z, seed) === "corridor" &&
-    landmarkKind(edgeX, z, seed) === "corridor"
+    isCorridor(edgeX - 1, z, corridorPhase) &&
+    isCorridor(edgeX, z, corridorPhase)
       ? corridorRow
       : 1 + (hash(edgeX, z, seed + 73) % (CHUNK - 2));
   const west = horizontalGate(x);
