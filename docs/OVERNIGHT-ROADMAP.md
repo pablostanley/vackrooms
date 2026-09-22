@@ -126,3 +126,10 @@ Further lore research suggests improving existing spaces before creating more ca
 | [Wikidot Level 6.1](https://backrooms-wiki.wikidot.com/level-6-1) | Existing food court | Improve anonymous vending-machine and shuttered-counter silhouettes. Keep our warm palette and sparse layout; no copied music, branding or article text. |
 
 Next review is an evidence-led texture sampling/seam audit. No new room type is queued while rendering consistency remains under review.
+
+
+### Combined rendering verification
+
+Integration commit `cec6d48` includes #42–#52. It passes TypeScript, lint, all four required shader checks and production build. The 175-test combined suite passed immediately before #51, whose own final 151-test suite also passed. Real-browser settings toggles preserve warm, bright fixtures; both effects can be turned off and back on. The new [deployed preview](https://vackrooms-n8552slou-pablostanley.vercel.app/?tape=199307) passed Record/Escape with no browser errors. #51 and #52 CI/deployment/review checks pass.
+
+The next evidenced fix addresses existing baked floor-contact shadows: some planes face down, vertical-wall fades use the wrong axis, and the nonperiodic gradient repeats at its edge. This is isolated from the completed tone-mapping change. An independent furniture/collider audit is also underway.
