@@ -86,3 +86,16 @@ Initial audit: clean detached checkout at `ce5e024`; no open PRs returned by `gh
 - [#46 Warehouse annex](https://github.com/pablostanley/vackrooms/pull/46): 154 tests/typecheck/lint/build pass; browser check pending.
 
 Next audits assigned: existing creature locomotion smoothing; texture/lighting quality; map architecture and streaming performance. Combined integration branch is for validation, not an additional feature PR.
+
+
+### Existing-content refinement batch
+
+- [#47 Cream acoustic ceilings](https://github.com/pablostanley/vackrooms/pull/47): same-camera WebGL comparison approved; combined WebGPU rendering also inspected.
+- [#48 Exact-output generation optimization](https://github.com/pablostanley/vackrooms/pull/48): original classification and chunk comparison preserved; local 2,000-chunk CPU benchmark median 649 to 116 ms. This is not a whole-game frame-rate claim.
+- [#49 Creature locomotion](https://github.com/pablostanley/vackrooms/pull/49): smoother foot lift/contact and shortest-arc turn interpolation; stalk/attack browser previews still work and attack completes through normal tape reset.
+- [#50 Bounded streaming](https://github.com/pablostanley/vackrooms/pull/50): evict departures before constructing replacements; intermediate allocations remain at most nine. Real-browser seam check in progress.
+- Confirmed follow-up: WebGL postprocessing omits tone mapping and uses an 8-bit intermediate, causing visible changes when effects toggle. Isolated correction is being checked with actual browser pixel comparisons.
+
+Combined branch `codex/overnight-integration` is pushed for validation only. First five implementation branches passed 165 combined tests, TypeScript, lint, all shader validation and production build. The refinement batch is now included and undergoing another focused combined pass. All feature PRs remain unmerged.
+
+Local browser evidence is saved under the task's visualization directory in `overnight/`; it includes before/after ceilings, both-renderer annex views, props, warehouse, close-up note, and creature preview recording.
