@@ -22,7 +22,7 @@ makes the net increase 78 triangles. Existing cream material batches absorb the
 geometry. There are no additional draw batches, lights, materials, textures, or
 water meshes. Normal section disposal owns all geometry.
 
-Tests retain pre-change generation-1 chunk/collider goldens, verify rare stable
+Tests retain pre-change generation-1 full-chunk and pool-owned collider goldens, verify rare stable
 selection, bound every added collider, compare water geometry and lighting, count
 triangles/batches, check disposal, walk the full dry perimeter with Rapier, collide
 with a pier and pass between the rows, classify dry/wet footsteps, and enter/escape
