@@ -168,7 +168,7 @@ test("all boundary gates stay connected around real landmark and furniture obsta
             `${data.landmark.kind}: every gate is physically reachable`,
           );
         assert.ok(
-          section.group.children.length < 40,
+          section.group.children.length - section.shapedColliders.filter((prop) => prop.movable).length < 40,
           "geometry remains batched",
         );
       } finally {
