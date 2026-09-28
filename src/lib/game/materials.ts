@@ -225,6 +225,10 @@ export function createMaterials() {
       polygonOffsetUnits: -1,
     });
   });
+  // Glossy inflatable vinyl for play rooms: warm primaries, never blue.
+  const vinyl = ["#c9432c", "#dfb536", "#5d8f3b", "#d9772b", "#cf6f86"].map(
+    (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.42 }),
+  );
   const courtyardWall = new THREE.MeshStandardMaterial({
     ...plaster, color: "#d7d4bd", roughness: 0.94,
   });
@@ -347,6 +351,7 @@ export function createMaterials() {
     funTrim,
     funStripe,
     funMurals,
+    vinyl,
     courtyardWall,
     courtyardPaving,
     courtyardWood,
@@ -400,6 +405,7 @@ export function createMaterials() {
         funTrim,
         funStripe,
         ...funMurals,
+        ...vinyl,
         courtyardWall,
         courtyardPaving,
         courtyardWood,

@@ -1,7 +1,6 @@
 import {
   CELL,
   CHUNK,
-  HEIGHT,
   SPAN,
   E,
   W,
@@ -124,7 +123,8 @@ export function wallsBetween(
     const height = ceilingAt(a.chunk, a.cx, a.cz);
     const nextHeight = ceilingAt(b.chunk, b.cx, b.cz);
     const header =
-      height !== nextHeight && from.y + (to.y - from.y) * t > HEIGHT;
+      height !== nextHeight &&
+      from.y + (to.y - from.y) * t > Math.min(height, nextHeight);
     return Number(!(a.bits & bit) || !(b.bits & opposite) || header);
   };
   for (let i = 0; (x !== tx || z !== tz) && i < 64; i++) {

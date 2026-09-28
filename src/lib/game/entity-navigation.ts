@@ -3,7 +3,6 @@ import { wallsBetween, type SoundPosition } from "./acoustics";
 import {
   CELL,
   CHUNK,
-  HEIGHT,
   N,
   E,
   S,
@@ -163,7 +162,7 @@ export class EntityNavigation {
           if (!(bits & bit))
             box(px, pz, width, depth, 0, Math.max(h, neighbor));
           else if (h !== neighbor)
-            box(px, pz, width, depth, HEIGHT, Math.max(h, neighbor));
+            box(px, pz, width, depth, Math.min(h, neighbor), Math.max(h, neighbor));
         }
       }
     this.sections.set(key, { data, furniture, walls });

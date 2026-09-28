@@ -54,6 +54,7 @@ export function headlessMaterials(): Materials {
     { length: 3 },
     () => new THREE.MeshStandardMaterial({ alphaTest: 0.5 }),
   );
+  const vinyl = Array.from({ length: 5 }, () => new THREE.MeshStandardMaterial());
   const streetSiding = Array.from(
     { length: 5 },
     () => new THREE.MeshStandardMaterial(),
@@ -67,6 +68,7 @@ export function headlessMaterials(): Materials {
     ...standard,
     ...basic,
     funMurals,
+    vinyl,
     streetSiding,
     forTheme: () => ({ wall: standard.wall, floor: standard.floor }),
     dispose: () => {
@@ -76,6 +78,7 @@ export function headlessMaterials(): Materials {
         ...Object.values(standard),
         ...Object.values(basic),
         ...funMurals,
+        ...vinyl,
         ...discoveryNotes,
         ...streetSiding,
       ])
