@@ -4,7 +4,6 @@ import { Box3, Sphere, Vector3, type Object3D } from "three";
 import {
   CELL,
   CHUNK,
-  HEIGHT,
   PLAYER_RADIUS,
   N,
   SPAN,
@@ -25,6 +24,8 @@ const JUMP_SPEED = 5.6;
 const DOUBLE_JUMP_SPEED = 8.8;
 // Gives one press enough height and airtime to clear the 1.84m pool rim.
 const POOL_JUMP_SPEED = 9.6;
+/** Inflatable play floors throw you almost as high as the pool. */
+const BOUNCE_JUMP_SPEED = 8.9;
 // A plain landing rebounds about 1.6m; a timed jump reaches the high ceiling.
 const TRAMPOLINE_BOUNCE = 7.6;
 const TRAMPOLINE_JUMP = 12.4;
@@ -58,6 +59,7 @@ export class CharacterMotor {
     colliders: RAPIER.Collider[];
     props: PhysicalProp[];
     basin: PoolBounds | null;
+    bouncy: PoolBounds[];
     trampolines: { x: number; z: number }[];
   }>();
   readonly movingPropShadows: Sphere[] = [];
@@ -186,23 +188,25 @@ export class CharacterMotor {
             westHeight / 2,
             CELL / 2,
           );
-        // Match the soffit above open transitions into taller halls.
+        // Match the soffit above open transitions between ceiling heights.
+        const northHeader = Math.min(height, ceilingAt(data, x, z - 1));
+        const westHeader = Math.min(height, ceilingAt(data, x - 1, z));
         if (bits & N && height !== ceilingAt(data, x, z - 1))
           box(
             ox + (x + 0.5) * CELL,
-            (northHeight + HEIGHT) / 2,
+            (northHeight + northHeader) / 2,
             oz + z * CELL,
             CELL / 2,
-            (northHeight - HEIGHT) / 2,
+            (northHeight - northHeader) / 2,
             0.09,
           );
         if (bits & W && height !== ceilingAt(data, x - 1, z))
           box(
             ox + x * CELL,
-            (westHeight + HEIGHT) / 2,
+            (westHeight + westHeader) / 2,
             oz + (z + 0.5) * CELL,
             0.09,
-            (westHeight - HEIGHT) / 2,
+            (westHeight - westHeader) / 2,
             CELL / 2,
           );
       }
@@ -252,6 +256,12 @@ export class CharacterMotor {
       colliders,
       props,
       basin: basin ? { ...basin, x: ox + basin.x, z: oz + basin.z } : null,
+      bouncy: (data.playroom?.cells ?? []).map((cell) => ({
+        x: ox + (cell % CHUNK) * CELL,
+        z: oz + Math.floor(cell / CHUNK) * CELL,
+        width: CELL,
+        length: CELL,
+      })),
       trampolines: basin && data.landmark.basin?.trampoline
         ? [{
             x: ox + basin.x + data.landmark.basin.trampoline.x,
@@ -373,6 +383,12 @@ export class CharacterMotor {
         ) return POOL_JUMP_SPEED;
       }
     }
+    for (const { bouncy } of this.sections.values())
+      for (const pad of bouncy)
+        if (
+          position.x >= pad.x && position.x <= pad.x + pad.width &&
+          position.z >= pad.z && position.z <= pad.z + pad.length
+        ) return BOUNCE_JUMP_SPEED;
     return JUMP_SPEED;
   }
   private step(dx: number, dz: number, dt: number) {

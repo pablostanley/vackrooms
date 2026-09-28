@@ -1,4 +1,13 @@
 import { interiorSeed, type GenerationVersion } from "./generation";
+import { CELL, CHUNK, HEIGHT, N, E, S, W, directions } from "./grid";
+import {
+  cutClearance,
+  openCompoundRooms,
+  planRoomShapes,
+  type CornerCut,
+  type Playroom,
+  type StairRun,
+} from "./room-shapes";
 import {
   POOL_COPING,
   designPool,
@@ -7,21 +16,9 @@ import {
   type PoolDesign,
 } from "./pool-shape";
 
-export const CELL = 4.8;
+export { CELL, CHUNK, HEIGHT, N, E, S, W, directions };
 export const PLAYER_RADIUS = 0.22;
-export const CHUNK = 12;
 export const SPAN = CELL * CHUNK;
-export const HEIGHT = 3.15;
-export const N = 1,
-  E = 2,
-  S = 4,
-  W = 8;
-export const directions = [
-  { dx: 0, dz: -1, bit: N, opposite: S },
-  { dx: 1, dz: 0, bit: E, opposite: W },
-  { dx: 0, dz: 1, bit: S, opposite: N },
-  { dx: -1, dz: 0, bit: W, opposite: E },
-];
 export type Theme = "offices" | "service" | "pool" | "archive";
 export type LandmarkKind =
   | "lobby"
@@ -59,6 +56,14 @@ export interface ChunkData {
   theme: Theme;
   seed: number;
   landmark: Landmark;
+  /** Generation 2: per-cell ceilings outside the landmark. */
+  ceilings?: Float64Array;
+  /** Generation 2: angled walls across dead corners. */
+  cuts?: CornerCut[];
+  /** Generation 2: flights that climb to sealed doors. */
+  stairs?: StairRun[];
+  /** Generation 2: an inflatable play area inside the office. */
+  playroom?: Playroom;
 }
 const modulo = (n: number, size: number) => ((n % size) + size) % size;
 
@@ -154,7 +159,10 @@ export function inLandmark(room: Landmark, x: number, z: number) {
   );
 }
 export function ceilingAt(data: ChunkData, x: number, z: number) {
-  return inLandmark(data.landmark, x, z) ? data.landmark.height : HEIGHT;
+  if (inLandmark(data.landmark, x, z)) return data.landmark.height;
+  if (!data.ceilings || x < 0 || z < 0 || x >= CHUNK || z >= CHUNK)
+    return HEIGHT;
+  return data.ceilings[z * CHUNK + x];
 }
 export const COURTYARD_STOREY = 4.2;
 /** The gallery remains at maze level; only the inaccessible patio is lower. */
@@ -357,6 +365,9 @@ export function generateChunk(
     landmark.corridor = "hotel";
   else if (kind === "corridor" && hash(Math.floor(x / 3), z, seed + 8117) % 8 === 1)
     landmark.corridor = "utility";
+  // Irregular open rooms use their own stream: themes and furnishing stay put.
+  if (generation === 2)
+    openCompoundRooms(cells, x, z, seed + depth * 7919, landmark);
   // Only remove walls: all original maze connections and shared gates survive.
   for (let rz = landmark.z; rz < landmark.z + landmark.length; rz++)
     for (let rx = landmark.x; rx < landmark.x + landmark.width; rx++) {
@@ -461,7 +472,9 @@ export function generateChunk(
           : choice < 0.91
             ? "archive"
             : "pool";
-  return { x, z, cells, theme, seed: chunkSeed, landmark };
+  const data: ChunkData = { x, z, cells, theme, seed: chunkSeed, landmark };
+  if (generation === 2) planRoomShapes(data, seed, depth);
+  return data;
 }
 export function cellAt(
   chunks: Map<string, ChunkData>,
@@ -505,6 +518,9 @@ export function canStand(
   }
   const lx = x - (cell.chunk.x * SPAN + cell.cx * CELL),
     lz = z - (cell.chunk.z * SPAN + cell.cz * CELL);
+  const at = cell.cz * CHUNK + cell.cx;
+  if (cell.chunk.cuts?.some((cut) => cut.cell === at && cutClearance(cut, lx, lz) < radius))
+    return false;
   const pad = radius + 0.09;
   if (
     (lx < pad && !(cell.bits & W)) ||

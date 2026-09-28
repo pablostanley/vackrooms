@@ -15,6 +15,7 @@ import {
   inLandmark,
   ceilingAt,
   canStand,
+  cellAt,
   poolBounds,
   courtyardBounds,
   type ChunkData,
@@ -25,6 +26,14 @@ import { buildLandmark } from "./landmarks";
 import type { BallPit } from "./ball-pit";
 import { wallContactShadowGeometry } from "./wall-contact-shadow";
 import { planRoomLighting } from "./room-lighting";
+import {
+  STAIR_LANDING,
+  STAIR_START,
+  STAIR_TREAD,
+  STAIR_WIDTH,
+  cutSegment,
+  stairBlocks,
+} from "./room-shapes";
 import { markTubePanel, pickFixtureChannel } from "./fixture-lighting";
 import type { Materials } from "./materials";
 import { configureSurfaceSampling, projectSurfaceUVs } from "./surface-textures";
@@ -100,6 +109,13 @@ export function buildSection(
   const furnitureRng = random(data.seed + 3403);
   const chairRng = random(data.seed + 39217);
   const furnished = new Set<number>();
+  // Angled corners and stairs own their cells: ordinary dressing stays out.
+  const shapedCells = new Set<number>([
+    ...(data.cuts ?? []).map((cut) => cut.cell),
+    ...(data.stairs ?? []).map((run) => run.cell),
+    ...(data.playroom?.cells ?? []),
+  ]);
+  const play = new Set(data.playroom?.cells);
   const propRecords: {
     kind: FurnitureKind;
     variant: number;
@@ -192,7 +208,13 @@ export function buildSection(
     }
     add(g, mat, x, y, z, rx, ry);
   }
-  function wall(x: number, z: number, vertical: boolean, height = HEIGHT) {
+  function wall(
+    x: number,
+    z: number,
+    vertical: boolean,
+    height = HEIGHT,
+    material: THREE.Material = theme.wall,
+  ) {
     // Collinear segments meet at cell edges. Extending them by their thickness
     // puts two faces at the same depth, exposing both themes at section seams.
     box(
@@ -202,7 +224,7 @@ export function buildSection(
       x,
       height / 2,
       z,
-      theme.wall,
+      material,
     );
     box(
       vertical ? 0.22 : CELL,
@@ -405,8 +427,10 @@ export function buildSection(
     lampOn = false,
     variant = Math.floor(furnitureRng() * furnitureVariants),
   ) {
+    if (shapedCells.has(cz * CHUNK + cx)) return false;
     const source = model(kind, lampOn, variant),
       bits = data.cells[cz * CHUNK + cx];
+    const ceiling = ceilingAt(data, cx, cz);
     const x = (cx + 0.5) * CELL,
       z = (cz + 0.5) * CELL;
     const closed = [N, E, S, W].filter((bit) => !(bits & bit));
@@ -446,7 +470,7 @@ export function buildSection(
           source.anchor,
           new THREE.Vector3(
             x + (attempt % 2 ? -1.5 : 1.5),
-            HEIGHT - 0.025,
+            ceiling - 0.025,
             z + (attempt % 3 ? -1.5 : 1.5),
           ),
           new THREE.Euler(
@@ -491,6 +515,8 @@ export function buildSection(
         pose.setPosition(target);
       }
       const bounds = source.bounds.clone().applyMatrix4(pose);
+      // Low ceilings refuse tall pieces rather than burying them in the tiles.
+      if (mode !== "ceiling" && bounds.max.y > ceiling - 0.08) continue;
       if (
         leavesPassagesClear(bounds, cx, cz, bits) &&
         fits(source, pose, mode === "floor" ? 0.03 : 0)
@@ -508,6 +534,116 @@ export function buildSection(
       }
     }
     return false;
+  }
+  function buildPlayroom(palette: number) {
+    const vinyl = (i: number) => mats.vinyl[(palette + i) % mats.vinyl.length];
+    const playRng = random(data.seed + 61441);
+    const solid = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) =>
+      colliders.push(new THREE.Box3(
+        new THREE.Vector3(ox + x0, y0, oz + z0),
+        new THREE.Vector3(ox + x1, y1, oz + z1),
+      ));
+    const sides = [
+      { bit: N, dx: 0, dz: -1 },
+      { bit: E, dx: 1, dz: 0 },
+      { bit: S, dx: 0, dz: 1 },
+      { bit: W, dx: -1, dz: 0 },
+    ];
+    for (const cell of play) {
+      const cx = cell % CHUNK,
+        cz = Math.floor(cell / CHUNK);
+      const bits = data.cells[cell];
+      const x0 = cx * CELL,
+        z0 = cz * CELL;
+      // One glossy floor across the whole play area, lifted clear of the carpet.
+      plane(CELL, CELL, x0 + CELL / 2, 0.014, z0 + CELL / 2, vinyl(0), -Math.PI / 2);
+      for (const { bit, dx, dz } of sides) {
+        // Local frame: u runs along the wall, v points into the room.
+        const cx0 = x0 + CELL / 2 + (dx * CELL) / 2,
+          cz0 = z0 + CELL / 2 + (dz * CELL) / 2;
+        const at = (u: number, v: number) =>
+          [cx0 + (dz ? u : -dx * v), cz0 + (dx ? u : -dz * v)] as const;
+        if (!(bits & bit)) {
+          // Puffed tubes line the wall like the side of a bouncy castle.
+          for (let i = 0; i < 7; i++) {
+            const [px, pz] = at(-CELL / 2 + 0.34 + i * 0.687, 0.39);
+            add(new THREE.CapsuleGeometry(0.3, 1.7, 6, 12), vinyl(1 + (i % 2)), px, 1.15, pz);
+          }
+          const [rx, rz] = at(0, 0.39);
+          add(new THREE.CylinderGeometry(0.22, 0.22, CELL - 0.5, 14), vinyl(3), rx, 2.35, rz,
+            dz ? 0 : Math.PI / 2, 0, dz ? Math.PI / 2 : 0);
+          const [ax, az] = at(-CELL / 2, 0.09),
+            [bx, bz] = at(CELL / 2, 0.72);
+          solid(Math.min(ax, bx), 0, Math.min(az, bz), Math.max(ax, bx), 2.57, Math.max(az, bz));
+          continue;
+        }
+        const neighbor = (cz + dz) * CHUNK + cx + dx;
+        if (play.has(neighbor)) continue;
+        // An inflatable arch welcomes you in from the office.
+        const header = Math.min(ceilingAt(data, cx, cz), ceilingAt(data, cx + dx, cz + dz));
+        if (header < 2.9) continue;
+        for (const side of [-1, 1]) {
+          const [px, pz] = at(side * 1.5, 0);
+          add(new THREE.CylinderGeometry(0.34, 0.38, 0.7, 14), vinyl(2), px, 0.35, pz);
+          solid(px - 0.34, 0, pz - 0.34, px + 0.34, 1.4, pz + 0.34);
+        }
+        const [mx, mz] = at(0, 0);
+        add(new THREE.TorusGeometry(1.5, 0.3, 12, 28, Math.PI), vinyl(4), mx, 0.7, mz, 0, dz ? 0 : Math.PI / 2);
+      }
+      // Turrets fill each closed corner, cone roofs and all.
+      for (const [bitA, bitB, ux, uz] of [
+        [N, W, 0, 0], [N, E, 1, 0], [S, E, 1, 1], [S, W, 0, 1],
+      ] as const) {
+        if (bits & bitA || bits & bitB) continue;
+        const px = x0 + (ux ? CELL - 0.62 : 0.62),
+          pz = z0 + (uz ? CELL - 0.62 : 0.62);
+        add(new THREE.CylinderGeometry(0.55, 0.6, 2.9, 18), vinyl(4), px, 1.45, pz);
+        add(new THREE.ConeGeometry(0.66, 0.8, 18), vinyl(0), px, 3.3, pz);
+        solid(px - 0.6, 0, pz - 0.6, px + 0.6, 3.7, pz + 0.6);
+      }
+    }
+    // A few giant balls to kick around; they roll on the same Rapier world.
+    const cells = [...play];
+    const balls = 1 + Math.floor(playRng() * 3);
+    for (let i = 0; i < balls; i++) {
+      const cell = cells[Math.floor(playRng() * cells.length)];
+      const radius = 0.45 + playRng() * 0.25;
+      // Spread by thirds so no two balls start interpenetrating.
+      const angle = (i * Math.PI * 2) / 3 + playRng() * 0.8;
+      const center = new THREE.Vector3(
+        ox + ((cell % CHUNK) + 0.5) * CELL + Math.cos(angle) * 0.85,
+        radius + 0.015,
+        oz + (Math.floor(cell / CHUNK) + 0.5) * CELL + Math.sin(angle) * 0.85,
+      );
+      const ball = new THREE.Group();
+      ball.position.copy(center);
+      for (let wedge = 0; wedge < 6; wedge++) {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(radius, 16, 12, (wedge * Math.PI) / 3, Math.PI / 3),
+          vinyl(wedge % 2 ? i + 1 : i + 3),
+        );
+        mesh.castShadow = mesh.receiveShadow = true;
+        ball.add(mesh);
+      }
+      group.add(ball);
+      const hull = new THREE.IcosahedronGeometry(radius, 1).getAttribute("position");
+      const vertices = new Float32Array(hull.count * 3);
+      for (let v = 0; v < hull.count; v++) {
+        vertices[v * 3] = hull.getX(v) + center.x;
+        vertices[v * 3 + 1] = hull.getY(v) + center.y;
+        vertices[v * 3 + 2] = hull.getZ(v) + center.z;
+      }
+      const bounds = new THREE.Box3(
+        center.clone().subScalar(radius),
+        center.clone().addScalar(radius),
+      );
+      colliders.push(bounds);
+      shapedColliders.push({
+        bounds,
+        parts: [vertices],
+        movable: { object: ball, mass: 2.5, material: "plastic" },
+      });
+    }
   }
   const basin = poolBounds(data.landmark);
   const courtyard = courtyardBounds(data.landmark);
@@ -536,6 +672,124 @@ export function buildSection(
     box, plane, lights, colliders, shapedColliders, water, ballPits, group,
     geometry: (g, mat, x, y, z) => add(g, mat, x, y, z),
   });
+  const wallMeters = theme.wall.userData.surfaceMeters as number | undefined;
+  for (const cut of data.cuts ?? []) {
+    // An angled wall seals a dead corner. Its face sits on the room faces of
+    // the two walls it joins, so nothing pokes into a neighboring cell.
+    const cx = cut.cell % CHUNK,
+      cz = Math.floor(cut.cell / CHUNK);
+    const bx = cx * CELL,
+      bz = cz * CELL;
+    const height = ceilingAt(data, cx, cz);
+    const { corner, from, to, normal, length } = cutSegment(cut);
+    const mx = bx + (from[0] + to[0]) / 2,
+      mz = bz + (from[1] + to[1]) / 2;
+    const yaw = Math.atan2(normal[0], normal[1]);
+    const face = new THREE.PlaneGeometry(length, height);
+    add(face, theme.wall, mx, height / 2, mz, 0, yaw);
+    if (wallMeters) {
+      // World projection would stretch the paper on a diagonal: run it along the face.
+      const position = face.getAttribute("position"),
+        uv = face.getAttribute("uv");
+      const dx = (to[0] - from[0]) / length,
+        dz = (to[1] - from[1]) / length;
+      for (let i = 0; i < position.count; i++) {
+        const along =
+          (position.getX(i) - ox - bx - from[0]) * dx +
+          (position.getZ(i) - oz - bz - from[1]) * dz;
+        uv.setXY(i, along / wallMeters, position.getY(i) / wallMeters);
+      }
+    }
+    const inset = (d: number) => [mx + normal[0] * d, mz + normal[1] * d];
+    const [kx, kz] = inset(0.025);
+    box(length, 0.115, 0.05, kx, 0.058, kz, mats.trim, yaw);
+    const [tx, tz] = inset(0.02);
+    box(length, 0.055, 0.04, tx, height - 0.027, tz, mats.trim, yaw);
+    const shadow = wallContactShadowGeometry(false, 1);
+    shadow.scale(length / CELL, 1, 1);
+    const [sx, sz] = inset(0.39);
+    add(shadow, mats.shadow, sx, 0.006, sz, 0, yaw);
+    // The collider fills the whole sealed triangle, not just a thin slab.
+    const vertices: number[] = [];
+    for (const [px, pz] of [corner, from, to])
+      for (const y of [0, height]) vertices.push(ox + bx + px, y, oz + bz + pz);
+    shapedColliders.push({
+      bounds: new THREE.Box3().setFromArray(vertices),
+      parts: [new Float32Array(vertices)],
+    });
+  }
+  for (const run of data.stairs ?? []) {
+    // Stairs to nowhere: carpeted steps climb a wall to a door that opens on plaster.
+    const bx = (run.cell % CHUNK) * CELL,
+      bz = Math.floor(run.cell / CHUNK) * CELL;
+    const alongX = run.wall === N || run.wall === S;
+    const blocks = stairBlocks(run);
+    blocks.forEach(([x0, z0, x1, z1, top], index) => {
+      box(x1 - x0, top, z1 - z0, bx + (x0 + x1) / 2, top / 2, bz + (z0 + z1) / 2, theme.floor);
+      colliders.push(
+        new THREE.Box3(
+          new THREE.Vector3(ox + bx + x0, 0, oz + bz + z0),
+          new THREE.Vector3(ox + bx + x1, top, oz + bz + z1),
+        ),
+      );
+      if (index === blocks.length - 1) return;
+      // Nosing on each tread's leading edge.
+      const lead = alongX ? (run.dir > 0 ? x0 : x1) : run.dir > 0 ? z0 : z1;
+      if (alongX)
+        box(0.05, 0.035, STAIR_WIDTH, bx + lead + run.dir * 0.025, top - 0.012, bz + (z0 + z1) / 2, mats.trim);
+      else
+        box(STAIR_WIDTH, 0.035, 0.05, bx + (x0 + x1) / 2, top - 0.012, bz + lead + run.dir * 0.025, mats.trim);
+    });
+    const landing = STAIR_START + run.steps * STAIR_TREAD + STAIR_LANDING / 2;
+    const along = run.dir > 0 ? landing : CELL - landing;
+    const inward = run.wall === N || run.wall === W ? 1 : -1;
+    const face = inward > 0 ? 0.09 : CELL - 0.09;
+    const doorPart = (w: number, h: number, depth: number, u: number, y: number, mat: THREE.Material) => {
+      const v = face + (inward * depth) / 2;
+      if (alongX) box(w, h, depth, bx + along + u, y, bz + v, mat);
+      else box(depth, h, w, bx + v, y, bz + along + u, mat);
+    };
+    const sill = run.rise;
+    doorPart(0.86, 2.02, 0.05, 0, sill + 1.01, mats.wood);
+    doorPart(0.07, 2.1, 0.08, -0.465, sill + 1.05, mats.trim);
+    doorPart(0.07, 2.1, 0.08, 0.465, sill + 1.05, mats.trim);
+    doorPart(1.0, 0.07, 0.08, 0, sill + 2.1, mats.trim);
+    doorPart(0.05, 0.05, 0.11, 0.33 * run.dir, sill + 1.0, mats.metal);
+  }
+  if (data.playroom) buildPlayroom(data.playroom.palette);
+  for (let cell = 0; cell < CHUNK * CHUNK; cell++) {
+    const cx = cell % CHUNK,
+      cz = Math.floor(cell / CHUNK);
+    const height = ceilingAt(data, cx, cz);
+    if (height < 9 || inLandmark(data.landmark, cx, cz)) continue;
+    // Shafts keep the storeys they never built: bands and tubes climb every wall.
+    const bits = data.cells[cell];
+    const sides = [
+      { bit: N, nx: cx, nz: cz - 1, x: (cx + 0.5) * CELL, z: cz * CELL + 0.09, alongX: true, inward: 1 },
+      { bit: S, nx: cx, nz: cz + 1, x: (cx + 0.5) * CELL, z: (cz + 1) * CELL - 0.09, alongX: true, inward: -1 },
+      { bit: W, nx: cx - 1, nz: cz, x: cx * CELL + 0.09, z: (cz + 0.5) * CELL, alongX: false, inward: 1 },
+      { bit: E, nx: cx + 1, nz: cz, x: (cx + 1) * CELL - 0.09, z: (cz + 0.5) * CELL, alongX: false, inward: -1 },
+    ];
+    sides.forEach((side, index) => {
+      // Over an open edge the wall only begins at the lower ceiling's header.
+      const bottom = bits & side.bit ? Math.min(height, ceilingAt(data, side.nx, side.nz)) : 0;
+      const offset = (d: number) => side.alongX
+        ? [side.x, side.z + side.inward * d]
+        : [side.x + side.inward * d, side.z];
+      for (let storey = 1, y = HEIGHT; y < height - 0.6; storey++, y += HEIGHT) {
+        if (y < bottom + 0.1) continue;
+        const [px, pz] = offset(0.025);
+        box(side.alongX ? CELL - 0.2 : 0.05, 0.09, side.alongX ? 0.05 : CELL - 0.2, px, y, pz, mats.trim);
+        if ((storey + index) % 2) continue;
+        const [lx, lz] = offset(0.05);
+        box(side.alongX ? 1.3 : 0.1, 0.16, side.alongX ? 0.1 : 1.3, lx, y + 0.45, lz, mats.fixtures);
+        const [gx, gz] = offset(0.101);
+        plane(1.18, 0.1, gx, y + 0.45, gz, mats.luminous, 0,
+          side.alongX ? (side.inward > 0 ? 0 : Math.PI) : (side.inward * Math.PI) / 2);
+        if (storey <= 2) lights.push(new THREE.Vector3(ox + lx, y + 0.3, oz + lz));
+      }
+    });
+  }
   if (lighting.lampCell !== null) {
     const at = lighting.lampCell;
     // Place the only lamp before clutter so its pool of light stays readable.
@@ -571,28 +825,37 @@ export function buildSection(
       );
       const northHeight = Math.max(height, ceilingAt(data, cx, cz - 1));
       const westHeight = Math.max(height, ceilingAt(data, cx - 1, cz));
-      if (!(bits & N)) wall(x, cz * CELL, false, northHeight);
-      else if (height !== ceilingAt(data, cx, cz - 1))
+      // Play areas paint the plaster above their puffed walls.
+      const funAt = (nx: number, nz: number) =>
+        play.has(cz * CHUNK + cx) || (nx >= 0 && nz >= 0 && nx < CHUNK && nz < CHUNK && play.has(nz * CHUNK + nx))
+          ? mats.funWall
+          : theme.wall;
+      if (!(bits & N)) wall(x, cz * CELL, false, northHeight, funAt(cx, cz - 1));
+      else if (height !== ceilingAt(data, cx, cz - 1)) {
+        const header = Math.min(height, ceilingAt(data, cx, cz - 1));
         box(
           CELL,
-          northHeight - HEIGHT,
+          northHeight - header,
           0.18,
           x,
-          (northHeight + HEIGHT) / 2,
+          (northHeight + header) / 2,
           cz * CELL,
           theme.wall,
         );
-      if (!(bits & W)) wall(cx * CELL, z, true, westHeight);
-      else if (height !== ceilingAt(data, cx - 1, cz))
+      }
+      if (!(bits & W)) wall(cx * CELL, z, true, westHeight, funAt(cx - 1, cz));
+      else if (height !== ceilingAt(data, cx - 1, cz)) {
+        const header = Math.min(height, ceilingAt(data, cx - 1, cz));
         box(
           0.18,
-          westHeight - HEIGHT,
+          westHeight - header,
           CELL,
           cx * CELL,
-          (westHeight + HEIGHT) / 2,
+          (westHeight + header) / 2,
           z,
           theme.wall,
         );
+      }
       if (
         courtyard && x > courtyard.x && x < courtyard.x + courtyard.width &&
         z > courtyard.z && z < courtyard.z + courtyard.length
@@ -642,24 +905,24 @@ export function buildSection(
         if (channel) fixtureChannels.set(light, channel);
       }
       // Landmarks have authored empty space and perimeter details of their own.
-      if (landmark) continue;
+      if (landmark || shapedCells.has(at)) continue;
       const isSpawn = data.x === 0 && data.z === 0 && cx === 2 && cz >= 1;
       // Pillars break up open rooms without sealing a passage.
       const pillar = new THREE.Box3(
         new THREE.Vector3(x + 1.29, 0, z + 1.29),
-        new THREE.Vector3(x + 1.91, HEIGHT, z + 1.91),
+        new THREE.Vector3(x + 1.91, height, z + 1.91),
       );
       if (
         bits === 15 && rng() < 0.38 && !isSpawn && !furnished.has(at) &&
         vacant(pillar)
       ) {
-        box(0.57, HEIGHT, 0.57, x + 1.6, HEIGHT / 2, z + 1.6, theme.wall);
+        box(0.57, height, 0.57, x + 1.6, height / 2, z + 1.6, theme.wall);
         box(0.62, 0.12, 0.62, x + 1.6, 0.06, z + 1.6, mats.trim);
         occupy(pillar);
         colliders.push(
           new THREE.Box3(
             new THREE.Vector3(ox + x + 1.315, 0, oz + z + 1.315),
-            new THREE.Vector3(ox + x + 1.885, HEIGHT, oz + z + 1.885),
+            new THREE.Vector3(ox + x + 1.885, height, oz + z + 1.885),
           ),
         );
       }
@@ -714,7 +977,8 @@ export function buildSection(
           // Check each pile's solids, preserving the walking lane between them.
           if (poses.every((pose) => {
             const bounds = source.bounds.clone().applyMatrix4(pose);
-            return insideCell(bounds, cx, cz) &&
+            return bounds.max.y < height - 0.08 &&
+              insideCell(bounds, cx, cz) &&
               leavesPassagesClear(bounds, cx, cz, bits) &&
               fits(source, pose);
           }))
@@ -869,6 +1133,7 @@ export function buildSection(
   for (let cz = 0; cz < CHUNK; cz++)
     for (let cx = 0; cx < CHUNK; cx++) {
       if (inLandmark(data.landmark, cx, cz)) continue;
+      if (shapedCells.has(cz * CHUNK + cx)) continue;
       if (data.x === 0 && data.z === 0 && cx === 2 && cz >= 1) continue;
       if (
         portals.some(
@@ -886,7 +1151,11 @@ export function buildSection(
   // among a section's computers. Regenerated sections keep their sites.
   const homeOffset = hash(data.x, data.z, data.seed + 93013) % COMPUTER_HOMES.length;
   const placeComputer = (cx: number, cz: number, kind: ComputerKind) => {
-    if (furnished.has(cz * CHUNK + cx) || lighting.cells.has(cz * CHUNK + cx))
+    if (
+      furnished.has(cz * CHUNK + cx) ||
+      lighting.cells.has(cz * CHUNK + cx) ||
+      shapedCells.has(cz * CHUNK + cx)
+    )
       return false;
     const bits = data.cells[cz * CHUNK + cx];
     const source = model(kind);
@@ -1023,7 +1292,9 @@ export function buildSection(
   for (const obstacle of looseFurniture) {
     const b = obstacle.bounds;
     const interior = b.clone().expandByScalar(-0.025);
-    let clear = Math.abs(b.min.y) < 0.03 && b.max.y < HEIGHT - 0.03;
+    const home = cellAt(chunks, (b.min.x + b.max.x) / 2, (b.min.z + b.max.z) / 2);
+    const ceiling = home ? ceilingAt(data, home.cx, home.cz) : HEIGHT;
+    let clear = Math.abs(b.min.y) < 0.03 && b.max.y < ceiling - 0.03;
     const nx = Math.max(1, Math.ceil((b.max.x - b.min.x) / (CELL / 4)));
     const nz = Math.max(1, Math.ceil((b.max.z - b.min.z) / (CELL / 4)));
     for (let ix = 0; ix <= nx; ix++) for (let iz = 0; iz <= nz; iz++) {
