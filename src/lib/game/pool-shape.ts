@@ -29,6 +29,8 @@ export interface PoolDesign {
   outline: [number, number][];
   bridge?: PoolBridge;
   trampoline?: { x: number; z: number };
+  /** One in four seeded basins is a ball pit instead of water. */
+  fill?: "balls";
 }
 
 export const POOL_COPING = 0.18;

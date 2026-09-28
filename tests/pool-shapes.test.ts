@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Mesh, Vector3 } from "three";
-import { CELL, SPAN, canStand, generateChunk, poolBounds, type ChunkData } from "../src/lib/game/maze";
+import { CELL, SPAN, canStand, generateChunk, poolBounds, random, type ChunkData } from "../src/lib/game/maze";
+import { interiorSeed } from "../src/lib/game/generation";
 import {
   crossings,
   deckRects,
@@ -11,7 +12,9 @@ import {
 } from "../src/lib/game/pool-shape";
 import { buildSection } from "../src/lib/game/world";
 import { CharacterMotor } from "../src/lib/game/physics";
-import { footstepSurfaceAt } from "../src/lib/game/acoustics";
+import { footstepSurfaceAt, inBallPit, roomSoundAt } from "../src/lib/game/acoustics";
+import { BALL_RADIUS, BALL_TOP, ballPitLayout } from "../src/lib/game/ball-pit";
+import { designPool } from "../src/lib/game/pool-shape";
 import { headlessMaterials } from "./helpers/materials";
 
 function* shapedPools(seeds = [0, 2, 7, 48, 199307]) {
@@ -89,7 +92,7 @@ test("bridges land on dry deck, piers stop over open water, and trampolines stay
 });
 
 test("a shaped section clips its water to the outline and releases every geometry", () => {
-  const data = find((d) => d.landmark.basin!.shape === "kidney" && !!d.landmark.basin!.trampoline);
+  const data = find((d) => d.landmark.basin!.shape === "kidney" && !!d.landmark.basin!.trampoline && !d.landmark.basin!.fill);
   const errors: unknown[] = [], error = console.error;
   console.error = (...args: unknown[]) => errors.push(args);
   const mats = headlessMaterials();
@@ -167,7 +170,7 @@ test("stepping onto a trampoline bounces the player well above the deck", async 
 });
 
 test("the dry notch inside an L-shaped basin is solid deck", async () => {
-  const data = find((d) => d.landmark.basin!.shape === "trueL");
+  const data = find((d) => d.landmark.basin!.shape === "trueL" && !d.landmark.basin!.fill);
   const design = data.landmark.basin!, bounds = poolBounds(data.landmark)!;
   const rect = deckRects(design).sort((a, b) => b.width * b.length - a.width * a.length)[0];
   const cx = rect.x + rect.width / 2, cz = rect.z + rect.length / 2;
@@ -181,4 +184,67 @@ test("the dry notch inside an L-shaped basin is solid deck", async () => {
   const [wx, wz] = design.outline.reduce(([sx, sz], [px, pz]) => [sx + px / design.outline.length, sz + pz / design.outline.length], [0, 0]);
   const inWater = pointInPolygon(design.outline, wx, wz) ? [wx, wz] : [design.width * 0.25, design.length * 0.75];
   assert.equal(footstepSurfaceAt(chunks, { x: ox + inWater[0], y: -1.4, z: oz + inWater[1] }), "water");
+});
+
+test("one in four shaped pools is a ball pit, without moving any outline", () => {
+  let pits = 0, total = 0;
+  for (const data of shapedPools()) {
+    total++;
+    const { fill, ...shape } = data.landmark.basin!;
+    if (fill === "balls") pits++;
+    else assert.equal(fill, undefined);
+    // The fill rides its own hash: the same seed still draws the same basin.
+    const redrawn = designPool(
+      random(interiorSeed(data.x, data.z, data.tape + 0x9001)),
+      data.landmark.width * CELL,
+      data.landmark.length * CELL,
+    );
+    assert.deepEqual(shape, redrawn);
+  }
+  assert.ok(pits / total > 0.17 && pits / total < 0.33, `${pits}/${total}`);
+});
+
+test("a ball pit fills its outline with plastic instead of water, and balls part around a wader", () => {
+  const data = find((d) => d.landmark.basin!.fill === "balls" && !!d.landmark.basin!.bridge);
+  const design = data.landmark.basin!, bounds = poolBounds(data.landmark)!;
+  const ox = data.x * SPAN + bounds.x, oz = data.z * SPAN + bounds.z;
+  const layout = ballPitLayout(design, 1, { x: ox, z: oz, clear: [] });
+  for (let i = 0; i < layout.positions.length; i += 3) {
+    const x = layout.positions[i] - ox, z = layout.positions[i + 2] - oz;
+    assert.ok(pointInPolygon(design.outline, x, z), "every ball sits inside the coping");
+    assert.ok(layout.positions[i + 1] + BALL_RADIUS <= BALL_TOP + 1e-9);
+  }
+  assert.ok(layout.positions.length / 3 <= 16000);
+
+  const errors: unknown[] = [], error = console.error;
+  console.error = (...args: unknown[]) => errors.push(args);
+  const mats = headlessMaterials();
+  let section;
+  try { section = buildSection(data, mats, 0); } finally { console.error = error; }
+  assert.deepEqual(errors, [], "every material batch merges");
+  try {
+    assert.equal(section.water.length, 0, "no water in a ball pit");
+    assert.equal(section.ballPits.length, 1);
+    const pit = section.ballPits[0];
+    assert.ok(pit.mesh.count > 500, `${pit.mesh.count} balls`);
+    assert.ok(!section.occluders.includes(pit.mesh));
+    // Wade into the middle of the heap: nearby balls roll aside, then settle.
+    const wx = layout.positions[0], wz = layout.positions[2];
+    pit.update(wx, wz, -1.4, 1 / 60);
+    assert.ok(pit.moving > 0);
+    for (let i = 0; i < 600; i++) pit.update(wx + 50, wz, 0, 1 / 60);
+    assert.equal(pit.moving, 0, "every ball settles back once the wader leaves");
+    // Standing on the deck never stirs them.
+    pit.update(wx, wz, 0, 1 / 60);
+    assert.equal(pit.moving, 0);
+
+    const chunks = new Map([[`${data.x},${data.z}`, data]]);
+    const [cx, cz] = design.outline.reduce(([sx, sz], [px, pz]) => [sx + px / design.outline.length, sz + pz / design.outline.length], [0, 0]);
+    const inside = pointInPolygon(design.outline, cx, cz) ? [cx, cz] : [layout.positions[0] - ox, layout.positions[2] - oz];
+    const feet = { x: ox + inside[0], y: -1.4, z: oz + inside[1] };
+    assert.ok(inBallPit(chunks, feet));
+    assert.equal(footstepSurfaceAt(chunks, feet), "carpet", "no splashes in plastic");
+    assert.equal(roomSoundAt(chunks, feet), "hall", "and no lapping water");
+    assert.ok(!inBallPit(chunks, { ...feet, y: 0 }), "the deck above is not the pit");
+  } finally { section.dispose(); mats.dispose(); }
 });

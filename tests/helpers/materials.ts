@@ -21,6 +21,8 @@ export function headlessMaterials(): Materials {
     "upholstery",
     "enamel",
     "fadedRed",
+    "ballPit",
+    "ballPitFill",
     "cream",
     "metal",
     "paper",

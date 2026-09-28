@@ -20,6 +20,7 @@ import { buildNeighborhood } from "./neighborhood";
 import { buildOfficeAnnex } from "./office-annex";
 import { buildWarehouse } from "./warehouse";
 import { buildShapedPool } from "./pool-build";
+import type { BallPit } from "./ball-pit";
 
 export interface LandmarkBuilder {
   box: (
@@ -47,6 +48,7 @@ export interface LandmarkBuilder {
   colliders: THREE.Box3[];
   shapedColliders: ShapedObstacle[];
   water: THREE.Mesh[];
+  ballPits?: BallPit[];
   /** Batch arbitrary chunk-local geometry, offset like `box`. */
   geometry?: (
     geometry: THREE.BufferGeometry,

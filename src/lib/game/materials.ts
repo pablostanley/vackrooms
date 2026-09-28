@@ -4,6 +4,7 @@ import { createDiscoveryNotes } from "./discovery-notes";
 import { createHotelLabels } from "./hotel-labels";
 import { createRoomAmbientPool } from "./room-lighting";
 import { random, type Theme } from "./maze";
+import { BALL_COLORS } from "./ball-pit";
 import { drawFunCarpet, drawFunMural } from "./fun-textures";
 import {
   configureSurfaceSampling,
@@ -231,6 +232,33 @@ export function createMaterials() {
     color: "#9b5942",
     roughness: 0.88,
   });
+  // Glossy playground plastic; each ball's colour comes from its instance.
+  const ballPit = new THREE.MeshStandardMaterial({ roughness: 0.34 });
+  // The shaded heap under the top layer, seen through its gaps.
+  const ballPitFill = new THREE.MeshStandardMaterial({
+    map: texture((ctx, s) => {
+      const rng = random(0xba11);
+      ctx.fillStyle = "#2f2a20";
+      ctx.fillRect(0, 0, s, s);
+      const r = s / 20;
+      for (let n = 0; n < 420; n++) {
+        const x = rng() * s, y = rng() * s;
+        const color = BALL_COLORS[Math.floor(rng() * BALL_COLORS.length)];
+        for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) {
+          const g = ctx.createRadialGradient(x + dx - r * 0.3, y + dy - r * 0.3, r * 0.1, x + dx, y + dy, r);
+          g.addColorStop(0, color);
+          g.addColorStop(1, "#1e1a14");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }),
+    roughness: 0.6,
+  });
+  // Canvas tiles cover two meters of heap.
+  ballPitFill.map!.repeat.set(0.5, 0.5);
   const cream = new THREE.MeshStandardMaterial({
     ...plaster,
     color: "#c8bc91",
@@ -397,6 +425,8 @@ export function createMaterials() {
     upholstery,
     enamel,
     fadedRed,
+    ballPit,
+    ballPitFill,
     cream,
     metal,
     paper,

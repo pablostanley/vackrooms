@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { CHUNK, CELL, poolBounds, type ChunkData } from "./maze";
 import type { Materials } from "./materials";
 import type { LandmarkBuilder } from "./landmarks";
+import { BALL_TOP, BallPit, ballPitLayout } from "./ball-pit";
 import {
   BRIDGE_TOP,
   BRIDGE_WIDTH,
@@ -94,9 +95,24 @@ export function buildShapedPool(
     b.shapedColliders.push({ bounds: box, parts: [vertices] });
   }
 
-  const water = waterMesh(design, bounds, ox, oz, data.landmark.height, mats.tileFloor);
-  b.group.add(water);
-  b.water.push(water);
+  if (design.fill === "balls") {
+    const heap = new THREE.ShapeGeometry(planShape(local(offsetOutline(outline, -0.04))));
+    heap.rotateX(-Math.PI / 2);
+    b.geometry?.(heap, mats.ballPitFill, 0, BALL_TOP - 0.24, 0);
+    const pit = new BallPit(ballPitLayout(design, data.seed + 0xba11, {
+      x: ox + bounds.x,
+      z: oz + bounds.z,
+      clear: design.bridge
+        ? bridgePiers(design, bounds).map(([x, z]) => ({ x: ox + x, z: oz + z, r: 0.23 }))
+        : [],
+    }), mats.ballPit);
+    b.group.add(pit.mesh);
+    b.ballPits?.push(pit);
+  } else {
+    const water = waterMesh(design, bounds, ox, oz, data.landmark.height, mats.tileFloor);
+    b.group.add(water);
+    b.water.push(water);
+  }
   if (design.shape === "rectangle" && design.width >= 12 && design.length >= 18)
     laneMarks(design, bounds, b, mats);
   if (design.bridge) buildBridge(design, bounds, mats, b, solid);
@@ -198,17 +214,27 @@ function buildBridge(
   if (!pointInPolygon(design.outline, bridge.x1 - 0.1, bridge.z)) landings.push(x1 + 0.3);
   for (const px of landings)
     solid(0.6, step, BRIDGE_WIDTH, px, step / 2, z, mats.cream);
-  // Square piers down to the basin floor, only where they stand in water.
+  const height = BRIDGE_TOP - thickness - FLOOR_Y;
+  for (const [px, pz] of bridgePiers(design, bounds))
+    solid(0.32, height, 0.32, px, FLOOR_Y + height / 2, pz, mats.cream);
+}
+
+/** Square piers down to the basin floor, only where they stand in the basin. */
+function bridgePiers(design: PoolDesign, bounds: { x: number; z: number }) {
+  const bridge = design.bridge!;
+  const z = bounds.z + bridge.z;
+  const x0 = bounds.x + bridge.x0, x1 = bounds.x + bridge.x1;
+  const inner = offsetOutline(design.outline, -0.5);
+  const piers: [number, number][] = [];
   const span = x1 - x0, count = Math.max(1, Math.round(span / 4.5));
   for (let i = 0; i <= count; i++) {
     const px = x0 + 0.5 + ((span - 1) * i) / count;
     for (const side of [-1, 1]) {
       const pz = z + side * (BRIDGE_WIDTH / 2 - 0.25);
-      if (!pointInPolygon(offsetOutline(design.outline, -0.5), px - bounds.x, pz - bounds.z)) continue;
-      const height = BRIDGE_TOP - thickness - FLOOR_Y;
-      solid(0.32, height, 0.32, px, FLOOR_Y + height / 2, pz, mats.cream);
+      if (pointInPolygon(inner, px - bounds.x, pz - bounds.z)) piers.push([px, pz]);
     }
   }
+  return piers;
 }
 
 /** A low backyard trampoline on the deck: stepping on it launches the camera. */
