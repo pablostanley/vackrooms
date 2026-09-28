@@ -1,8 +1,7 @@
-import { Box3, Euler, Matrix4, Quaternion, Vector3 } from "three";
-import { CELL, N, E, S, W } from "./maze";
-
-const seatContact = new Vector3(0, 0.455, 0);
-export const chairLegContact = new Vector3(0.19, 0.11, 0.19);
+import { Box3, Euler, Matrix3, Matrix4, Quaternion, Vector3 } from "three";
+import { OBB } from "three/addons/math/OBB.js";
+import { CELL, HEIGHT, N, E, S, W } from "./maze";
+import type { ChairFrame, FurnitureModel } from "./furniture-models";
 
 /** Attach a solid point on a rotated model to a solid point in the world. */
 export function anchorPose(
@@ -21,11 +20,57 @@ export function anchorPose(
   );
 }
 
+/** Oriented solids for every part of a placed model. */
+export function partSolids(model: FurnitureModel, pose: Matrix4): OBB[] {
+  const scale = new Vector3().setFromMatrixScale(pose);
+  const rotation = new Matrix3().setFromMatrix4(
+    new Matrix4().extractRotation(pose),
+  );
+  return model.parts.map(({ geometry }) => {
+    const local = geometry.boundingBox!;
+    return new OBB(
+      local.getCenter(new Vector3()).applyMatrix4(pose),
+      local.getSize(new Vector3()).multiply(scale).multiplyScalar(0.5),
+      rotation.clone(),
+    );
+  });
+}
+
+/** True when any two solids overlap by more than the tolerated contact. */
+export function solidsOverlap(a: readonly OBB[], b: readonly OBB[], contact = 0.002) {
+  for (const first of a) {
+    const shrunk = new OBB(
+      first.center,
+      first.halfSize.clone().subScalar(contact).max(new Vector3()),
+      first.rotation,
+    );
+    for (const second of b) if (shrunk.intersectsOBB(second)) return true;
+  }
+  return false;
+}
+
 export const chairStackStyles = ["crooked", "aligned", "crossed", "spiral"] as const;
 export type ChairStackStyle = (typeof chairStackStyles)[number];
 
-/** Every upper chair's leg penetrates the seat directly below it. */
+/** Clearance between a hanging backrest and the furniture it passes. */
+const pileGap = 0.008;
+/** Hanging directions in the base chair's frame: front, +X, back, -X. */
+const hang = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const;
+const hangYaw = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
+
+/** The tallest pile that still leaves the top chair clear of the ceiling. */
+export function maxChairPile(frame: ChairFrame) {
+  return Math.max(1, Math.floor((HEIGHT - 0.12) / frame.seatTop));
+}
+
+/**
+ * A janitor's pile: one upright chair, then chairs turned upside down. The
+ * first rests seat-to-seat in front of the lower backrest; each later chair
+ * rests its seat on the upturned legs below. Every backrest hangs clear of
+ * the seat it passes, so solids touch without passing through each other.
+ */
 export function chairStack(
+  frame: ChairFrame,
   x: number,
   z: number,
   yaw: number,
@@ -33,32 +78,41 @@ export function chairStack(
   rng: () => number,
   style: ChairStackStyle = "crooked",
 ): Matrix4[] {
+  const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), yaw);
   const poses = [
-    anchorPose(new Vector3(), new Vector3(x, 0, z), new Euler(0, yaw, 0)),
+    new Matrix4().compose(new Vector3(x, 0, z), turn, new Vector3(1, 1, 1)),
   ];
-  for (let i = 1; i < count; i++) {
-    const contact = (style === "aligned"
-      ? new Vector3(0.19, 0.455, 0.19)
-      : seatContact.clone()).applyMatrix4(poses[i - 1]);
-    const pitch = (rng() - 0.5) * 0.32;
-    const turn = (rng() - 0.5) * 1.5;
-    const roll = (rng() - 0.5) * 0.38;
-    poses.push(
-      anchorPose(
-        chairLegContact,
-        contact,
-        new Euler(
-          style === "crooked" ? pitch : 0,
-          yaw + (
-            style === "aligned" ? 0
-              : style === "crossed" ? (i % 2) * Math.PI
-                : style === "spiral" ? i * Math.PI / 2
-                  : (i % 2) * Math.PI + turn
-          ),
-          style === "crooked" ? roll : 0,
-        ),
-      ),
-    );
+  const { seatHalf, legInset, legHalf, backFront, seatTop } = frame;
+  // Seat-to-seat, the upper seat stays in front of the lower back posts.
+  const first = seatHalf + pileGap - backFront;
+  // On upturned legs, the offset keeps the hanging back outside the lower
+  // seat while the seat still covers the far pair of leg tips.
+  const later = (first + seatHalf - legInset + legHalf) / 2;
+  const side = rng() < 0.5 ? 1 : 3;
+  const spin = rng() < 0.5 ? 1 : 3;
+  const total = Math.min(count, maxChairPile(frame));
+  const center = new Vector3(0, 0, -first);
+  for (let i = 1; i < total; i++) {
+    let direction: number;
+    if (style === "aligned") direction = 0;
+    else if (style === "crossed") direction = i % 2 ? 0 : side;
+    else if (style === "spiral") direction = ((i - 1) * spin) % 4;
+    else {
+      // The second chair would hang its back into the upright backrest.
+      const allowed = i === 1 ? [0, 1, 3] : i === 2 ? [0, 1, 3] : [0, 1, 2, 3];
+      direction = allowed[Math.floor(rng() * allowed.length)];
+    }
+    const [dx, dz] = hang[direction];
+    const step = i === 1 ? (direction ? first : 0) : later;
+    center.x += dx * step;
+    center.z += dz * step;
+    const contact = i * seatTop;
+    const rotation = new Quaternion()
+      .setFromAxisAngle(new Vector3(0, 1, 0), yaw + hangYaw[direction])
+      .multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI));
+    const position = center.clone().applyQuaternion(turn).add(new Vector3(x, 0, z));
+    position.y = contact + seatTop;
+    poses.push(new Matrix4().compose(position, rotation, new Vector3(1, 1, 1)));
   }
   return poses;
 }

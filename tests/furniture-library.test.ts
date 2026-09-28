@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { BufferGeometry, Material, Mesh } from "three";
-import { createFurniture, type FurnitureKind, type FurnitureModel } from "../src/lib/game/furniture-models";
+import { createFurniture, furnitureVariants, type FurnitureKind, type FurnitureModel } from "../src/lib/game/furniture-models";
+import { isComputerKind } from "../src/lib/game/computer-models";
 import { furnitureKinds } from "../src/lib/game/furniture-library";
 import { generateChunk } from "../src/lib/game/maze";
 import { buildSection, type Section } from "../src/lib/game/world";
@@ -68,12 +69,15 @@ test("finite furniture inventory preserves every prototype attribute, bounds and
     const identities = new Set<FurnitureModel>();
     let bytes = 0;
     for (const kind of furnitureKinds) {
-      for (const lit of [false, true]) {
-        const cached = mats.furniture.get(kind, lit), original = createFurniture(kind, mats, lit);
+      for (const lit of [false, true]) for (let variant = 0; variant < furnitureVariants; variant++) {
+        const cached = mats.furniture.get(kind, lit, variant), original = createFurniture(kind, mats, lit, variant);
         try {
-          assert.deepEqual(modelState(cached), modelState(original), `${kind}:${lit}`);
+          assert.deepEqual(modelState(cached), modelState(original), `${kind}:${lit}:${variant}`);
           cached.parts.forEach((part, i) => assert.equal(part.material, original.parts[i].material));
-          assert.equal(mats.furniture.get(kind, lit), cached);
+          assert.equal(mats.furniture.get(kind, lit, variant), cached);
+          // Out-of-range designs wrap onto the same finite prototypes.
+          assert.equal(mats.furniture.get(kind, lit, variant + furnitureVariants), cached);
+          assert.equal(mats.furniture.get(kind, lit, variant - furnitureVariants), cached);
           if (!identities.has(cached)) {
             for (const { geometry } of cached.parts) {
               for (const attribute of Object.values(geometry.attributes)) bytes += attribute.array.byteLength;
@@ -84,9 +88,12 @@ test("finite furniture inventory preserves every prototype attribute, bounds and
         } finally { disposeModel(original); }
       }
       if (kind !== "lamp") assert.equal(mats.furniture.get(kind), mats.furniture.get(kind, true));
+      if (isComputerKind(kind)) assert.equal(mats.furniture.get(kind, false, 2), mats.furniture.get(kind));
     }
-    assert.equal(identities.size, furnitureKinds.length + 1);
-    assert.ok(bytes < 3_000_000, `finite prototype array budget: ${bytes}`);
+    const designed = furnitureKinds.filter((kind) => !isComputerKind(kind)).length;
+    // Every design of every kind, one computer model each, plus lit lamps.
+    assert.equal(identities.size, designed * furnitureVariants + (furnitureKinds.length - designed) + furnitureVariants);
+    assert.ok(bytes < 4_500_000, `finite prototype array budget: ${bytes}`);
     assert.throws(() => mats.furniture.get("unknown" as FurnitureKind), /Unknown furniture/);
   } finally { mats.dispose(); }
 });
@@ -103,8 +110,8 @@ test("shared prototypes preserve complete section output and survive repeated se
         const data = generateChunk(x, z, seed, depth), before = structuredClone(data);
         // Independent original constructor is the reference. No cached model is
         // reused in this control, while final batching/collision code is identical.
-        mats.furniture.get = (kind, lit) => {
-          const model = createFurniture(kind, mats, lit); freshModels.push(model); return model;
+        mats.furniture.get = (kind, lit, variant) => {
+          const model = createFurniture(kind, mats, lit, variant); freshModels.push(model); return model;
         };
         const expected = buildSection(data, mats, depth);
         mats.furniture.get = libraryGet;

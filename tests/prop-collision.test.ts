@@ -17,7 +17,7 @@ for (const kind of ["utilityCart", "computerDesk"] as const) {
         const pose = new Matrix4().makeRotationY(yaw).setPosition(12, 0, 12);
         const bounds = model.bounds.clone().applyMatrix4(pose);
         const parts = furnitureCollisionParts(model, pose);
-        assert.equal(parts.length, kind === "computerDesk" ? 9 : 15);
+        assert.equal(parts.length, kind === "computerDesk" ? 9 : model.parts.length);
         const data = generateChunk(0, 0, 1);
         data.cells.fill(15);
         data.landmark = { kind: "lobby", x: 0, z: 0, width: CHUNK, length: CHUNK, height: 3.15 };
@@ -58,11 +58,13 @@ test("generated desks and carts retain coarse navigation bounds and separate phy
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 199307]) {
       const section = buildSection(generateChunk(0, 0, seed), mats, 0);
       try {
-        for (const prop of section.group.userData.furniture as { kind: string; bounds: Box3 }[]) {
+        for (const prop of section.group.userData.furniture as { kind: "computerDesk" | "utilityCart"; variant: number; bounds: Box3 }[]) {
           if (prop.kind !== "computerDesk" && prop.kind !== "utilityCart") continue;
           const shaped = section.shapedColliders.find(({ bounds }) => bounds.equals(prop.bounds));
           assert.ok(shaped && section.colliders.includes(shaped.bounds));
-          assert.equal(shaped.parts.length, prop.kind === "computerDesk" ? 9 : 15);
+          // Every visible cart part is a separate solid, never one filled box.
+          assert.equal(shaped.parts.length, prop.kind === "computerDesk"
+            ? 9 : mats.furniture.get(prop.kind, false, prop.variant).parts.length);
           seen.add(prop.kind);
         }
       } finally { section.dispose(); }
