@@ -58,6 +58,8 @@ export class Stalker {
   heading = 0;
   gait = 0;
   observed = false;
+  /** Counts arrivals; each one grows a different body. */
+  appearances = 0;
   private rng: () => number;
   private schedule: EncounterSchedule;
   private time = 0;
@@ -116,6 +118,7 @@ export class Stalker {
     this.lastKnown = { x: player.x, z: player.z };
     this.lastSensed = this.time;
     this.nextSense = 0;
+    this.appearances++;
     this.change(pursuit ? "pursuing" : "stalking");
   }
   reset() {
@@ -238,6 +241,7 @@ export class Stalker {
       this.lastSensed = this.time;
       this.nextSense = 0;
       this.observed = false;
+      this.appearances++;
       this.change("stalking");
       return;
     }

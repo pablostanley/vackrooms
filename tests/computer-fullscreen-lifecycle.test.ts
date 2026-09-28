@@ -58,7 +58,7 @@ async function scenario(
     keys: new Set(), gamepad: { suspend: noop }, listeners: { abort: noop },
     resizeObserver: { disconnect: noop }, audio: { dispose: noop, stopComputer: noop },
     sections: new Map(), entities: [], lights: [],
-    entityMaterial: { dispose: noop }, materials: { dispose: noop },
+    entityMaterial: { dispose: noop }, wardrobe: { dispose: noop }, materials: { dispose: noop },
   }) as Engine;
   try {
     engine.useComputer();
