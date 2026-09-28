@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Raycaster, Vector3 } from "three";
+import { Mesh, Raycaster, Vector3 } from "three";
 import {
   CELL,
   CHUNK,
@@ -146,8 +146,9 @@ for (const [variant, cx] of [
         canStand(new Map([[`${cx},-2`, data]]), ox + centerX, oz + centerZ),
         variant === "ground",
       );
+      // Pushable furniture keeps one group per piece; count only static batches.
       assert.ok(
-        section.group.children.length < 40,
+        section.group.children.filter((child) => child instanceof Mesh).length < 40,
         "repeated windows remain material-batched",
       );
       const ground = new Raycaster(
