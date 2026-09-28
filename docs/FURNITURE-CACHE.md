@@ -1,9 +1,16 @@
 # Furniture prototype lifetime
 
 Each material owner keeps a lazy `FurnitureLibrary`. Its finite inventory has
-21 furniture kinds plus one lit-lamp variant: at most 22 prototypes. Other kinds
+21 furniture kinds. The 18 non-computer kinds each have three seeded designs
+(`furnitureVariants`), the three computers have one, and each lamp design has a
+lit state: at most 60 prototypes. Designs wrap modulo three, other kinds
 canonicalize the lamp flag, and unknown kinds are rejected. Prototypes use that
 owner's existing material objects; they are never shared between engines.
+
+A design is an authored shape (for example a ladder-, spindle- or padded-back
+dining chair; a two-seat, three-seat or armchair sofa) plus small proportion
+changes from a seed of the kind and design number, so the same design is the
+same everywhere. Placement picks a design from the section's furniture stream.
 
 Section construction clones each prototype part before projecting UVs or applying
 placement. Final batches and collider bounds follow the existing paths. Section
@@ -11,8 +18,9 @@ disposal owns these cloned and merged geometries; material-owner disposal frees
 prototype geometries once, before disposing shared materials. A disposed library
 cannot create more prototypes. The library owns no textures or GPU resources.
 
-The full current inventory retains 2,533,968 bytes of vertex/index arrays (about
-2.42 MiB), plus JavaScript geometry/object overhead. These source geometries are
+The full current inventory retains 3,857,328 bytes of vertex/index arrays (about
+3.68 MiB), plus JavaScript geometry/object overhead. The measurements below were
+taken on the earlier 22-prototype inventory. These source geometries are
 never attached to a render scene, so they do not add draw calls or resident GPU
 vertex buffers. This deliberately trades bounded CPU memory for fewer repeated
 procedural model builds when sections stream or a recording moves deeper.
@@ -45,3 +53,16 @@ teardown disposed all 561 prototype geometries exactly once. Subsequent library
 disposal was inert and reuse rejected. Both renderer screenshots and the returned
 origin scene were inspected, with no page errors. Temporary profiling hooks were
 removed.
+
+## Placement without clipping
+
+Section construction keeps a registry of every placed solid: furniture parts as
+oriented boxes, pillars and wall shelving as boxes. Scattered props, chairs,
+table seating, chair piles and computers are only accepted where their part
+solids clear that registry; pillars and shelving check it too. Chair piles are
+solved from the wooden chair's measured frame: an upright chair, then chairs
+turned upside down, resting seat-to-seat and then on upturned legs, with each
+backrest hanging outside the seat it passes. Tests check every design, style
+and seed for touching support without interpenetration, and generated sections
+for no furniture-furniture or furniture-fixture overlap. Deliberate wall and
+ceiling embedding is unchanged.

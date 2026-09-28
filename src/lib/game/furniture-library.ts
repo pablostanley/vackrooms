@@ -2,12 +2,16 @@ import { computerKinds } from "./computer-models";
 import {
   chairKinds,
   createFurniture,
+  furnitureVariant,
   type FurnitureKind,
   type FurnitureModel,
 } from "./furniture-models";
 import type { Materials } from "./materials";
 
-/** Exhaustive finite inventory; only the lamp has a second material state. */
+/**
+ * Exhaustive finite inventory. Each kind has a few seeded designs (computers
+ * have one); only the lamp has a second material state.
+ */
 export const furnitureKinds = [
   ...chairKinds, "filingCabinet", "bookcase", "bench", "sideTable", "utilityCart",
   "waterCooler", "photocopier", "archiveCartons", "sofa", "table", "lamp",
@@ -22,14 +26,15 @@ export class FurnitureLibrary {
 
   constructor(private readonly materials: () => Materials) {}
 
-  get(kind: FurnitureKind, lampOn = false): FurnitureModel {
+  get(kind: FurnitureKind, lampOn = false, variant = 0): FurnitureModel {
     if (this.disposed) throw new Error("Furniture library is disposed");
     if (!supported.has(kind)) throw new Error(`Unknown furniture kind: ${kind}`);
     const lit = kind === "lamp" && Boolean(lampOn);
-    const key = `${kind}:${lit}`;
+    const design = furnitureVariant(kind, variant);
+    const key = `${kind}:${design}:${lit}`;
     let model = this.models.get(key);
     if (!model) {
-      model = createFurniture(kind, this.materials(), lit);
+      model = createFurniture(kind, this.materials(), lit, design);
       this.models.set(key, model);
     }
     return model;
