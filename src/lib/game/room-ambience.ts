@@ -1,5 +1,6 @@
 import type { RoomSound } from "./acoustics";
 import { random } from "./maze";
+import { lappingSamples } from "./pool-audio";
 
 // Deliberately below the localized fluorescent fixtures. The room's machinery
 // gives the space a character without pretending to be an approaching entity.
@@ -9,7 +10,7 @@ export const ROOM_AIR: Record<RoomSound, {
   office: { air: 0.035, cutoff: 380, water: 0, motor: 0, frequency: 58 },
   hall: { air: 0.044, cutoff: 530, water: 0, motor: 0.003, frequency: 54 },
   corridor: { air: 0.029, cutoff: 240, water: 0, motor: 0.007, frequency: 73 },
-  pool: { air: 0.024, cutoff: 320, water: 0.018, motor: 0.005, frequency: 48 },
+  pool: { air: 0.024, cutoff: 320, water: 0.03, motor: 0.005, frequency: 48 },
 };
 
 /** A seeded, seamless noise loop; the raised-cosine overlap avoids a loop click. */
@@ -46,10 +47,14 @@ export class RoomAmbience {
     const samples = roomAirSamples(ctx.sampleRate, seed);
     const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
     buffer.getChannelData(0).set(samples);
+    // Water laps against the gutter in slow, uneven swells instead of hissing.
+    const lapping = lappingSamples(ctx.sampleRate, seed);
+    const lapBuffer = ctx.createBuffer(1, lapping.length, ctx.sampleRate);
+    lapBuffer.getChannelData(0).set(lapping);
     const air = ctx.createBufferSource(), water = ctx.createBufferSource();
-    air.buffer = water.buffer = buffer;
+    air.buffer = buffer;
+    water.buffer = lapBuffer;
     air.loop = water.loop = true;
-    water.playbackRate.value = 1.7;
     this.air = ctx.createGain();
     this.water = ctx.createGain();
     this.motor = ctx.createGain();
@@ -58,8 +63,8 @@ export class RoomAmbience {
     this.filter.Q.value = 0.5;
     const waterFilter = ctx.createBiquadFilter();
     waterFilter.type = "bandpass";
-    waterFilter.frequency.value = 1250;
-    waterFilter.Q.value = 0.45;
+    waterFilter.frequency.value = 780;
+    waterFilter.Q.value = 0.6;
     this.tone = ctx.createOscillator();
     this.tone.type = "sine";
     air.connect(this.filter).connect(this.air).connect(destination);

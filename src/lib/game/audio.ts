@@ -28,6 +28,7 @@ import {
 } from "./rpg-recordings";
 
 import { propSoundSamples, type PropSound } from "./prop-sounds";
+import { dropletSamples, WadingVoice } from "./pool-audio";
 
 interface SpatialVoice {
   position: SoundPosition;
@@ -41,6 +42,13 @@ interface SpatialVoice {
 interface FixtureVoice {
   voice: SpatialVoice;
   retireAt: number | null;
+  channel: number;
+  ballast: GainNode;
+  level: number;
+}
+interface FixtureSection {
+  lights: readonly SoundPosition[];
+  fixtureChannels?: ReadonlyMap<SoundPosition, number>;
 }
 interface RoomBus {
   input: GainNode;
@@ -57,6 +65,12 @@ export class BackroomsAudio {
   private propBuffers = new Map<string, AudioBuffer>();
   private nextPropSound = 0;
   private lastWaterRecording = -1;
+  private droplets: AudioBuffer[] = [];
+  private wading: WadingVoice | null = null;
+  private nextDrip = 0;
+  private dripAt: SoundPosition | null = null;
+  /** Called with the world position of each drip, for surface ripples. */
+  onDrip: ((position: SoundPosition) => void) | null = null;
   private recordings: RpgRecordings | null = null;
   private dialup: ComputerDialup | null = null;
   private entityAudio: EntityAudio | null = null;
@@ -150,6 +164,17 @@ export class BackroomsAudio {
     }
     this.noise = buffer;
     this.ambience = new RoomAmbience(ctx, this.mix, this.seed);
+    // Bubble radii from fine condensation (1.4mm) to heavier ceiling drops.
+    this.droplets = [1.4, 1.9, 2.4, 2.9, 3.5, 4.2].map((radius, index) => {
+      const samples = dropletSamples(ctx.sampleRate, radius / 1000, this.seed + index);
+      const droplet = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+      droplet.getChannelData(0).set(samples);
+      return droplet;
+    });
+    const wadingSend = ctx.createGain();
+    wadingSend.gain.value = 0.9;
+    wadingSend.connect(this.reflections);
+    this.wading = new WadingVoice(ctx, [this.mix, wadingSend], buffer);
   }
 
   private impulse(room: RoomSound) {
@@ -246,6 +271,9 @@ export class BackroomsAudio {
     this.stopComputer();
     this.entityWasPresent = false;
     this.pending = null;
+    this.nextDrip = time + 2;
+    this.dripAt = null;
+    this.wading?.update(0, false);
     this.schedule.defer(time);
     for (const voice of this.transients) this.release(voice);
     for (const fixture of this.fixtures.values()) this.release(fixture.voice);
@@ -282,7 +310,7 @@ export class BackroomsAudio {
     forward: SoundPosition,
     up: SoundPosition,
     chunks: Map<string, ChunkData>,
-    sections: Iterable<{ lights: readonly SoundPosition[] }>,
+    sections: Iterable<FixtureSection>,
     entityPresent = false,
   ) {
     this.listener = { ...position };
@@ -312,6 +340,8 @@ export class BackroomsAudio {
         );
       }
       this.ambience?.update(room);
+      if (room !== "pool") this.dripAt = null;
+      else if (time >= this.nextDrip) this.drip(time);
       this.updateFixtures(sections);
       for (const voice of this.transients) this.occlude(voice);
     }
@@ -404,12 +434,16 @@ export class BackroomsAudio {
   }
 
   private updateFixtures(
-    sections: Iterable<{ lights: readonly SoundPosition[] }>,
+    sections: Iterable<FixtureSection>,
   ) {
     const ctx = this.ctx!,
       now = ctx.currentTime;
-    const candidates: { id: string; position: SoundPosition; score: number }[] =
-      [];
+    const candidates: {
+      id: string;
+      position: SoundPosition;
+      score: number;
+      channel: number;
+    }[] = [];
     for (const section of sections)
       for (const p of section.lights) {
         const distance = Math.hypot(
@@ -425,6 +459,7 @@ export class BackroomsAudio {
           id,
           position: p,
           score: distance + walls * 7 - (this.fixtures.has(id) ? 0.8 : 0),
+          channel: section.fixtureChannels?.get(p) ?? 0,
         });
       }
     candidates.sort((a, b) => a.score - b.score || a.id.localeCompare(b.id));
@@ -482,7 +517,26 @@ export class BackroomsAudio {
         voice.nodes.push(level);
         osc.start();
       }
-      this.fixtures.set(item.id, { voice, retireAt: null });
+      this.fixtures.set(item.id, {
+        voice,
+        retireAt: null,
+        channel: item.channel,
+        ballast,
+        level: 1,
+      });
+    }
+  }
+
+  /** A failing tube's hum cuts out and strikes back with its light. */
+  setFixtureLevels(levels: ArrayLike<number>) {
+    if (!this.ctx || !this.active) return;
+    const now = this.ctx.currentTime;
+    for (const fixture of this.fixtures.values()) {
+      const level = levels[fixture.channel] ?? 1;
+      // Tube levels are mostly steps; skip tiny sags to keep automation sparse.
+      if (Math.abs(level - fixture.level) < 0.03) continue;
+      fixture.level = level;
+      fixture.ballast.gain.setTargetAtTime(0.94 * level, now, 0.012);
     }
   }
 
@@ -550,6 +604,45 @@ export class BackroomsAudio {
     source.connect(filter).connect(voice.input);
     voice.sources.push(source);
     voice.nodes.push(filter);
+    this.track(voice);
+    source.start();
+  }
+
+  /** Legs pushing through the water; call every frame with horizontal speed. */
+  wade(speed: number, inWater: boolean) {
+    this.wading?.update(this.active && this.volume ? speed : 0, inWater);
+  }
+
+  /**
+   * Condensation falls from the ceiling onto the water near the listener.
+   * Drops sometimes repeat from the same spot, like a slow leak.
+   */
+  private drip(time: number) {
+    let position = this.dripAt;
+    for (let attempt = 0; !position && attempt < 6; attempt++) {
+      const angle = this.rng() * Math.PI * 2, distance = 1.5 + this.rng() * 10;
+      const candidate = {
+        x: this.listener.x + Math.cos(angle) * distance,
+        y: POOL_WATER_Y,
+        z: this.listener.z + Math.sin(angle) * distance,
+      };
+      if (footstepSurfaceAt(this.chunks, candidate) === "water") position = candidate;
+    }
+    const repeat = !!position && this.rng() < 0.3;
+    this.dripAt = repeat ? position : null;
+    this.nextDrip = time + (repeat ? 0.5 + this.rng() * 1.4 : 1.2 + this.rng() * 4.5);
+    if (!position) return;
+    this.onDrip?.(position);
+    if (!this.ctx || !this.volume || this.transients.size >= 12) return;
+    const buffer = this.droplets[Math.floor(this.rng() * this.droplets.length)];
+    if (!buffer) return;
+    const voice = this.spatial(position, 1.2, 2);
+    voice.input.gain.value = 0.16 + this.rng() * 0.1;
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = 0.92 + this.rng() * 0.16;
+    source.connect(voice.input);
+    voice.sources.push(source);
     this.track(voice);
     source.start();
   }
@@ -684,6 +777,9 @@ export class BackroomsAudio {
     this.entityAudio = null;
     this.ambience?.dispose();
     this.ambience = null;
+    this.wading?.dispose();
+    this.wading = null;
+    this.droplets = [];
     this.rooms.clear();
     this.noise = null;
     this.propBuffers.clear();

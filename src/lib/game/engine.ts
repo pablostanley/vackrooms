@@ -20,7 +20,13 @@ import { crushEnvelope, DEATH_HOLD } from "./encounter-effects";
 import { ComputerScreens } from "./computer-screens";
 import { computerFocus, type ComputerStation } from "./computers";
 import { ShadowCache } from "./shadow-cache";
-import { fixturePhase, fixtureStrength } from "./fixture-lighting";
+import {
+  FIXTURE_CHANNELS,
+  applyTubeLevels,
+  fixtureLevel,
+  fixturePhase,
+  fixtureStrength,
+} from "./fixture-lighting";
 import { connectedGamepads, GamepadInput, PAD, type GamepadFrame } from "./gamepad";
 import type { GameSettings } from "./settings";
 
@@ -114,6 +120,8 @@ export class BackroomsEngine {
   private seconds = 0;
   private distance = 0;
   private stepDistance = 0;
+  private wakeDistance = 0;
+  private wakeIdle = 0;
   private stepSide = 1;
   private depth = 0;
   private stress = 0;
@@ -124,6 +132,9 @@ export class BackroomsEngine {
   private flashOn = false;
   private lastStats = 0;
   private lastLights = -10;
+  private fixtureLevels = new Float32Array(FIXTURE_CHANNELS.length).fill(1);
+  private hemisphere = new THREE.HemisphereLight("#fff4cd", "#a39770", 1.15);
+  private ambient = new THREE.AmbientLight("#fff5d6", 0.3);
   private lastChange = 0;
   private drag: { x: number; y: number; id: number } | null = null;
   private touchMove = { x: 0, y: 0 };
@@ -149,6 +160,8 @@ export class BackroomsEngine {
     this.encounters = new Encounters(seed, this.navigation);
     this.encounters.setEnabled(settings.entities);
     this.audio.setVolume(settings.volume);
+    // Heard drips mark the surface where they land.
+    this.audio.onDrip = (p) => this.disturbWater(p.x, p.z, 0.45);
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
     // Hide the outer edge of the bounded resident window, including along the
@@ -156,8 +169,7 @@ export class BackroomsEngine {
     this.scene.fog = new THREE.Fog("#9e9450", 32, SPAN - 1);
     // Ceiling panels dominate; warm carpet bounce still keeps the ceiling
     // readable. Less uniform fill lets the architectural contact shading show.
-    this.scene.add(new THREE.HemisphereLight("#fff4cd", "#a39770", 1.15));
-    this.scene.add(new THREE.AmbientLight("#fff5d6", 0.3));
+    this.scene.add(this.hemisphere, this.ambient);
     // Leave five texture slots for albedo, packed surface detail, the outage
     // mask, Three's BRDF lookup, and contact AO on baseline 16-texture GPUs.
     for (let i = 0; i < 11; i++) {
@@ -664,6 +676,11 @@ export class BackroomsEngine {
     this.lastLights = -10;
     this.lastScreens = -1;
   }
+  private disturbWater(x: number, z: number, strength: number) {
+    // Rings are timed on the render clock, which stops under reduced motion.
+    if (!this.settings.reducedMotion) this.renderer?.disturbWater(x, z, strength);
+  }
+
   private prepareWater(section: Section) {
     if (this.renderer)
       for (const water of section.water)
@@ -672,8 +689,12 @@ export class BackroomsEngine {
   private updateLights() {
     const candidates = [...this.sections.values()]
       .flatMap((s) => [
-        ...s.lights.map((position) => ({ position, lamp: false })),
-        ...s.lampLights.map((position) => ({ position, lamp: true })),
+        ...s.lights.map((position) => ({
+          position,
+          lamp: false,
+          channel: s.fixtureChannels.get(position) ?? 0,
+        })),
+        ...s.lampLights.map((position) => ({ position, lamp: true, channel: 0 })),
       ])
       .sort(
         (a, b) =>
@@ -688,6 +709,7 @@ export class BackroomsEngine {
       light.visible = !!p;
       if (p) {
         light.userData.lamp = p.lamp;
+        light.userData.channel = p.channel;
         light.userData.strength = fixtureStrength(
           p.position.distanceTo(this.position),
           nextDistance,
@@ -730,11 +752,27 @@ export class BackroomsEngine {
     }) !== "water") {
       this.audio.enterWater(this.position);
       this.stepDistance = 0;
+      // Jumping in throws a bigger ring than wading down the steps.
+      this.disturbWater(this.position.x, this.position.z, 1.4 + Math.min(Math.max(previousY - this.position.y, 0) * 20, 1.4));
     }
     const moved = Math.hypot(
       this.position.x - previousX,
       this.position.z - previousZ,
     );
+    this.audio.wade(moved / Math.max(dt, 0.001), inWater);
+    if (inWater) {
+      // A trailing wake while moving; small sway rings while standing.
+      this.wakeDistance += moved;
+      this.wakeIdle += dt;
+      if (this.wakeDistance > 0.32) {
+        this.wakeDistance = 0;
+        this.wakeIdle = 0;
+        this.disturbWater(this.position.x, this.position.z, running ? 1.1 : 0.75);
+      } else if (this.wakeIdle > 1.7) {
+        this.wakeIdle = 0;
+        this.disturbWater(this.position.x, this.position.z, 0.25);
+      }
+    }
     this.playerSpeed = moved / Math.max(dt, 0.001);
     this.distance += moved;
     const grounded = this.motor?.grounded ?? false;
@@ -1142,8 +1180,27 @@ export class BackroomsEngine {
         this.updateLights();
         this.lastLights = this.elapsed;
       }
+      // Tired and failing tubes: panels, their spotlights, and their ballast hum
+      // all follow the same channel. Reduced motion holds each at its level.
+      for (let c = 1; c < this.fixtureLevels.length; c++)
+        this.fixtureLevels[c] = fixtureLevel(c, this.elapsed, this.settings.reducedMotion);
+      for (const section of this.sections.values())
+        if (section.tubes) applyTubeLevels(section.tubes, this.fixtureLevels);
+      this.audio.setFixtureLevels(this.fixtureLevels);
+      let nearby = 0,
+        failing = 0;
       for (let i = 0; i < this.lights.length; i++) {
         const light = this.lights[i];
+        const level = this.fixtureLevels[light.userData.channel ?? 0];
+        if (light.visible && !light.userData.lamp) {
+          const d = Math.hypot(
+            light.position.x - this.position.x,
+            light.position.z - this.position.z,
+          );
+          const weight = (light.userData.strength ?? 0) * Math.exp(-((d / 5) ** 2));
+          nearby += weight;
+          failing += weight * (1 - level);
+        }
         const jitter = this.settings.reducedMotion
           ? 0
           : Math.sin(this.elapsed * 8 + (light.userData.phase ?? 0)) * 0.012;
@@ -1155,8 +1212,13 @@ export class BackroomsEngine {
         const intensity = light.userData.lamp
           ? 9
           : 28 * heightCompensation * (1 + jitter);
-        light.intensity = intensity * (light.userData.strength ?? 0);
+        light.intensity = intensity * (light.userData.strength ?? 0) * level;
       }
+      // Fill light stands in for bounce from the tubes overhead, so it sags
+      // when the fixtures around the player dim or drop out.
+      const fill = 1 - 0.6 * (failing / Math.max(nearby, 1));
+      this.hemisphere.intensity = 1.15 * fill;
+      this.ambient.intensity = 0.3 * fill;
       this.flashlight.position.copy(this.camera.position);
       this.flashlight.target.position
         .set(0, 0, -1)

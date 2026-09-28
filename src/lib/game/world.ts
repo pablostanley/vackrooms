@@ -23,6 +23,7 @@ import { furnitureCollisionParts } from "./furniture-collision";
 import { buildLandmark } from "./landmarks";
 import { wallContactShadowGeometry } from "./wall-contact-shadow";
 import { planRoomLighting } from "./room-lighting";
+import { markTubePanel, pickFixtureChannel } from "./fixture-lighting";
 import type { Materials } from "./materials";
 import { configureSurfaceSampling, projectSurfaceUVs } from "./surface-textures";
 import type { ShapedObstacle } from "./physics";
@@ -53,6 +54,10 @@ export interface Portal {
 export interface Section {
   group: THREE.Group;
   lights: THREE.Vector3[];
+  /** Tube behavior per ceiling fixture; unlisted lights are steady. */
+  fixtureChannels: Map<THREE.Vector3, number>;
+  /** Merged dim and failing panels, if any; vertex colors hold tube levels. */
+  tubes: THREE.BufferGeometry | null;
   lampLights: THREE.Vector3[];
   portals: Portal[];
   colliders: THREE.Box3[];
@@ -440,6 +445,9 @@ export function buildSection(
     }
   }
   let madePortal = false;
+  // Own stream, so tube faults never shift the layout drawn from `rng`.
+  const tubeRng = random(data.seed + 60521);
+  const fixtureChannels = new Map<THREE.Vector3, number>();
   for (let cz = 0; cz < CHUNK; cz++)
     for (let cx = 0; cx < CHUNK; cx++) {
       const x = (cx + 0.5) * CELL,
@@ -489,6 +497,15 @@ export function buildSection(
       const lit = lighting.cells.has(at)
         ? lighting.fixtures.has(at)
         : normallyLit;
+      const tubeRoll = tubeRng(),
+        tubePick = tubeRng();
+      // The opening run, Level Fun, and open-sky courtyards keep steady tubes.
+      const channel =
+        !lit ||
+        (data.x === 0 && data.z === 0 && cx === 2) ||
+        (landmark && (courtyard || data.landmark.kind === "levelFun"))
+          ? 0
+          : pickFixtureChannel(tubeRoll, tubePick, lighting.cells.has(at));
       // Recessed lay-in troffer: a thin painted rim flush with the tile grid
       // and the lens just below it, rather than a surface-mounted box.
       box(
@@ -506,10 +523,15 @@ export function buildSection(
         x,
         fixtureHeight - 0.026,
         z,
-        lit ? mats.luminous : mats.deadLight,
+        !lit ? mats.deadLight : channel ? mats.tubePanel : mats.luminous,
         Math.PI / 2,
       );
-      if (lit) lights.push(new THREE.Vector3(x + ox, fixtureHeight - 0.19, z + oz));
+      if (channel) markTubePanel(batches.get(mats.tubePanel)!.at(-1)!, channel);
+      if (lit) {
+        const light = new THREE.Vector3(x + ox, fixtureHeight - 0.19, z + oz);
+        lights.push(light);
+        if (channel) fixtureChannels.set(light, channel);
+      }
       // Landmarks have authored empty space and perimeter details of their own.
       if (landmark) continue;
       const isSpawn = data.x === 0 && data.z === 0 && cx === 2 && cz >= 1;
@@ -863,6 +885,7 @@ export function buildSection(
     : null;
   const ambientMap = ambientLease?.texture;
   const ownedMaterials: THREE.Material[] = [];
+  let tubes: THREE.BufferGeometry | null = null;
   for (const [material, geometries] of batches) {
     const merged = mergeGeometries(geometries);
     if (merged) {
@@ -886,9 +909,11 @@ export function buildSection(
       mesh.receiveShadow = true;
       mesh.castShadow =
         material !== mats.luminous &&
+        material !== mats.tubePanel &&
         material !== mats.lampGlow &&
         material !== mats.shadow;
       group.add(mesh);
+      if (material === mats.tubePanel) tubes = merged;
     }
     geometries.forEach((g) => g.dispose());
   }
@@ -914,6 +939,8 @@ export function buildSection(
   return {
     group,
     lights,
+    fixtureChannels,
+    tubes,
     lampLights,
     portals,
     colliders,

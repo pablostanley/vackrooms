@@ -183,6 +183,10 @@ export function createMaterials() {
     // on camera; the excess feeds the lens bloom rather than tinting the lens.
     color: new THREE.Color(2.5, 2.35, 1.45),
   });
+  // Tired and failing tubes share one batch per section. Their vertex colors
+  // carry each tube's current brightness, rewritten by the engine per frame.
+  const tubePanel = luminous.clone();
+  tubePanel.vertexColors = true;
   const deadLight = new THREE.MeshStandardMaterial({
     color: "#b2ad78",
     roughness: 0.8,
@@ -384,6 +388,7 @@ export function createMaterials() {
     fixtures,
     troffer,
     luminous,
+    tubePanel,
     lampGlow,
     deadLight,
     shadow,
@@ -438,6 +443,7 @@ export function createMaterials() {
         fixtures,
         troffer,
         luminous,
+        tubePanel,
         lampGlow,
         deadLight,
         shadow,
