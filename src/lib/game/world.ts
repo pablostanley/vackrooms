@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { OBB } from "three/addons/math/OBB.js";
 import {
   CELL,
   CHUNK,
@@ -35,15 +36,19 @@ import {
 import { COMPUTER_HOMES, type ComputerStation } from "./computers";
 import {
   chairKinds,
+  furnitureVariants,
   isChairKind,
   type ChairKind,
   type FurnitureKind,
+  type FurnitureModel,
 } from "./furniture-models";
 import {
   anchorPose,
   chairStack,
   chairStackStyles,
   leavesPassagesClear,
+  partSolids,
+  solidsOverlap,
 } from "./furniture-layout";
 
 export interface Portal {
@@ -93,9 +98,39 @@ export function buildSection(
   const furnished = new Set<number>();
   const propRecords: {
     kind: FurnitureKind;
+    variant: number;
+    pose: THREE.Matrix4;
     attachment: string;
     bounds: THREE.Box3;
   }[] = [];
+  // Every placed solid in section space. Later pieces are tested against it,
+  // so furniture, pillars and shelving never pass through one another.
+  const occupied: { bounds: THREE.Box3; solids: OBB[] }[] = [];
+  function occupy(bounds: THREE.Box3, solids = [new OBB().fromBox3(bounds)]) {
+    occupied.push({ bounds, solids });
+  }
+  function fits(source: FurnitureModel, pose: THREE.Matrix4, clearance = 0.03) {
+    const bounds = source.bounds.clone().applyMatrix4(pose).expandByScalar(clearance);
+    const nearby = occupied.filter((other) => other.bounds.intersectsBox(bounds));
+    if (!nearby.length) return true;
+    const solids = partSolids(source, pose);
+    for (const solid of solids) solid.halfSize.addScalar(clearance);
+    return !nearby.some((other) => solidsOverlap(solids, other.solids, 0));
+  }
+  function vacant(bounds: THREE.Box3) {
+    const solid = [new OBB().fromBox3(bounds)];
+    return !occupied.some((other) =>
+      other.bounds.intersectsBox(bounds) && solidsOverlap(solid, other.solids, 0));
+  }
+  /** Keep a free-standing piece inside its own room, clear of the walls. */
+  function insideCell(bounds: THREE.Box3, cx: number, cz: number, margin = 0.12) {
+    return (
+      bounds.min.x >= cx * CELL + margin &&
+      bounds.max.x <= (cx + 1) * CELL - margin &&
+      bounds.min.z >= cz * CELL + margin &&
+      bounds.max.z <= (cz + 1) * CELL - margin
+    );
+  }
   group.userData.furniture = propRecords;
   const matrix = new THREE.Matrix4(),
     quaternion = new THREE.Quaternion();
@@ -195,16 +230,18 @@ export function buildSection(
       );
     }
   }
-  function model(kind: FurnitureKind, lampOn = false) {
-    return mats.furniture.get(kind, lampOn);
+  function model(kind: FurnitureKind, lampOn = false, variant = 0) {
+    return mats.furniture.get(kind, lampOn, variant);
   }
   function furniture(
     kind: FurnitureKind,
     pose: THREE.Matrix4,
     attachment = "floor",
     lampOn = false,
+    variant = 0,
   ) {
-    const source = model(kind, lampOn);
+    const source = model(kind, lampOn, variant);
+    occupy(source.bounds.clone().applyMatrix4(pose), partSolids(source, pose));
     if (lampOn)
       lampLights.push(
         new THREE.Vector3(0, 1.4, 0)
@@ -251,7 +288,7 @@ export function buildSection(
       geometries.forEach((geometry) => geometry.dispose());
     }
     const bounds = source.bounds.clone().applyMatrix4(pose);
-    propRecords.push({ kind, attachment, bounds: bounds.clone() });
+    propRecords.push({ kind, variant, pose: pose.clone(), attachment, bounds: bounds.clone() });
     if (movable) {
       const obstacle: ShapedObstacle = {
         bounds: worldBounds,
@@ -288,20 +325,73 @@ export function buildSection(
         colliders.push(solid.translate(new THREE.Vector3(ox, 0, oz)));
     }
   }
+  /** A free-standing chair, placed only where it touches nothing else. */
   function chair(
     x: number,
     z: number,
     angle: number,
     kind: ChairKind = "chair",
+    variant = 0,
+    cx = Math.floor(x / CELL),
+    cz = Math.floor(z / CELL),
   ) {
-    furniture(
-      kind,
-      anchorPose(
-        new THREE.Vector3(),
-        new THREE.Vector3(x, -model(kind).bounds.min.y, z),
-        new THREE.Euler(0, angle, 0),
-      ),
+    const source = model(kind, false, variant);
+    const pose = anchorPose(
+      new THREE.Vector3(),
+      new THREE.Vector3(x, -source.bounds.min.y, z),
+      new THREE.Euler(0, angle, 0),
     );
+    const bounds = source.bounds.clone().applyMatrix4(pose);
+    if (
+      !insideCell(bounds, cx, cz) ||
+      !leavesPassagesClear(bounds, cx, cz, data.cells[cz * CHUNK + cx]) ||
+      !fits(source, pose)
+    )
+      return false;
+    furniture(kind, pose, "floor", false, variant);
+    return true;
+  }
+  /** Pull a few matching chairs up to a free-standing table. */
+  function seatTable(
+    table: FurnitureModel,
+    pose: THREE.Matrix4,
+    cx: number,
+    cz: number,
+  ) {
+    const kind = (["chair", "chair", "foldingChair", "plasticChair"] as const)[
+      Math.floor(furnitureRng() * 4)
+    ];
+    const variant = Math.floor(furnitureRng() * furnitureVariants);
+    const size = table.bounds.getSize(new THREE.Vector3());
+    const round = Math.abs(size.x - size.z) < 0.05;
+    const center = table.bounds.getCenter(new THREE.Vector3()).applyMatrix4(pose);
+    const tableYaw = new THREE.Euler().setFromRotationMatrix(pose).y;
+    // Seats around the table: angle, distance to its edge, and offset along it.
+    const sides: [number, number, number][] = round
+      ? [0, 1, 2].map((i) => [furnitureRng() * 0.4 + (i * Math.PI * 2) / 3, size.x / 2, 0])
+      : [
+          [0, size.z / 2, -size.x / 4], [0, size.z / 2, size.x / 4],
+          [Math.PI, size.z / 2, -size.x / 4], [Math.PI, size.z / 2, size.x / 4],
+          [Math.PI / 2, size.x / 2, 0], [-Math.PI / 2, size.x / 2, 0],
+        ];
+    let seated = 0;
+    const wanted = 2 + Math.floor(furnitureRng() * 3);
+    for (const [angle, reach, along] of sides) {
+      if (seated >= wanted || furnitureRng() < 0.2) continue;
+      const yaw = tableYaw + angle;
+      // Some chairs are tucked under the top, others pushed back and askew.
+      for (const pull of [0.1 + furnitureRng() * 0.25, 0.42]) {
+        const distance = reach + pull;
+        const local = new THREE.Vector3(along, 0, -distance).applyAxisAngle(
+          new THREE.Vector3(0, 1, 0), yaw,
+        );
+        if (chair(center.x + local.x, center.z + local.z,
+          yaw + Math.PI + (furnitureRng() - 0.5) * 0.35, kind, variant, cx, cz)) {
+          seated++;
+          break;
+        }
+      }
+    }
   }
   function scatterFurniture(
     kind: FurnitureKind,
@@ -309,8 +399,9 @@ export function buildSection(
     cz: number,
     mode: "floor" | "wall" | "ceiling",
     lampOn = false,
+    variant = Math.floor(furnitureRng() * furnitureVariants),
   ) {
-    const source = model(kind, lampOn),
+    const source = model(kind, lampOn, variant),
       bits = data.cells[cz * CHUNK + cx];
     const x = (cx + 0.5) * CELL,
       z = (cz + 0.5) * CELL;
@@ -361,6 +452,8 @@ export function buildSection(
           ),
         );
       } else {
+        // A slight, seeded misalignment keeps rooms from looking stamped out.
+        if (kind !== "slide") yaw += (furnitureRng() - 0.5) * 0.1;
         pose = anchorPose(
           new THREE.Vector3(),
           new THREE.Vector3(),
@@ -381,20 +474,32 @@ export function buildSection(
         else if (wallBit === W) target.x = cx * CELL + 0.2 - box.min.x;
         else if (wallBit === E) target.x = (cx + 1) * CELL - 0.2 - box.max.x;
         else {
-          target.x += attempt % 2 ? -1.75 : 1.75;
-          target.z += attempt % 3 ? -1.75 : 1.75;
+          target.x += (attempt % 2 ? -1 : 1) * (1.45 + furnitureRng() * 0.45);
+          target.z += (attempt % 3 ? -1 : 1) * (1.45 + furnitureRng() * 0.45);
+        }
+        // Slide along the wall, anywhere the piece still fits in the room.
+        const along = wallBit === N || wallBit === S ? "x" : "z";
+        if (wallBit) {
+          const span = box.max[along] - box.min[along];
+          const slack = Math.max(0, CELL - 0.7 - span) / 2;
+          target[along] += (furnitureRng() * 2 - 1) * slack;
         }
         pose.setPosition(target);
       }
       const bounds = source.bounds.clone().applyMatrix4(pose);
-      if (leavesPassagesClear(bounds, cx, cz, bits)) {
+      if (
+        leavesPassagesClear(bounds, cx, cz, bits) &&
+        fits(source, pose, mode === "floor" ? 0.03 : 0)
+      ) {
         furniture(
           kind,
           pose,
           mode === "wall" && !wallBit ? "floor" : mode,
           lampOn,
+          variant,
         );
         furnished.add(cz * CHUNK + cx);
+        if (kind === "table" && mode === "floor") seatTable(source, pose, cx, cz);
         return true;
       }
     }
@@ -536,9 +641,17 @@ export function buildSection(
       if (landmark) continue;
       const isSpawn = data.x === 0 && data.z === 0 && cx === 2 && cz >= 1;
       // Pillars break up open rooms without sealing a passage.
-      if (bits === 15 && rng() < 0.38 && !isSpawn && !furnished.has(at)) {
+      const pillar = new THREE.Box3(
+        new THREE.Vector3(x + 1.29, 0, z + 1.29),
+        new THREE.Vector3(x + 1.91, HEIGHT, z + 1.91),
+      );
+      if (
+        bits === 15 && rng() < 0.38 && !isSpawn && !furnished.has(at) &&
+        vacant(pillar)
+      ) {
         box(0.57, HEIGHT, 0.57, x + 1.6, HEIGHT / 2, z + 1.6, theme.wall);
         box(0.62, 0.12, 0.62, x + 1.6, 0.06, z + 1.6, mats.trim);
+        occupy(pillar);
         colliders.push(
           new THREE.Box3(
             new THREE.Vector3(ox + x + 1.315, 0, oz + z + 1.315),
@@ -554,6 +667,16 @@ export function buildSection(
         const yaw = chairRng() * Math.PI * 2;
         const arrangement = chairRng();
         const kind = chairKinds[Math.floor(chairRng() * chairKinds.length)];
+        const variant = Math.floor(chairRng() * furnitureVariants);
+        // Chairs gather in one of the room's four quarters, never on a grid.
+        const quarter = Math.floor(chairRng() * 4);
+        const spot = (turn: number): [number, number] => {
+          const q = (quarter + turn) % 4;
+          return [
+            x + (q % 2 ? -1 : 1) * (1.2 + chairRng() * 0.45),
+            z + (q < 2 ? 1 : -1) * (1.2 + chairRng() * 0.45),
+          ];
+        };
         if (arrangement < 0.14) {
           if (
             !scatterFurniture(
@@ -561,11 +684,14 @@ export function buildSection(
               cx,
               cz,
               chairRng() < 0.8 ? "wall" : "ceiling",
+              false,
+              variant,
             )
           )
-            scatterFurniture(kind, cx, cz, "floor");
+            scatterFurniture(kind, cx, cz, "floor", false, variant);
         } else if (arrangement < 0.29) {
           // Only the wooden model has the seat/leg contract used by the piles.
+          const source = model("chair", false, variant);
           const style =
             chairStackStyles[Math.floor(chairRng() * chairStackStyles.length)];
           // Sometimes two short piles replace the single tall tower.
@@ -573,28 +699,59 @@ export function buildSection(
           const count = paired
             ? 2 + Math.floor(chairRng() * 2)
             : 3 + Math.floor(chairRng() * 3);
-          const poses = chairStack(x + 1.4, z + 1.4, yaw, count, chairRng, style);
-          if (paired)
+          const poses = chairStack(source.chair!, ...spot(0), yaw, count, chairRng, style);
+          const bases = [0];
+          if (paired) {
+            bases.push(poses.length);
             poses.push(...chairStack(
-              x - 1.4, z - 1.4, yaw + Math.PI / 2, count, chairRng, style,
+              source.chair!, ...spot(2), yaw + Math.PI / 2, count, chairRng, style,
             ));
+          }
           // Check each pile's solids, preserving the walking lane between them.
-          if (poses.every((pose) => leavesPassagesClear(
-            model("chair").bounds.clone().applyMatrix4(pose), cx, cz, bits,
-          )))
+          if (poses.every((pose) => {
+            const bounds = source.bounds.clone().applyMatrix4(pose);
+            return insideCell(bounds, cx, cz) &&
+              leavesPassagesClear(bounds, cx, cz, bits) &&
+              fits(source, pose);
+          }))
             poses.forEach((pose, index) => furniture(
               "chair", pose,
-              index === 0 || (paired && index === count) ? "floor" : "chair",
+              bases.includes(index) ? "floor" : "chair",
+              false, variant,
             ));
-          else chair(x + 1.4, z + 1.4, yaw, kind);
+          else
+            for (let turn = 0; turn < 4; turn++)
+              if (chair(...spot(turn), yaw, kind, variant, cx, cz)) break;
         } else {
-          chair(x + 1.4, z + 1.4, yaw, kind);
-          if (arrangement < 0.57)
-            chair(x + 1.4, z - 1.4, yaw + 0.3 + chairRng() * 0.7, kind);
+          let placed: [number, number] | null = null;
+          for (let turn = 0; turn < 4 && !placed; turn++) {
+            const candidate = spot(turn);
+            if (chair(...candidate, yaw, kind, variant, cx, cz)) placed = candidate;
+          }
+          if (placed && arrangement < 0.57) {
+            // A second chair either sits beside the first or faces it.
+            const facing = chairRng() < 0.4;
+            const offset = facing
+              ? new THREE.Vector3(0, 0, -1.15)
+              : new THREE.Vector3(chairRng() < 0.5 ? 0.62 : -0.62, 0, 0.04);
+            offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            chair(
+              placed[0] + offset.x, placed[1] + offset.z,
+              yaw + (facing ? Math.PI : 0) + (chairRng() - 0.5) * 0.5,
+              kind, variant, cx, cz,
+            );
+          }
         }
         furnished.add(at);
       }
-      if (!isSpawn && !furnished.has(at) && rng() < 0.075 && !(bits & N)) {
+      const shelving = new THREE.Box3(
+        new THREE.Vector3(x - 0.57, 0, cz * CELL + 0.1),
+        new THREE.Vector3(x + 0.57, 1.3, cz * CELL + 0.68),
+      );
+      if (
+        !isSpawn && !furnished.has(at) && rng() < 0.075 && !(bits & N) &&
+        vacant(shelving)
+      ) {
         box(1.1, 1.3, 0.48, x, 0.65, cz * CELL + 0.36, mats.metal);
         for (let i = 0; i < 4; i++) {
           box(
@@ -622,6 +779,7 @@ export function buildSection(
             new THREE.Vector3(ox + x + 0.57, 1.3, oz + cz * CELL + 0.65),
           ),
         );
+        occupy(shelving);
       }
       if (rng() < 0.08) {
         plane(
@@ -752,7 +910,8 @@ export function buildSection(
       if (side === E) target.x = (cx + 1) * CELL - 0.24 - local.max.x;
       pose.setPosition(target);
       const bounds = source.bounds.clone().applyMatrix4(pose);
-      if (!leavesPassagesClear(bounds, cx, cz, bits)) continue;
+      if (!leavesPassagesClear(bounds, cx, cz, bits) || !fits(source, pose, 0.08))
+        continue;
       const worldBounds = bounds
         .clone()
         .translate(new THREE.Vector3(ox, 0, oz))
@@ -843,7 +1002,8 @@ export function buildSection(
   }
   // One solitary chair in the opening vista makes scale immediately familiar.
   if (data.x === 0 && data.z === 0)
-    chair(CELL * 3.5 + 1.4, CELL * 2.5 + 1.4, 0.5);
+    for (const [dx, dz] of [[1.4, 1.4], [-1.4, 1.4], [1.4, -1.4], [-1.4, -1.4]])
+      if (chair(CELL * 3.5 + dx, CELL * 2.5 + dz, 0.5)) break;
   const discovery = planDiscovery(data, available, furnished, colliders);
   group.userData.discoveries = discovery ? [discovery] : [];
   if (discovery) {

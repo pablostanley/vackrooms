@@ -7,13 +7,14 @@ import {
   chairStack,
   chairStackStyles,
   leavesPassagesClear,
+  maxChairPile,
+  partSolids,
+  solidsOverlap,
 } from "../src/lib/game/furniture-layout";
-import { CELL, N, E, S, W, directions, random } from "../src/lib/game/maze";
+import { createFurniture, furnitureVariants } from "../src/lib/game/furniture-models";
+import { CELL, HEIGHT, N, E, S, W, directions, random } from "../src/lib/game/maze";
+import { headlessMaterials } from "./helpers/materials";
 
-// Exact chair solids, rather than a whole-chair bound that includes empty air.
-const seatCenter = new Vector3(0, 0.45, 0);
-const seatSize = new Vector3(0.48, 0.065, 0.48);
-const legSize = new Vector3(0.045, 0.46, 0.045);
 function orientedBox(center: Vector3, size: Vector3, pose: Matrix4) {
   const scale = new Vector3().setFromMatrixScale(pose);
   const rotation = new Matrix3().setFromMatrix4(
@@ -30,63 +31,123 @@ function boxAt(center: Vector3, size: Vector3) {
   return new Box3().setFromCenterAndSize(center, size);
 }
 
-test("every upper chair leg intersects the previous seat under seeded rotations", () => {
-  for (const style of chairStackStyles) {
-    for (let seed = 0; seed < 48; seed++) {
-      for (const count of [2, 4, 6]) {
-        const poses = chairStack(-13.4, 7.9, seed * 0.71, count, random(seed), style);
-        assert.equal(poses.length, count);
-        for (let i = 1; i < poses.length; i++) {
-          const lowerSeat = orientedBox(seatCenter, seatSize, poses[i - 1]);
-          const upperLeg = orientedBox(
-            new Vector3(0.19, 0.23, 0.19),
-            legSize,
-            poses[i],
-          );
-          assert.ok(
-            lowerSeat.intersectsOBB(upperLeg),
-            `chair ${i} floats above its support for seed ${seed}, count ${count}`,
-          );
+function chairs() {
+  const mats = headlessMaterials();
+  const models = Array.from({ length: furnitureVariants }, (_, variant) =>
+    createFurniture("chair", mats, false, variant));
+  return { mats, models };
+}
+
+test("piled chairs rest on each other without any solids passing through", () => {
+  const { mats, models } = chairs();
+  try {
+    for (const model of models) {
+      const frame = model.chair!;
+      for (const style of chairStackStyles) {
+        for (let seed = 0; seed < 40; seed++) {
+          const poses = chairStack(frame, -13.4, 7.9, seed * 0.71, 6, random(seed), style);
+          const solids = poses.map((pose) => partSolids(model, pose));
+          for (let i = 0; i < solids.length; i++)
+            for (let j = i + 1; j < solids.length; j++)
+              assert.ok(
+                !solidsOverlap(solids[i], solids[j]),
+                `chairs ${i} and ${j} interpenetrate for ${style} seed ${seed}`,
+              );
+          for (let i = 1; i < solids.length; i++) {
+            const touching = solids[i].map((solid) => new OBB(
+              solid.center, solid.halfSize.clone().addScalar(0.003), solid.rotation,
+            ));
+            assert.ok(
+              touching.some((a) => solids[i - 1].some((b) => a.intersectsOBB(b))),
+              `chair ${i} floats above its support for ${style} seed ${seed}`,
+            );
+          }
+          const top = Math.max(...poses.map((pose) =>
+            model.bounds.clone().applyMatrix4(pose).max.y));
+          assert.ok(top < HEIGHT - 0.05, `pile clears the ceiling: ${top}`);
         }
       }
     }
+  } finally {
+    models.forEach((model) => model.parts.forEach(({ geometry }) => geometry.dispose()));
+    mats.dispose();
+  }
+});
+
+test("the overlap test is not vacuous: sinking a piled chair is caught", () => {
+  const { mats, models } = chairs();
+  try {
+    const model = models[0];
+    const [base, upper] = chairStack(model.chair!, 0, 0, 0.4, 2, random(3), "aligned");
+    const sunk = upper.clone().premultiply(new Matrix4().makeTranslation(0, -0.03, 0));
+    assert.ok(!solidsOverlap(partSolids(model, base), partSolids(model, upper)));
+    assert.ok(solidsOverlap(partSolids(model, base), partSolids(model, sunk)));
+  } finally {
+    models.forEach((model) => model.parts.forEach(({ geometry }) => geometry.dispose()));
+    mats.dispose();
   }
 });
 
 test("all four base-chair legs rest on the floor at arbitrary placement and yaw", () => {
-  for (const [x, z, yaw] of [
-    [0, 0, 0],
-    [-17.3, -8.9, 0.84],
-    [22.1, -40.7, Math.PI],
-    [-0.2, 3.4, Math.PI * 1.7],
-  ]) {
-    const [base] = chairStack(x, z, yaw, 4, random(18));
-    for (const lx of [-0.19, 0.19]) {
-      for (const lz of [-0.19, 0.19]) {
-        const bottom = new Vector3(lx, 0, lz).applyMatrix4(base);
-        assert.ok(Math.abs(bottom.y) < 1e-10);
-        assert.ok(Math.hypot(bottom.x - x, bottom.z - z) < 0.28);
+  const { mats, models } = chairs();
+  try {
+    for (const model of models) {
+      const { legInset } = model.chair!;
+      for (const [x, z, yaw] of [
+        [0, 0, 0],
+        [-17.3, -8.9, 0.84],
+        [22.1, -40.7, Math.PI],
+        [-0.2, 3.4, Math.PI * 1.7],
+      ]) {
+        const [base] = chairStack(model.chair!, x, z, yaw, 4, random(18));
+        for (const lx of [-legInset, legInset]) {
+          for (const lz of [-legInset, legInset]) {
+            const bottom = new Vector3(lx, 0, lz).applyMatrix4(base);
+            assert.ok(Math.abs(bottom.y) < 1e-10);
+            assert.ok(Math.hypot(bottom.x - x, bottom.z - z) < 0.28);
+          }
+        }
+        assert.ok(Math.abs(model.bounds.clone().applyMatrix4(base).min.y) < 1e-6);
       }
     }
+  } finally {
+    models.forEach((model) => model.parts.forEach(({ geometry }) => geometry.dispose()));
+    mats.dispose();
   }
 });
 
-test("the same tape produces the same stack while other seeds vary the pile", () => {
-  const poseValues = (seed: number) =>
-    chairStack(2.4, -12, 0.5, 5, random(seed)).map((pose) => pose.elements);
-  assert.deepEqual(poseValues(199307), poseValues(199307));
-  assert.notDeepEqual(poseValues(199307).slice(1), poseValues(199308).slice(1));
+test("the same tape produces the same pile while other seeds vary it", () => {
+  const { mats, models } = chairs();
+  try {
+    const frame = models[0].chair!;
+    const poseValues = (seed: number) =>
+      chairStack(frame, 2.4, -12, 0.5, 5, random(seed)).map((pose) => pose.elements);
+    assert.deepEqual(poseValues(199307), poseValues(199307));
+    const piles = new Set<string>();
+    for (let seed = 0; seed < 12; seed++) piles.add(JSON.stringify(poseValues(seed)));
+    assert.ok(piles.size > 3, "crooked piles vary with the tape");
+    assert.ok(maxChairPile(frame) >= 5);
+  } finally {
+    models.forEach((model) => model.parts.forEach(({ geometry }) => geometry.dispose()));
+    mats.dispose();
+  }
 });
 
-test("stack styles have distinct silhouettes and reproduce from the same tape", () => {
-  const silhouettes = new Set<string>();
-  for (const style of chairStackStyles) {
-    const snapshot = () => chairStack(0, 0, 0, 5, random(42), style)
-      .map((pose) => pose.elements);
-    assert.deepEqual(snapshot(), snapshot());
-    silhouettes.add(JSON.stringify(snapshot()));
+test("pile styles have distinct silhouettes and reproduce from the same tape", () => {
+  const { mats, models } = chairs();
+  try {
+    const silhouettes = new Set<string>();
+    for (const style of chairStackStyles) {
+      const snapshot = () => chairStack(models[1].chair!, 0, 0, 0, 5, random(42), style)
+        .map((pose) => pose.elements);
+      assert.deepEqual(snapshot(), snapshot());
+      silhouettes.add(JSON.stringify(snapshot()));
+    }
+    assert.equal(silhouettes.size, chairStackStyles.length);
+  } finally {
+    models.forEach((model) => model.parts.forEach(({ geometry }) => geometry.dispose()));
+    mats.dispose();
   }
-  assert.equal(silhouettes.size, chairStackStyles.length);
 });
 
 test("rotated and scaled furniture remains attached to a solid wall", () => {

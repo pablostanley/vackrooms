@@ -5,6 +5,7 @@ import { buildSection, type Section } from "../src/lib/game/world";
 import {
   CELL,
   CHUNK,
+  HEIGHT,
   N,
   E,
   S,
@@ -19,6 +20,8 @@ import {
   type FurnitureKind,
 } from "../src/lib/game/furniture-models";
 import { isComputerKind } from "../src/lib/game/computer-models";
+import { partSolids, solidsOverlap } from "../src/lib/game/furniture-layout";
+import { OBB } from "three/addons/math/OBB.js";
 
 interface Placement {
   kind: FurnitureKind;
@@ -324,4 +327,61 @@ test("furniture batches merge valid indexed geometry and release it after use", 
       disposed.has(geometry.uuid),
       "section disposal releases each visible mesh",
     );
+});
+
+test("placed furniture never passes through other furniture, pillars or shelving", () => {
+  const mats = headlessMaterials();
+  let checked = 0, tableChairs = 0;
+  const designs = new Map<FurnitureKind, Set<number>>();
+  try {
+    for (const [x, z, seed, depth, generation] of [
+      [0, 0, 48, 0, 2], [-1, 0, 2, 2, 2], [2, -3, 199307, 5, 2], [-4, 2, 882731, 3, 1],
+      [3, 1, 14, 1, 2], [-2, -2, 91, 4, 2], [1, 5, 7, 0, 1], [5, -1, 3301, 2, 2],
+    ] as const) {
+      const section = buildSection(generateChunk(x, z, seed, depth, generation), mats, depth);
+      try {
+        const props = section.group.userData.furniture as (Placement & {
+          variant: number; pose: THREE.Matrix4;
+        })[];
+        const solids = props.map((prop) =>
+          partSolids(mats.furniture.get(prop.kind, false, prop.variant), prop.pose));
+        const offset = new THREE.Vector3(-x * CELL * CHUNK, 0, -z * CELL * CHUNK);
+        // Pillars and wall shelving are authored boxes, not furniture records.
+        const fixtures = section.colliders
+          .map((bounds) => bounds.clone().translate(offset))
+          .filter((bounds) => {
+            const size = bounds.getSize(new THREE.Vector3());
+            return (Math.abs(size.x - 0.57) < 0.01 && Math.abs(size.z - 0.57) < 0.01 &&
+                Math.abs(size.y - HEIGHT) < 0.01) ||
+              (Math.abs(size.x - 1.14) < 0.01 && Math.abs(size.y - 1.3) < 0.01 &&
+                Math.abs(size.z - 0.55) < 0.01);
+          })
+          .map((bounds) => new OBB().fromBox3(bounds));
+        props.forEach((prop, i) => {
+          if (!designs.has(prop.kind)) designs.set(prop.kind, new Set());
+          designs.get(prop.kind)!.add(prop.variant);
+          assert.ok(!solidsOverlap(solids[i], fixtures), `${prop.kind} clips a fixture`);
+          for (let j = i + 1; j < props.length; j++) {
+            if (!prop.bounds.intersectsBox(props[j].bounds)) continue;
+            assert.ok(
+              !solidsOverlap(solids[i], solids[j]),
+              `${prop.kind}:${prop.attachment} passes through ${props[j].kind}:${props[j].attachment}`,
+            );
+          }
+          checked++;
+        });
+        for (const table of props.filter((prop) => prop.kind === "table" && prop.attachment === "floor"))
+          tableChairs += props.filter((prop) => isChairKind(prop.kind) &&
+            prop.bounds.distanceToPoint(table.bounds.getCenter(new THREE.Vector3())) < 1.2).length;
+      } finally {
+        section.dispose();
+      }
+    }
+    assert.ok(checked > 150, `checked ${checked} placements`);
+    assert.ok(tableChairs > 0, "free-standing tables gather chairs");
+    const varied = [...designs].filter(([kind, set]) => !isComputerKind(kind) && set.size > 1);
+    assert.ok(varied.length >= 8, "repeated kinds appear in several generated designs");
+  } finally {
+    mats.dispose();
+  }
 });
