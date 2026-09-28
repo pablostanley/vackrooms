@@ -3,7 +3,8 @@ import { PointerLockControls } from "three/addons/controls/PointerLockControls.j
 import { CharacterMotor } from "./physics";
 import { updateResidentSections } from "./resident-sections";
 import { BackroomsAudio } from "./audio";
-import { footstepSurfaceAt } from "./acoustics";
+import { footstepSurfaceAt, inBallPit } from "./acoustics";
+import { BALL_TOP } from "./ball-pit";
 import { nextTape, type Tape } from "./tape";
 import type { GenerationVersion } from "./generation";
 import { CELL, generateChunk, landmarkKind, SPAN, type ChunkData } from "./maze";
@@ -121,6 +122,7 @@ export class BackroomsEngine {
   private distance = 0;
   private stepDistance = 0;
   private wakeDistance = 0;
+  private ballDistance = 0;
   private wakeIdle = 0;
   private stepSide = 1;
   private depth = 0;
@@ -208,14 +210,15 @@ export class BackroomsEngine {
           if (kind === "officeAnnex" && room.office !== "annex") continue;
           if (kind === "hotelCorridor" && room.corridor !== "hotel") continue;
           if (kind === "utilityCorridor" && room.corridor !== "utility") continue;
-          // `&pool=` narrows to a basin shape, or to one with a bridge, pier, or trampoline.
+          // `&pool=` narrows to a basin shape, a ball pit, or one with a bridge, pier, or trampoline.
           const pool = new URLSearchParams(location.search).get("pool");
           const basin = room.basin;
           if (kind === "poolroom" && pool && !(
             basin?.shape === pool ||
             (pool === "bridge" && basin?.bridge && !basin.bridge.pier) ||
             (pool === "pier" && basin?.bridge?.pier) ||
-            (pool === "trampoline" && basin?.trampoline)
+            (pool === "trampoline" && basin?.trampoline) ||
+            (pool === "balls" && basin?.fill === "balls")
           )) continue;
           this.position.set(
             x * SPAN + (room.x + room.width / 2) * CELL,
@@ -771,6 +774,23 @@ export class BackroomsEngine {
       } else if (this.wakeIdle > 1.7) {
         this.wakeIdle = 0;
         this.disturbWater(this.position.x, this.position.z, 0.25);
+      }
+    }
+    const feet = { x: this.position.x, y: this.position.y - 1.66, z: this.position.z };
+    for (const section of this.sections.values())
+      for (const pit of section.ballPits)
+        pit.update(feet.x, feet.z, feet.y, dt, this.settings.reducedMotion);
+    if (inBallPit(this.chunks, feet)) {
+      const into = !inBallPit(this.chunks, { x: previousX, y: previousY - 1.66, z: previousZ });
+      this.ballDistance += moved;
+      if (into || this.ballDistance > (running ? 0.28 : 0.36)) {
+        this.ballDistance = 0;
+        this.audio.propSound({
+          kind: into ? "impact" : "scrape",
+          material: "plastic",
+          position: { ...feet, y: BALL_TOP },
+          strength: into ? 1 : Math.min(1, moved / Math.max(dt, 0.001) / 3),
+        });
       }
     }
     this.playerSpeed = moved / Math.max(dt, 0.001);

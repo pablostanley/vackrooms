@@ -347,6 +347,9 @@ export function generateChunk(
       landmark.width * CELL,
       landmark.length * CELL,
     );
+  // A separate hash, so every outline, bridge, and trampoline stays put.
+  if (landmark.basin && interiorSeed(x, z, seed + 0xba11) % 4 === 0)
+    landmark.basin.fill = "balls";
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
   // One choice per three-section run, including negative chunk coordinates.

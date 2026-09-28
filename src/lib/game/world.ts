@@ -22,6 +22,7 @@ import {
 import { createDiscoveryParts, planDiscovery } from "./discoveries";
 import { furnitureCollisionParts } from "./furniture-collision";
 import { buildLandmark } from "./landmarks";
+import type { BallPit } from "./ball-pit";
 import { wallContactShadowGeometry } from "./wall-contact-shadow";
 import { planRoomLighting } from "./room-lighting";
 import { markTubePanel, pickFixtureChannel } from "./fixture-lighting";
@@ -68,6 +69,8 @@ export interface Section {
   colliders: THREE.Box3[];
   shapedColliders: ShapedObstacle[];
   water: THREE.Mesh[];
+  /** Instanced ball pits that part around the player. */
+  ballPits: BallPit[];
   computers: ComputerStation[];
   occluders: THREE.Mesh[];
   dispose: () => void;
@@ -86,6 +89,7 @@ export function buildSection(
     portals: Portal[] = [],
     colliders: THREE.Box3[] = [],
     water: THREE.Mesh[] = [];
+  const ballPits: BallPit[] = [];
   const shapedColliders: ShapedObstacle[] = [];
   const computers: ComputerStation[] = [];
   const looseFurniture: ShapedObstacle[] = [];
@@ -529,7 +533,7 @@ export function buildSection(
     floor(x + width, z, SPAN - x - width, length);
   } else floor(0, 0, SPAN, SPAN);
   buildLandmark(data, mats, {
-    box, plane, lights, colliders, shapedColliders, water, group,
+    box, plane, lights, colliders, shapedColliders, water, ballPits, group,
     geometry: (g, mat, x, y, z) => add(g, mat, x, y, z),
   });
   if (lighting.lampCell !== null) {
@@ -1089,8 +1093,10 @@ export function buildSection(
     object.geometry.computeBoundingBox();
     object.geometry.computeBoundingSphere();
     // Water receives its transparent renderer material after section creation.
+    // Ball pits are thousands of instances: too costly to raycast as occluders.
     if (
       !water.includes(object) &&
+      !(object instanceof THREE.InstancedMesh) &&
       !(object.material as THREE.Material).transparent
     )
       occluders.push(object);
@@ -1106,6 +1112,7 @@ export function buildSection(
     colliders,
     shapedColliders,
     water,
+    ballPits,
     computers,
     occluders,
     dispose: () => {
