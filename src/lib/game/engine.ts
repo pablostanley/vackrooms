@@ -114,6 +114,8 @@ export class BackroomsEngine {
   private seconds = 0;
   private distance = 0;
   private stepDistance = 0;
+  private wakeDistance = 0;
+  private wakeIdle = 0;
   private stepSide = 1;
   private depth = 0;
   private stress = 0;
@@ -149,6 +151,8 @@ export class BackroomsEngine {
     this.encounters = new Encounters(seed, this.navigation);
     this.encounters.setEnabled(settings.entities);
     this.audio.setVolume(settings.volume);
+    // Heard drips mark the surface where they land.
+    this.audio.onDrip = (p) => this.disturbWater(p.x, p.z, 0.45);
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
     // Hide the outer edge of the bounded resident window, including along the
@@ -655,6 +659,11 @@ export class BackroomsEngine {
     this.lastLights = -10;
     this.lastScreens = -1;
   }
+  private disturbWater(x: number, z: number, strength: number) {
+    // Rings are timed on the render clock, which stops under reduced motion.
+    if (!this.settings.reducedMotion) this.renderer?.disturbWater(x, z, strength);
+  }
+
   private prepareWater(section: Section) {
     if (this.renderer)
       for (const water of section.water)
@@ -721,11 +730,27 @@ export class BackroomsEngine {
     }) !== "water") {
       this.audio.enterWater(this.position);
       this.stepDistance = 0;
+      // Jumping in throws a bigger ring than wading down the steps.
+      this.disturbWater(this.position.x, this.position.z, 1.4 + Math.min(Math.max(previousY - this.position.y, 0) * 20, 1.4));
     }
     const moved = Math.hypot(
       this.position.x - previousX,
       this.position.z - previousZ,
     );
+    this.audio.wade(moved / Math.max(dt, 0.001), inWater);
+    if (inWater) {
+      // A trailing wake while moving; small sway rings while standing.
+      this.wakeDistance += moved;
+      this.wakeIdle += dt;
+      if (this.wakeDistance > 0.32) {
+        this.wakeDistance = 0;
+        this.wakeIdle = 0;
+        this.disturbWater(this.position.x, this.position.z, running ? 1.1 : 0.75);
+      } else if (this.wakeIdle > 1.7) {
+        this.wakeIdle = 0;
+        this.disturbWater(this.position.x, this.position.z, 0.25);
+      }
+    }
     this.playerSpeed = moved / Math.max(dt, 0.001);
     this.distance += moved;
     const grounded = this.motor?.grounded ?? false;

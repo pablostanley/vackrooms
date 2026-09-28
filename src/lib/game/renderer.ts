@@ -14,6 +14,8 @@ export interface GameRenderer {
   canvas: HTMLCanvasElement;
   backend: "WebGPU · vgpu" | "WebGL";
   waterMaterial: THREE.Material;
+  /** Drop a ripple on any pool surface at a world position. */
+  disturbWater: (x: number, z: number, strength: number) => void;
   resize: (w: number, h: number) => void;
   updateSettings: (settings: RenderSettings) => void;
   recordFrame: (milliseconds: number, playing: boolean) => void;
@@ -123,7 +125,11 @@ export async function createRenderer(
         };
         configurePipeline();
         const gpuRenderer = renderer;
-        const water = createPoolWater(true);
+        const water = createPoolWater(true, scene);
+        // The mirror is a second scene render whenever a pool is on screen.
+        const reflectionScale = () =>
+          settings.quality === "low" ? 0.25 : settings.quality === "high" ? 0.6 : 0.4;
+        water.setReflectionScale(reflectionScale());
         const resize = () => {
           gpuRenderer.setPixelRatio(
             resolution.pixelRatio(width, height, window.devicePixelRatio),
@@ -139,6 +145,7 @@ export async function createRenderer(
           canvas: renderer.domElement,
           backend: "WebGPU · vgpu",
           waterMaterial: water.material,
+          disturbWater: water.disturb,
           resize: (w, h) => {
             width = w;
             height = h;
@@ -148,6 +155,7 @@ export async function createRenderer(
           updateSettings: (next) => {
             const changed = settings.tapeEffects !== next.tapeEffects || contactShadowsEnabled(settings) !== contactShadowsEnabled(next);
             settings = next;
+            water.setReflectionScale(reflectionScale());
             if (resolution.setQuality(next.quality)) resize();
             if (changed) configurePipeline();
             diagnostics(gpuRenderer.domElement);
@@ -165,7 +173,7 @@ export async function createRenderer(
             } else pipeline.render();
           },
           dispose: () => {
-            water.material.dispose();
+            water.dispose();
             pipeline.dispose();
             scenePass.dispose();
             plainPass.dispose();
@@ -187,7 +195,7 @@ export async function createRenderer(
     antialias: true,
     powerPreference: "high-performance",
   });
-  const water = createPoolWater(false);
+  const water = createPoolWater(false, scene);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
@@ -256,6 +264,7 @@ export async function createRenderer(
     canvas: renderer.domElement,
     backend: "WebGL",
     waterMaterial: water.material,
+    disturbWater: water.disturb,
     resize: (w, h) => {
       width = w;
       height = h;
@@ -289,7 +298,7 @@ export async function createRenderer(
       renderer.render(postScene, postCamera);
     },
     dispose: () => {
-      water.material.dispose();
+      water.dispose();
       quad.geometry.dispose();
       material.dispose();
       target.dispose();
