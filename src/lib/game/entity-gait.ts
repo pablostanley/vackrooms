@@ -4,7 +4,7 @@ export const LEG_LENGTH = 0.65;
 export const gaitUrgency = (speed: number) => clamp((speed - 1.5) / 3, 0, 1);
 export const stepLength = (speed: number) => 0.9 + gaitUrgency(speed) * 0.4;
 
-/** Two equal leg bones solve toward a planted foot, with the knee always forward.
+/** Two equal leg bones (of either leg's own length) solve toward a planted foot, with the knee always forward.
  * Each stance covers exactly one traveled step; the return swing lifts the toes.
  */
 export function solveEntityLeg(
@@ -12,6 +12,7 @@ export function solveEntityLeg(
   speed: number,
   motion: number,
   hipHeight: number,
+  leg = LEG_LENGTH,
 ) {
   const phase = ((((gait + Math.PI / 2) / (Math.PI * 2)) % 1) + 1) % 1;
   const swinging = phase >= 0.5;
@@ -25,10 +26,10 @@ export function solveEntityLeg(
   const lift = arc * (0.15 + gaitUrgency(speed) * 0.18) * motion;
   const footY = 0.05 + lift;
   const drop = hipHeight - footY;
-  const length = clamp(Math.hypot(drop, footZ), 0.1, LEG_LENGTH * 2 - 0.001);
+  const length = clamp(Math.hypot(drop, footZ), 0.1, leg * 2 - 0.001);
   const knee = Math.acos(
     clamp(
-      (length * length - 2 * LEG_LENGTH ** 2) / (2 * LEG_LENGTH ** 2),
+      (length * length - 2 * leg ** 2) / (2 * leg ** 2),
       -1,
       1,
     ),
