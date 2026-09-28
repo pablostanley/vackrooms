@@ -14,6 +14,7 @@ import {
   type ChunkData,
   type PoolBounds,
 } from "./maze";
+import { TRAMPOLINE_RADIUS, TRAMPOLINE_TOP, deckRects } from "./pool-shape";
 
 let initialization: Promise<void> | undefined;
 const BODY_HEIGHT = 0.89;
@@ -25,6 +26,9 @@ const DOUBLE_JUMP_SPEED = 8.8;
 const POOL_JUMP_SPEED = 9.6;
 /** Inflatable play floors throw you almost as high as the pool. */
 const BOUNCE_JUMP_SPEED = 8.9;
+// A plain landing rebounds about 1.6m; a timed jump reaches the high ceiling.
+const TRAMPOLINE_BOUNCE = 7.6;
+const TRAMPOLINE_JUMP = 12.4;
 const COYOTE_TIME = 0.1;
 const JUMP_BUFFER = 0.12;
 
@@ -56,6 +60,7 @@ export class CharacterMotor {
     props: PhysicalProp[];
     basin: PoolBounds | null;
     bouncy: PoolBounds[];
+    trampolines: { x: number; z: number }[];
   }>();
   readonly movingPropShadows: Sphere[] = [];
   readonly propSounds: PropSound[] = [];
@@ -145,6 +150,11 @@ export class CharacterMotor {
         recess.x, recess.z, recess.width, recess.length,
         basin ? -1.4 : court!.floorY,
       );
+      // Shaped basins keep dry deck inside their bounding box.
+      const design = data.landmark.basin;
+      if (basin && design)
+        for (const rect of deckRects(design))
+          floor(basin.x + rect.x, basin.z + rect.z, rect.width, rect.length);
     } else floor(0, 0, SPAN, SPAN);
     for (let z = 0; z < CHUNK; z++)
       for (let x = 0; x < CHUNK; x++) {
@@ -252,6 +262,12 @@ export class CharacterMotor {
         width: CELL,
         length: CELL,
       })),
+      trampolines: basin && data.landmark.basin?.trampoline
+        ? [{
+            x: ox + basin.x + data.landmark.basin.trampoline.x,
+            z: oz + basin.z + data.landmark.basin.trampoline.z,
+          }]
+        : [],
     });
     this.world.step();
   }
@@ -344,7 +360,18 @@ export class CharacterMotor {
       this.movingPropShadows.push(prop.bounds.getBoundingSphere(prop.shadow));
     }
   }
+  /** Standing on a trampoline bed, not merely beside or under it. */
+  private onTrampoline() {
+    const position = this.body.translation();
+    if (Math.abs(position.y - BODY_HEIGHT - TRAMPOLINE_TOP) > 0.12) return false;
+    for (const { trampolines } of this.sections.values())
+      for (const bed of trampolines)
+        if (Math.hypot(position.x - bed.x, position.z - bed.z) < TRAMPOLINE_RADIUS)
+          return true;
+    return false;
+  }
   private takeoffSpeed() {
+    if (this.onTrampoline()) return TRAMPOLINE_JUMP;
     const position = this.body.translation();
     // Dry decks and the top of the coping retain the ordinary jump height.
     if (position.y < BODY_HEIGHT - 0.1) {
@@ -385,6 +412,14 @@ export class CharacterMotor {
       this.onGround = false;
       this.timeSinceGround = Math.max(this.timeSinceGround, COYOTE_TIME);
       this.jumpPresses--;
+    }
+    // Any landing on the bed rebounds; a buffered press above takes the big one.
+    if (!jumped && this.onGround && this.onTrampoline()) {
+      this.fallSpeed = TRAMPOLINE_BOUNCE;
+      this.jumps = 1;
+      jumped = 1;
+      this.onGround = false;
+      this.timeSinceGround = COYOTE_TIME;
     }
     this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
     if (!this.jumpBuffer) this.jumpPresses = 0;

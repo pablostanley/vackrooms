@@ -5,10 +5,10 @@ import * as THREE from "three";
 import { EntityModel } from "../src/lib/game/entity-model";
 import { indexEntityGeometry } from "../src/lib/game/entity-index";
 
-// Captured from ce5e024's unindexed position/normal/skinIndex/skinWeight buffers.
+// Captured from the canonical (seed 0) bodies' unindexed position/normal/skinIndex/skinWeight buffers.
 const baseline = {
-  stalker: { vertices: 91224, unique: 15247, bytes: 914304, hash: "21a7cf47fb6547ee2d0c2e317f9950da007e226e582ee7b67de18a6b39454f47" },
-  pyramid: { vertices: 79716, unique: 13329, bytes: 799224, hash: "9093d2d4c158a793ded7745112b11c6e6f85c0e208ae25ceff45b1010b08fb95" },
+  stalker: { vertices: 81672, unique: 14720, bytes: 869904, hash: "88d4d1cf646c4622c328a095172e25502ca25e4b020ca4f13308dc799f6ddfcf" },
+  pyramid: { vertices: 72048, unique: 13007, bytes: 768432, hash: "b10dad7a644be956886a4d13ec01840e63de7e4f8e08bdfa50b150244c3f120a" },
 };
 
 for (const variant of ["stalker", "pyramid"] as const) {
@@ -29,7 +29,8 @@ for (const variant of ["stalker", "pyramid"] as const) {
       assert.ok(skin.geometry.index!.array instanceof Uint16Array);
       const bytes = Object.values(skin.geometry.attributes).reduce((sum, attribute) => sum + attribute.array.byteLength, skin.geometry.index!.array.byteLength);
       assert.equal(bytes, expected.bytes);
-      assert.ok(bytes < expected.vertices * 48 * 0.21, "resident buffers stay below 21% of the old surface");
+      assert.ok(bytes < expected.vertices * 48 * 0.23, "resident buffers stay below 23% of the unindexed surface");
+      assert.ok(bytes <= 914304, "the fuller anatomy stays within the original creature's residency");
       const actual = new THREE.Vector3(), original = new THREE.Vector3();
       for (const [gait, speed, reach, squeeze] of [[0, 0, 0, 0], [1.5, 2.85, 0, 0], [3.8, 4.65, 1, 1]]) {
         model.animate(gait, speed > 0, speed, 1, reach, squeeze);

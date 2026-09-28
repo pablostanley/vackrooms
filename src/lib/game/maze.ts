@@ -8,6 +8,13 @@ import {
   type Playroom,
   type StairRun,
 } from "./room-shapes";
+import {
+  POOL_COPING,
+  designPool,
+  distanceToOutline,
+  pointInPolygon,
+  type PoolDesign,
+} from "./pool-shape";
 
 export { CELL, CHUNK, HEIGHT, N, E, S, W, directions };
 export const PLAYER_RADIUS = 0.22;
@@ -33,6 +40,8 @@ export interface Landmark {
   warehouse?: boolean;
   corridor?: "hotel" | "utility";
   pool?: "colonnade";
+  /** Generation-2 seeded basin; absent pools keep the classic 16x25m lanes. */
+  basin?: PoolDesign;
 }
 export interface PoolBounds {
   x: number;
@@ -169,12 +178,24 @@ export function courtyardBounds(room: Landmark) {
 }
 export function poolBounds(room: Landmark): PoolBounds | null {
   if (room.kind !== "poolroom") return null;
+  const width = room.basin?.width ?? 16, length = room.basin?.length ?? 25;
   return {
-    x: (room.x + room.width / 2) * CELL - 8,
-    z: (room.z + room.length / 2) * CELL - 12.5,
-    width: 16,
-    length: 25,
+    x: (room.x + room.width / 2) * CELL - width / 2,
+    z: (room.z + room.length / 2) * CELL - length / 2,
+    width,
+    length,
   };
+}
+/** True over water or its coping; `pad` widens the blocked band. */
+export function overPool(room: Landmark, x: number, z: number, pad = 0) {
+  const bounds = poolBounds(room);
+  if (!bounds) return false;
+  const px = x - bounds.x, pz = z - bounds.z, band = POOL_COPING + pad;
+  if (px <= -band || px >= bounds.width + band || pz <= -band || pz >= bounds.length + band)
+    return false;
+  if (!room.basin) return true;
+  return pointInPolygon(room.basin.outline, px, pz) ||
+    distanceToOutline(room.basin.outline, px, pz) < band;
 }
 export function hash(x: number, z: number, seed: number): number {
   let h =
@@ -327,6 +348,16 @@ export function generateChunk(
   if (generation === 2 && kind === "poolroom" && (x !== 0 || z !== 0) &&
       interiorSeed(x, z, seed + 0x37c011) % 5 === 0)
     landmark.pool = "colonnade";
+  // Every other new-generation pool gets its own seeded outline and fittings.
+  else if (generation === 2 && kind === "poolroom" && (x !== 0 || z !== 0))
+    landmark.basin = designPool(
+      random(interiorSeed(x, z, seed + 0x9001)),
+      landmark.width * CELL,
+      landmark.length * CELL,
+    );
+  // A separate hash, so every outline, bridge, and trampoline stays put.
+  if (landmark.basin && interiorSeed(x, z, seed + 0xba11) % 4 === 0)
+    landmark.basin.fill = "balls";
   if (kind === "courtyard")
     landmark.height = courtyardBounds(landmark)!.floorY + 5 * COURTYARD_STOREY;
   // One choice per three-section run, including negative chunk coordinates.
@@ -483,14 +514,7 @@ export function canStand(
   if (basin) {
     const px = x - cell.chunk.x * SPAN,
       pz = z - cell.chunk.z * SPAN;
-    const coping = radius + 0.18;
-    if (
-      px > basin.x - coping &&
-      px < basin.x + basin.width + coping &&
-      pz > basin.z - coping &&
-      pz < basin.z + basin.length + coping
-    )
-      return false;
+    if (overPool(cell.chunk.landmark, px, pz, radius)) return false;
   }
   const lx = x - (cell.chunk.x * SPAN + cell.cx * CELL),
     lz = z - (cell.chunk.z * SPAN + cell.cz * CELL);

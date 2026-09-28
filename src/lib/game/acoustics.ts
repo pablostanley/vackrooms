@@ -1,3 +1,4 @@
+import { distanceToOutline, pointInPolygon } from "./pool-shape";
 import {
   CELL,
   CHUNK,
@@ -43,7 +44,8 @@ export function roomSoundAt(
       case "levelFun":
         return "office";
       case "poolroom":
-        return "pool";
+        // Plastic swallows the tile echo, and there is no water to lap.
+        return cell.chunk.landmark.basin?.fill === "balls" ? "hall" : "pool";
       case "corridor":
         return "corridor";
       default:
@@ -69,21 +71,36 @@ export type FootstepSurface = "carpet" | "hard" | "water";
 // Match the recessed water plane and the 0.36m coping in landmarks.ts.
 export const POOL_WATER_Y = -0.18;
 
+/** The basin's fill when the feet are down inside it, clear of the rim. */
+function basinFillAt(chunks: Map<string, ChunkData>, feet: SoundPosition) {
+  const cell = cellAt(chunks, feet.x, feet.z);
+  const basin = cell && poolBounds(cell.chunk.landmark);
+  if (!cell || !basin || feet.y > POOL_WATER_Y) return null;
+  const x = feet.x - cell.chunk.x * SPAN,
+    z = feet.z - cell.chunk.z * SPAN;
+  const design = cell.chunk.landmark.basin;
+  const inside = design
+    ? pointInPolygon(design.outline, x - basin.x, z - basin.z) &&
+      distanceToOutline(design.outline, x - basin.x, z - basin.z) > 0.18
+    : x > basin.x + 0.18 && x < basin.x + basin.width - 0.18 &&
+      z > basin.z + 0.18 && z < basin.z + basin.length - 0.18;
+  return inside ? design?.fill ?? "water" : null;
+}
+
+/** Feet wading through a ball pit rather than standing on its deck. */
+export function inBallPit(chunks: Map<string, ChunkData>, feet: SoundPosition) {
+  return basinFillAt(chunks, feet) === "balls";
+}
+
 /** The position is at the feet, so standing on the rim never splashes. */
 export function footstepSurfaceAt(
   chunks: Map<string, ChunkData>,
   feet: SoundPosition,
 ): FootstepSurface {
-  const cell = cellAt(chunks, feet.x, feet.z);
-  const basin = cell && poolBounds(cell.chunk.landmark);
-  if (cell && basin && feet.y <= POOL_WATER_Y) {
-    const x = feet.x - cell.chunk.x * SPAN,
-      z = feet.z - cell.chunk.z * SPAN;
-    if (
-      x > basin.x + 0.18 && x < basin.x + basin.width - 0.18 &&
-      z > basin.z + 0.18 && z < basin.z + basin.length - 0.18
-    ) return "water";
-  }
+  const fill = basinFillAt(chunks, feet);
+  if (fill === "water") return "water";
+  // Tile under a meter of plastic balls lands as soft as carpet.
+  if (fill === "balls") return "carpet";
   return hardFloorAt(chunks, feet) ? "hard" : "carpet";
 }
 

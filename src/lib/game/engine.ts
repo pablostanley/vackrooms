@@ -3,7 +3,8 @@ import { PointerLockControls } from "three/addons/controls/PointerLockControls.j
 import { CharacterMotor } from "./physics";
 import { updateResidentSections } from "./resident-sections";
 import { BackroomsAudio } from "./audio";
-import { footstepSurfaceAt } from "./acoustics";
+import { footstepSurfaceAt, inBallPit } from "./acoustics";
+import { BALL_TOP } from "./ball-pit";
 import { nextTape, type Tape } from "./tape";
 import type { GenerationVersion } from "./generation";
 import { CELL, generateChunk, landmarkKind, SPAN, type ChunkData } from "./maze";
@@ -13,12 +14,20 @@ import { TapeOverlay } from "./tape-overlay";
 import { buildSection, type Portal, type Section } from "./world";
 import { EntityNavigation, groundDistance } from "./entity-navigation";
 import { EntityModel } from "./entity-model";
+import { entityBodySeed } from "./entity-anatomy";
+import { EntityWardrobe } from "./entity-wardrobe";
 import { Encounters } from "./encounters";
 import { crushEnvelope, DEATH_HOLD } from "./encounter-effects";
 import { ComputerScreens } from "./computer-screens";
 import { computerFocus, type ComputerStation } from "./computers";
 import { ShadowCache } from "./shadow-cache";
-import { fixturePhase, fixtureStrength } from "./fixture-lighting";
+import {
+  FIXTURE_CHANNELS,
+  applyTubeLevels,
+  fixtureLevel,
+  fixturePhase,
+  fixtureStrength,
+} from "./fixture-lighting";
 import { connectedGamepads, GamepadInput, PAD, type GamepadFrame } from "./gamepad";
 import type { GameSettings } from "./settings";
 
@@ -82,10 +91,12 @@ export class BackroomsEngine {
     roughness: 0.96,
     metalness: 0,
   });
+  // Unskinned skeletons until the first bodies arrive from the wardrobe.
   private entities = [
-    new EntityModel(this.entityMaterial),
-    new EntityModel(this.entityMaterial, "pyramid"),
+    new EntityModel(this.entityMaterial, "stalker", 0, null),
+    new EntityModel(this.entityMaterial, "pyramid", 0, null),
   ];
+  private wardrobe = new EntityWardrobe();
   // Includes the full height, gait, and extended arms of the animated creature.
   private entityShadowBounds = this.entities.map(() => new THREE.Sphere(new THREE.Vector3(), 2.2));
   private navigation = new EntityNavigation();
@@ -110,6 +121,9 @@ export class BackroomsEngine {
   private seconds = 0;
   private distance = 0;
   private stepDistance = 0;
+  private wakeDistance = 0;
+  private ballDistance = 0;
+  private wakeIdle = 0;
   private stepSide = 1;
   private depth = 0;
   private stress = 0;
@@ -120,6 +134,9 @@ export class BackroomsEngine {
   private flashOn = false;
   private lastStats = 0;
   private lastLights = -10;
+  private fixtureLevels = new Float32Array(FIXTURE_CHANNELS.length).fill(1);
+  private hemisphere = new THREE.HemisphereLight("#fff4cd", "#a39770", 1.15);
+  private ambient = new THREE.AmbientLight("#fff5d6", 0.3);
   private lastChange = 0;
   private drag: { x: number; y: number; id: number } | null = null;
   private touchMove = { x: 0, y: 0 };
@@ -145,6 +162,8 @@ export class BackroomsEngine {
     this.encounters = new Encounters(seed, this.navigation);
     this.encounters.setEnabled(settings.entities);
     this.audio.setVolume(settings.volume);
+    // Heard drips mark the surface where they land.
+    this.audio.onDrip = (p) => this.disturbWater(p.x, p.z, 0.45);
     if (overlayCanvas) this.tapeOverlay = new TapeOverlay(overlayCanvas);
     this.scene.background = new THREE.Color("#9e9450");
     // Hide the outer edge of the bounded resident window, including along the
@@ -152,8 +171,7 @@ export class BackroomsEngine {
     this.scene.fog = new THREE.Fog("#9e9450", 32, SPAN - 1);
     // Ceiling panels dominate; warm carpet bounce still keeps the ceiling
     // readable. Less uniform fill lets the architectural contact shading show.
-    this.scene.add(new THREE.HemisphereLight("#fff4cd", "#a39770", 1.15));
-    this.scene.add(new THREE.AmbientLight("#fff5d6", 0.3));
+    this.scene.add(this.hemisphere, this.ambient);
     // Leave five texture slots for albedo, packed surface detail, the outage
     // mask, Three's BRDF lookup, and contact AO on baseline 16-texture GPUs.
     for (let i = 0; i < 11; i++) {
@@ -192,6 +210,16 @@ export class BackroomsEngine {
           if (kind === "officeAnnex" && room.office !== "annex") continue;
           if (kind === "hotelCorridor" && room.corridor !== "hotel") continue;
           if (kind === "utilityCorridor" && room.corridor !== "utility") continue;
+          // `&pool=` narrows to a basin shape, a ball pit, or one with a bridge, pier, or trampoline.
+          const pool = new URLSearchParams(location.search).get("pool");
+          const basin = room.basin;
+          if (kind === "poolroom" && pool && !(
+            basin?.shape === pool ||
+            (pool === "bridge" && basin?.bridge && !basin.bridge.pier) ||
+            (pool === "pier" && basin?.bridge?.pier) ||
+            (pool === "trampoline" && basin?.trampoline) ||
+            (pool === "balls" && basin?.fill === "balls")
+          )) continue;
           this.position.set(
             x * SPAN + (room.x + room.width / 2) * CELL,
             1.66,
@@ -651,6 +679,11 @@ export class BackroomsEngine {
     this.lastLights = -10;
     this.lastScreens = -1;
   }
+  private disturbWater(x: number, z: number, strength: number) {
+    // Rings are timed on the render clock, which stops under reduced motion.
+    if (!this.settings.reducedMotion) this.renderer?.disturbWater(x, z, strength);
+  }
+
   private prepareWater(section: Section) {
     if (this.renderer)
       for (const water of section.water)
@@ -659,8 +692,12 @@ export class BackroomsEngine {
   private updateLights() {
     const candidates = [...this.sections.values()]
       .flatMap((s) => [
-        ...s.lights.map((position) => ({ position, lamp: false })),
-        ...s.lampLights.map((position) => ({ position, lamp: true })),
+        ...s.lights.map((position) => ({
+          position,
+          lamp: false,
+          channel: s.fixtureChannels.get(position) ?? 0,
+        })),
+        ...s.lampLights.map((position) => ({ position, lamp: true, channel: 0 })),
       ])
       .sort(
         (a, b) =>
@@ -675,6 +712,7 @@ export class BackroomsEngine {
       light.visible = !!p;
       if (p) {
         light.userData.lamp = p.lamp;
+        light.userData.channel = p.channel;
         light.userData.strength = fixtureStrength(
           p.position.distanceTo(this.position),
           nextDistance,
@@ -717,11 +755,44 @@ export class BackroomsEngine {
     }) !== "water") {
       this.audio.enterWater(this.position);
       this.stepDistance = 0;
+      // Jumping in throws a bigger ring than wading down the steps.
+      this.disturbWater(this.position.x, this.position.z, 1.4 + Math.min(Math.max(previousY - this.position.y, 0) * 20, 1.4));
     }
     const moved = Math.hypot(
       this.position.x - previousX,
       this.position.z - previousZ,
     );
+    this.audio.wade(moved / Math.max(dt, 0.001), inWater);
+    if (inWater) {
+      // A trailing wake while moving; small sway rings while standing.
+      this.wakeDistance += moved;
+      this.wakeIdle += dt;
+      if (this.wakeDistance > 0.32) {
+        this.wakeDistance = 0;
+        this.wakeIdle = 0;
+        this.disturbWater(this.position.x, this.position.z, running ? 1.1 : 0.75);
+      } else if (this.wakeIdle > 1.7) {
+        this.wakeIdle = 0;
+        this.disturbWater(this.position.x, this.position.z, 0.25);
+      }
+    }
+    const feet = { x: this.position.x, y: this.position.y - 1.66, z: this.position.z };
+    for (const section of this.sections.values())
+      for (const pit of section.ballPits)
+        pit.update(feet.x, feet.z, feet.y, dt, this.settings.reducedMotion);
+    if (inBallPit(this.chunks, feet)) {
+      const into = !inBallPit(this.chunks, { x: previousX, y: previousY - 1.66, z: previousZ });
+      this.ballDistance += moved;
+      if (into || this.ballDistance > (running ? 0.28 : 0.36)) {
+        this.ballDistance = 0;
+        this.audio.propSound({
+          kind: into ? "impact" : "scrape",
+          material: "plastic",
+          position: { ...feet, y: BALL_TOP },
+          strength: into ? 1 : Math.min(1, moved / Math.max(dt, 0.001) / 3),
+        });
+      }
+    }
     this.playerSpeed = moved / Math.max(dt, 0.001);
     this.distance += moved;
     const grounded = this.motor?.grounded ?? false;
@@ -930,6 +1001,35 @@ export class BackroomsEngine {
       return;
     }
   }
+  /** Each arrival wears a different body, grown while its stalker was away. */
+  private dressEntities() {
+    this.entities.forEach((entity, i) => {
+      const stalker = this.encounters.stalkers[i];
+      const seed = entityBodySeed(this.seed, i, stalker.appearances + (stalker.present ? 0 : 1));
+      if (entity.sculpted && entity.seed === seed) return;
+      // Never change a body in view; a late body waits for the next arrival.
+      if (stalker.present && entity.sculpted) return;
+      const surface = this.wardrobe.take(entity.variant, seed);
+      if (!surface && !stalker.present && this.wardrobe.available) {
+        this.wardrobe.prepare(entity.variant, seed);
+        return;
+      }
+      const next = new EntityModel(this.entityMaterial, entity.variant, seed, surface);
+      next.position.copy(entity.position);
+      next.rotation.copy(entity.rotation);
+      next.visible = entity.visible;
+      this.scene.remove(entity);
+      this.disposeEntity(entity);
+      this.scene.add(next);
+      this.entities[i] = next;
+    });
+  }
+  private disposeEntity(entity: EntityModel) {
+    entity.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose();
+    });
+  }
   private updateEntity(dt: number) {
     const previousGait = this.encounters.stalkers.map((stalker) => stalker.renderGait);
     const wasAttacking = this.encounters.attacking;
@@ -949,6 +1049,7 @@ export class BackroomsEngine {
       },
       (position, running) => this.audio.entityStep(position, running),
     );
+    this.dressEntities();
     const attack = crushEnvelope(this.encounters.attackTime, this.settings.reducedMotion);
     let proximity = 0;
     this.entities.forEach((entity, i) => {
@@ -1099,8 +1200,27 @@ export class BackroomsEngine {
         this.updateLights();
         this.lastLights = this.elapsed;
       }
+      // Tired and failing tubes: panels, their spotlights, and their ballast hum
+      // all follow the same channel. Reduced motion holds each at its level.
+      for (let c = 1; c < this.fixtureLevels.length; c++)
+        this.fixtureLevels[c] = fixtureLevel(c, this.elapsed, this.settings.reducedMotion);
+      for (const section of this.sections.values())
+        if (section.tubes) applyTubeLevels(section.tubes, this.fixtureLevels);
+      this.audio.setFixtureLevels(this.fixtureLevels);
+      let nearby = 0,
+        failing = 0;
       for (let i = 0; i < this.lights.length; i++) {
         const light = this.lights[i];
+        const level = this.fixtureLevels[light.userData.channel ?? 0];
+        if (light.visible && !light.userData.lamp) {
+          const d = Math.hypot(
+            light.position.x - this.position.x,
+            light.position.z - this.position.z,
+          );
+          const weight = (light.userData.strength ?? 0) * Math.exp(-((d / 5) ** 2));
+          nearby += weight;
+          failing += weight * (1 - level);
+        }
         const jitter = this.settings.reducedMotion
           ? 0
           : Math.sin(this.elapsed * 8 + (light.userData.phase ?? 0)) * 0.012;
@@ -1112,8 +1232,13 @@ export class BackroomsEngine {
         const intensity = light.userData.lamp
           ? 9
           : 28 * heightCompensation * (1 + jitter);
-        light.intensity = intensity * (light.userData.strength ?? 0);
+        light.intensity = intensity * (light.userData.strength ?? 0) * level;
       }
+      // Fill light stands in for bounce from the tubes overhead, so it sags
+      // when the fixtures around the player dim or drop out.
+      const fill = 1 - 0.6 * (failing / Math.max(nearby, 1));
+      this.hemisphere.intensity = 1.15 * fill;
+      this.ambient.intensity = 0.3 * fill;
       this.flashlight.position.copy(this.camera.position);
       this.flashlight.target.position
         .set(0, 0, -1)
@@ -1214,10 +1339,8 @@ export class BackroomsEngine {
     this.computerScreens?.dispose();
     this.motor?.dispose();
     for (const s of this.sections.values()) s.dispose();
-    for (const entity of this.entities) entity.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.geometry.dispose();
-      if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose();
-    });
+    for (const entity of this.entities) this.disposeEntity(entity);
+    this.wardrobe.dispose();
     this.entityMaterial.dispose();
     this.lights.forEach((light) => light.dispose());
     this.materials.dispose();

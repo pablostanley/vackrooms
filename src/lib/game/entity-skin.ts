@@ -12,13 +12,26 @@ export type Tissue = {
   blend?: number;
 };
 
+/** Transferable bind-pose surface; built off the main thread when possible. */
+export type EntitySurface = {
+  position: Float32Array;
+  normal: Float32Array;
+  skinIndex: Uint16Array;
+  skinWeight: Float32Array;
+  index: Uint16Array | Uint32Array;
+};
+
 /** Smooth-union tissue is polygonized once in the bind pose, never per frame.
  * The same distance field blends bone weights across elbows, knees and sockets.
  */
 export function sculptEntitySkin(tissue: Tissue[], bones: THREE.Bone[], material: THREE.Material) {
+  return skinEntitySurface(sculptEntitySurface(tissue, bones), bones, material);
+}
+
+export function sculptEntitySurface(tissue: Tissue[], bones: THREE.Bone[]): EntitySurface {
   const resolution = 128;
-  const size = new THREE.Vector3(1.3, 3.25, 1.3);
-  const origin = new THREE.Vector3(-0.65, -0.15, -0.65);
+  const size = new THREE.Vector3(1.5, 3.25, 1.5);
+  const origin = new THREE.Vector3(-0.75, -0.15, -0.75);
   const blend = 0.026;
   const shapes = tissue.map(({ bone, center, radii, length, radius, curve, blend: smoothing }) => ({
     length, radius, curve, smoothing: smoothing ?? blend,
@@ -28,8 +41,10 @@ export function sculptEntitySkin(tissue: Tissue[], bones: THREE.Bone[], material
     local: center,
     bone: bones.indexOf(bone),
     minRadius: Math.min(radii.x, radii.y, radii.z),
+    reach: Math.max(radii.x, radii.y, radii.z) + (radius ?? 0),
   }));
-  const surface = new MarchingCubes(resolution, material, false, false, 60000);
+  const scratch = new THREE.MeshBasicMaterial();
+  const surface = new MarchingCubes(resolution, scratch, false, false, 60000);
   surface.isolation = 0;
   surface.field.fill(-1);
   const point = new THREE.Vector3();
@@ -54,7 +69,7 @@ export function sculptEntitySkin(tissue: Tissue[], bones: THREE.Bone[], material
   for (const shape of shapes) {
     const bounds = new THREE.Box3(
       shape.local.clone().sub(shape.radii), shape.local.clone().add(shape.radii),
-    ).applyMatrix4(bones[shape.bone].matrixWorld).expandByScalar(blend);
+    ).applyMatrix4(bones[shape.bone].matrixWorld).expandByScalar(Math.max(blend, shape.smoothing));
     const lo = bounds.min.sub(origin).divide(size).multiplyScalar(resolution).floor();
     const hi = bounds.max.sub(origin).divide(size).multiplyScalar(resolution).ceil();
     for (let z = Math.max(1, lo.z); z <= Math.min(resolution - 2, hi.z); z++) {
@@ -86,6 +101,8 @@ export function sculptEntitySkin(tissue: Tissue[], bones: THREE.Bone[], material
     local.fromBufferAttribute(sourceNormal, vertex).divide(size).normalize().toArray(normals, vertex * 3);
     influence.fill(0);
     for (const shape of shapes) {
+      // Tissue this far away contributes under a thousandth of a weight.
+      if (point.distanceTo(shape.center) - shape.reach > 0.16) continue;
       // Maximum per bone avoids biasing weights toward densely sampled anatomy.
       influence[shape.bone] = Math.max(influence[shape.bone], Math.exp(Math.min(0, distance(shape, point)) / 0.022));
     }
@@ -104,11 +121,29 @@ export function sculptEntitySkin(tissue: Tissue[], bones: THREE.Bone[], material
     }
   }
   surface.geometry.dispose();
+  scratch.dispose();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
   geometry.setAttribute("skinIndex", new THREE.BufferAttribute(indices, 4));
   geometry.setAttribute("skinWeight", new THREE.BufferAttribute(weights, 4));
   indexEntityGeometry(geometry);
+  const array = (name: string) => geometry.getAttribute(name).array;
+  return {
+    position: array("position") as Float32Array,
+    normal: array("normal") as Float32Array,
+    skinIndex: array("skinIndex") as Uint16Array,
+    skinWeight: array("skinWeight") as Float32Array,
+    index: geometry.index!.array as Uint16Array | Uint32Array,
+  };
+}
+
+export function skinEntitySurface(surface: EntitySurface, bones: THREE.Bone[], material: THREE.Material) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(surface.position, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(surface.normal, 3));
+  geometry.setAttribute("skinIndex", new THREE.BufferAttribute(surface.skinIndex, 4));
+  geometry.setAttribute("skinWeight", new THREE.BufferAttribute(surface.skinWeight, 4));
+  geometry.setIndex(new THREE.BufferAttribute(surface.index, 1));
   const skin = new THREE.SkinnedMesh(geometry, material);
   skin.name = "continuous-void-skin";
   skin.castShadow = skin.receiveShadow = true;
