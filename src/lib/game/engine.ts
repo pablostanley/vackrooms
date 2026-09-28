@@ -192,6 +192,15 @@ export class BackroomsEngine {
           if (kind === "officeAnnex" && room.office !== "annex") continue;
           if (kind === "hotelCorridor" && room.corridor !== "hotel") continue;
           if (kind === "utilityCorridor" && room.corridor !== "utility") continue;
+          // `&pool=` narrows to a basin shape, or to one with a bridge, pier, or trampoline.
+          const pool = new URLSearchParams(location.search).get("pool");
+          const basin = room.basin;
+          if (kind === "poolroom" && pool && !(
+            basin?.shape === pool ||
+            (pool === "bridge" && basin?.bridge && !basin.bridge.pier) ||
+            (pool === "pier" && basin?.bridge?.pier) ||
+            (pool === "trampoline" && basin?.trampoline)
+          )) continue;
           this.position.set(
             x * SPAN + (room.x + room.width / 2) * CELL,
             1.66,
