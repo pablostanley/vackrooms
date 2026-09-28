@@ -42,6 +42,13 @@ interface SpatialVoice {
 interface FixtureVoice {
   voice: SpatialVoice;
   retireAt: number | null;
+  channel: number;
+  ballast: GainNode;
+  level: number;
+}
+interface FixtureSection {
+  lights: readonly SoundPosition[];
+  fixtureChannels?: ReadonlyMap<SoundPosition, number>;
 }
 interface RoomBus {
   input: GainNode;
@@ -303,7 +310,7 @@ export class BackroomsAudio {
     forward: SoundPosition,
     up: SoundPosition,
     chunks: Map<string, ChunkData>,
-    sections: Iterable<{ lights: readonly SoundPosition[] }>,
+    sections: Iterable<FixtureSection>,
     entityPresent = false,
   ) {
     this.listener = { ...position };
@@ -427,12 +434,16 @@ export class BackroomsAudio {
   }
 
   private updateFixtures(
-    sections: Iterable<{ lights: readonly SoundPosition[] }>,
+    sections: Iterable<FixtureSection>,
   ) {
     const ctx = this.ctx!,
       now = ctx.currentTime;
-    const candidates: { id: string; position: SoundPosition; score: number }[] =
-      [];
+    const candidates: {
+      id: string;
+      position: SoundPosition;
+      score: number;
+      channel: number;
+    }[] = [];
     for (const section of sections)
       for (const p of section.lights) {
         const distance = Math.hypot(
@@ -448,6 +459,7 @@ export class BackroomsAudio {
           id,
           position: p,
           score: distance + walls * 7 - (this.fixtures.has(id) ? 0.8 : 0),
+          channel: section.fixtureChannels?.get(p) ?? 0,
         });
       }
     candidates.sort((a, b) => a.score - b.score || a.id.localeCompare(b.id));
@@ -505,7 +517,26 @@ export class BackroomsAudio {
         voice.nodes.push(level);
         osc.start();
       }
-      this.fixtures.set(item.id, { voice, retireAt: null });
+      this.fixtures.set(item.id, {
+        voice,
+        retireAt: null,
+        channel: item.channel,
+        ballast,
+        level: 1,
+      });
+    }
+  }
+
+  /** A failing tube's hum cuts out and strikes back with its light. */
+  setFixtureLevels(levels: ArrayLike<number>) {
+    if (!this.ctx || !this.active) return;
+    const now = this.ctx.currentTime;
+    for (const fixture of this.fixtures.values()) {
+      const level = levels[fixture.channel] ?? 1;
+      // Tube levels are mostly steps; skip tiny sags to keep automation sparse.
+      if (Math.abs(level - fixture.level) < 0.03) continue;
+      fixture.level = level;
+      fixture.ballast.gain.setTargetAtTime(0.94 * level, now, 0.012);
     }
   }
 

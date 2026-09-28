@@ -47,6 +47,7 @@ export function headlessMaterials(): Materials {
   ) as Record<(typeof standardNames)[number], THREE.MeshStandardMaterial>;
   const basic = {
     luminous: new THREE.MeshBasicMaterial(),
+    tubePanel: new THREE.MeshBasicMaterial({ vertexColors: true }),
     lampGlow: new THREE.MeshBasicMaterial(),
     shadow: new THREE.MeshBasicMaterial({ transparent: true }),
     darkness: new THREE.MeshBasicMaterial(),
