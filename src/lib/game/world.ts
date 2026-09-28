@@ -486,20 +486,22 @@ export function buildSection(
       const lit = lighting.cells.has(at)
         ? lighting.fixtures.has(at)
         : normallyLit;
+      // Recessed lay-in troffer: a thin painted rim flush with the tile grid
+      // and the lens just below it, rather than a surface-mounted box.
       box(
-        landmark ? 2.4 : 1.28,
-        0.065,
-        0.67,
+        landmark ? 2.4 : 1.3,
+        0.024,
+        0.68,
         x,
-        fixtureHeight - 0.045,
+        fixtureHeight - 0.012,
         z,
-        mats.fixtures,
+        mats.troffer,
       );
       plane(
-        landmark ? 2.3 : 1.18,
-        0.57,
+        landmark ? 2.3 : 1.2,
+        0.6,
         x,
-        fixtureHeight - 0.082,
+        fixtureHeight - 0.026,
         z,
         lit ? mats.luminous : mats.deadLight,
         Math.PI / 2,
