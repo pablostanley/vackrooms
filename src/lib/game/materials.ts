@@ -135,6 +135,10 @@ export function createMaterials() {
     // values preserve the former diffuser output under Three's ACES curve.
     color: new THREE.Color(1.65, 1.61, 0.35),
   });
+  // Tired and failing tubes share one batch per section. Their vertex colors
+  // carry each tube's current brightness, rewritten by the engine per frame.
+  const tubePanel = luminous.clone();
+  tubePanel.vertexColors = true;
   const deadLight = new THREE.MeshStandardMaterial({
     color: "#b2ad78",
     roughness: 0.8,
@@ -330,6 +334,7 @@ export function createMaterials() {
     trim,
     fixtures,
     luminous,
+    tubePanel,
     lampGlow,
     deadLight,
     shadow,
@@ -383,6 +388,7 @@ export function createMaterials() {
         trim,
         fixtures,
         luminous,
+        tubePanel,
         lampGlow,
         deadLight,
         shadow,
