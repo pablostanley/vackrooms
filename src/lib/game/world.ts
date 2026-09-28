@@ -528,7 +528,10 @@ export function buildSection(
     floor(0, z, x, length);
     floor(x + width, z, SPAN - x - width, length);
   } else floor(0, 0, SPAN, SPAN);
-  buildLandmark(data, mats, { box, plane, lights, colliders, shapedColliders, water, group });
+  buildLandmark(data, mats, {
+    box, plane, lights, colliders, shapedColliders, water, group,
+    geometry: (g, mat, x, y, z) => add(g, mat, x, y, z),
+  });
   if (lighting.lampCell !== null) {
     const at = lighting.lampCell;
     // Place the only lamp before clutter so its pool of light stays readable.

@@ -19,6 +19,7 @@ import { buildHotelCorridor } from "./hotel-corridor";
 import { buildNeighborhood } from "./neighborhood";
 import { buildOfficeAnnex } from "./office-annex";
 import { buildWarehouse } from "./warehouse";
+import { buildShapedPool } from "./pool-build";
 
 export interface LandmarkBuilder {
   box: (
@@ -46,6 +47,14 @@ export interface LandmarkBuilder {
   colliders: THREE.Box3[];
   shapedColliders: ShapedObstacle[];
   water: THREE.Mesh[];
+  /** Batch arbitrary chunk-local geometry, offset like `box`. */
+  geometry?: (
+    geometry: THREE.BufferGeometry,
+    mat: THREE.Material,
+    x: number,
+    y: number,
+    z: number,
+  ) => void;
 }
 
 /** Large silhouettes and a few perimeter fixtures leave the walking floor empty. */
@@ -268,23 +277,15 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuild
 
   const basin = poolBounds(room);
   if (basin) {
-    // Smooth plaster and poured flooring, without tile grids or blue hues.
-    const deck = (px: number, pz: number, w: number, d: number) =>
-      b.plane(w, d, px + w / 2, 0.012, pz + d / 2, mats.cream, -Math.PI / 2);
-    deck(x0, z0, width, basin.z - z0);
-    deck(
-      x0,
-      basin.z + basin.length,
-      width,
-      z0 + length - basin.z - basin.length,
-    );
-    deck(x0, basin.z, basin.x - x0, basin.length);
-    deck(
-      basin.x + basin.width,
-      basin.z,
-      x0 + width - basin.x - basin.width,
-      basin.length,
-    );
+    // Seeded generation-2 basins; the classic lane pool follows below.
+    if (room.basin) {
+      buildShapedPool(data, room.basin, mats, b, solid);
+      buildPoolDeck(b, mats, x0, z0, width, length, basin);
+      for (const pz of [z0 + CELL + 0.6, z0 + length - CELL - 0.6])
+        solid(3, 0.42, 0.65, x0 + CELL * 0.5, 0.21, pz, mats.cream);
+      return;
+    }
+    buildPoolDeck(b, mats, x0, z0, width, length, basin);
     b.plane(
       basin.width,
       basin.length,
@@ -411,4 +412,33 @@ export function buildLandmark(data: ChunkData, mats: Materials, b: LandmarkBuild
       ),
     );
   }
+}
+
+/** Smooth plaster and poured flooring around the basin's bounding box,
+ * without tile grids or blue hues. */
+function buildPoolDeck(
+  b: LandmarkBuilder,
+  mats: Materials,
+  x0: number,
+  z0: number,
+  width: number,
+  length: number,
+  basin: { x: number; z: number; width: number; length: number },
+) {
+  const deck = (px: number, pz: number, w: number, d: number) =>
+    b.plane(w, d, px + w / 2, 0.012, pz + d / 2, mats.cream, -Math.PI / 2);
+  deck(x0, z0, width, basin.z - z0);
+  deck(
+    x0,
+    basin.z + basin.length,
+    width,
+    z0 + length - basin.z - basin.length,
+  );
+  deck(x0, basin.z, basin.x - x0, basin.length);
+  deck(
+    basin.x + basin.width,
+    basin.z,
+    x0 + width - basin.x - basin.width,
+    basin.length,
+  );
 }

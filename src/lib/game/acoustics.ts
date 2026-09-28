@@ -1,3 +1,4 @@
+import { distanceToOutline, pointInPolygon } from "./pool-shape";
 import {
   CELL,
   CHUNK,
@@ -80,9 +81,12 @@ export function footstepSurfaceAt(
   if (cell && basin && feet.y <= POOL_WATER_Y) {
     const x = feet.x - cell.chunk.x * SPAN,
       z = feet.z - cell.chunk.z * SPAN;
-    if (
-      x > basin.x + 0.18 && x < basin.x + basin.width - 0.18 &&
-      z > basin.z + 0.18 && z < basin.z + basin.length - 0.18
+    const design = cell.chunk.landmark.basin;
+    if (design
+      ? pointInPolygon(design.outline, x - basin.x, z - basin.z) &&
+        distanceToOutline(design.outline, x - basin.x, z - basin.z) > 0.18
+      : x > basin.x + 0.18 && x < basin.x + basin.width - 0.18 &&
+        z > basin.z + 0.18 && z < basin.z + basin.length - 0.18
     ) return "water";
   }
   return hardFloorAt(chunks, feet) ? "hard" : "carpet";
