@@ -13,6 +13,8 @@ import { TapeOverlay } from "./tape-overlay";
 import { buildSection, type Portal, type Section } from "./world";
 import { EntityNavigation, groundDistance } from "./entity-navigation";
 import { EntityModel } from "./entity-model";
+import { entityBodySeed } from "./entity-anatomy";
+import { EntityWardrobe } from "./entity-wardrobe";
 import { Encounters } from "./encounters";
 import { crushEnvelope, DEATH_HOLD } from "./encounter-effects";
 import { ComputerScreens } from "./computer-screens";
@@ -88,10 +90,12 @@ export class BackroomsEngine {
     roughness: 0.96,
     metalness: 0,
   });
+  // Unskinned skeletons until the first bodies arrive from the wardrobe.
   private entities = [
-    new EntityModel(this.entityMaterial),
-    new EntityModel(this.entityMaterial, "pyramid"),
+    new EntityModel(this.entityMaterial, "stalker", 0, null),
+    new EntityModel(this.entityMaterial, "pyramid", 0, null),
   ];
+  private wardrobe = new EntityWardrobe();
   // Includes the full height, gait, and extended arms of the animated creature.
   private entityShadowBounds = this.entities.map(() => new THREE.Sphere(new THREE.Vector3(), 2.2));
   private navigation = new EntityNavigation();
@@ -943,6 +947,35 @@ export class BackroomsEngine {
       return;
     }
   }
+  /** Each arrival wears a different body, grown while its stalker was away. */
+  private dressEntities() {
+    this.entities.forEach((entity, i) => {
+      const stalker = this.encounters.stalkers[i];
+      const seed = entityBodySeed(this.seed, i, stalker.appearances + (stalker.present ? 0 : 1));
+      if (entity.sculpted && entity.seed === seed) return;
+      // Never change a body in view; a late body waits for the next arrival.
+      if (stalker.present && entity.sculpted) return;
+      const surface = this.wardrobe.take(entity.variant, seed);
+      if (!surface && !stalker.present && this.wardrobe.available) {
+        this.wardrobe.prepare(entity.variant, seed);
+        return;
+      }
+      const next = new EntityModel(this.entityMaterial, entity.variant, seed, surface);
+      next.position.copy(entity.position);
+      next.rotation.copy(entity.rotation);
+      next.visible = entity.visible;
+      this.scene.remove(entity);
+      this.disposeEntity(entity);
+      this.scene.add(next);
+      this.entities[i] = next;
+    });
+  }
+  private disposeEntity(entity: EntityModel) {
+    entity.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose();
+    });
+  }
   private updateEntity(dt: number) {
     const previousGait = this.encounters.stalkers.map((stalker) => stalker.renderGait);
     const wasAttacking = this.encounters.attacking;
@@ -962,6 +995,7 @@ export class BackroomsEngine {
       },
       (position, running) => this.audio.entityStep(position, running),
     );
+    this.dressEntities();
     const attack = crushEnvelope(this.encounters.attackTime, this.settings.reducedMotion);
     let proximity = 0;
     this.entities.forEach((entity, i) => {
@@ -1251,10 +1285,8 @@ export class BackroomsEngine {
     this.computerScreens?.dispose();
     this.motor?.dispose();
     for (const s of this.sections.values()) s.dispose();
-    for (const entity of this.entities) entity.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.geometry.dispose();
-      if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose();
-    });
+    for (const entity of this.entities) this.disposeEntity(entity);
+    this.wardrobe.dispose();
     this.entityMaterial.dispose();
     this.lights.forEach((light) => light.dispose());
     this.materials.dispose();

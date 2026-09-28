@@ -14,6 +14,7 @@ export function headlessMaterials(): Materials {
     "tileFloor",
     "trim",
     "fixtures",
+    "troffer",
     "deadLight",
     "wood",
     "fabric",

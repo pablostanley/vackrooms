@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { WebGPURenderer, RenderPipeline, type Node } from "three/webgpu";
-import { pass, uniform, uv, vec2, vec3, max } from "three/tsl";
+import { pass, uniform, uv, vec2, vec3 } from "three/tsl";
+import { bloom } from "three/addons/tsl/display/BloomNode.js";
 import { tslExports } from "vgpu/three";
 import tapeModule from "@/shaders/tape.wgsl";
 import { createPoolWater } from "./pool-water";
@@ -19,6 +20,15 @@ export interface GameRenderer {
   recordFrame: (milliseconds: number, playing: boolean) => void;
   render: (time: number, damage: number, stress: number) => void;
   dispose: () => void;
+}
+
+/** Khronos PBR Neutral keeps the ochre paper and carpet on-hue as they approach
+ * white, where ACES bleached large, many-fixture rooms to flat cream. Three's
+ * ACES also applies an implicit 1/0.6 gain; this exposure restores that level.
+ */
+export function configureToneMapping(renderer: { toneMapping: THREE.ToneMapping; toneMappingExposure: number }) {
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.4;
 }
 
 export async function createRenderer(
@@ -49,8 +59,7 @@ export async function createRenderer(
           powerPreference: "high-performance",
         });
         await renderer.init();
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.0;
+        configureToneMapping(renderer);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFShadowMap;
         const pipeline = new RenderPipeline(renderer);
@@ -65,6 +74,7 @@ export async function createRenderer(
           tapeWarp: WarpInputs;
           tapeGrade: GradeInputs;
         }>(tapeModule)("tapeWarp", "tapeGrade");
+        const glares: ReturnType<typeof bloom>[] = [];
         const tapeOutput = (cameraTexture: ReturnType<typeof scenePass.getTextureNode>) => {
           const coordinates = uv(),
             inputs = { uv: coordinates, seconds, damage, anomaly };
@@ -81,32 +91,16 @@ export async function createRenderer(
             .mul(0.6)
             .add(cameraTexture.sample(warped.add(softness)).rgb.mul(0.2))
             .add(cameraTexture.sample(warped.sub(softness)).rgb.mul(0.2));
-          // Only overexposed fluorescent highlights spill into the surrounding tape.
-          const halo = vec2(0.0035, 0.0025);
-          const glow = max(
-            cameraTexture.sample(warped.add(halo)).rgb.sub(0.82),
-            0,
-          )
-            .add(max(cameraTexture.sample(warped.sub(halo)).rgb.sub(0.82), 0))
-            .add(
-              max(
-                cameraTexture
-                  .sample(warped.add(vec2(halo.x, halo.y.negate())))
-                  .rgb.sub(0.82),
-                0,
-              ),
-            )
-            .add(
-              max(
-                cameraTexture
-                  .sample(warped.sub(vec2(halo.x, halo.y.negate())))
-                  .rgb.sub(0.82),
-                0,
-              ),
-            );
+          // Camcorder optics scatter overexposed fluorescent panels into a wide,
+          // soft veil. A real multi-scale bloom reads as lens glare; only
+          // radiance above the lit walls contributes.
+          const glare = bloom(cameraTexture, 0.42, 0.55, 1.05);
+          glares.push(glare);
+          glare.smoothWidth.value = 0.35;
+          const glow = glare.rgb;
           return tapeGrade({
             ...inputs,
-            color: soft.add(glow.mul(0.075)),
+            color: soft.add(glow),
           });
         };
         // Separate graphs remove AO's geometry prepass entirely when disabled.
@@ -167,6 +161,7 @@ export async function createRenderer(
           dispose: () => {
             water.material.dispose();
             pipeline.dispose();
+            glares.forEach((glare) => glare.dispose());
             scenePass.dispose();
             plainPass.dispose();
             contactShadows.dispose();
@@ -188,8 +183,7 @@ export async function createRenderer(
     powerPreference: "high-performance",
   });
   const water = createPoolWater(false);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  configureToneMapping(renderer);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   // Three leaves offscreen scene color linear and untone-mapped. Preserve
