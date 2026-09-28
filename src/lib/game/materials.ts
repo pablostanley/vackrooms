@@ -64,15 +64,30 @@ export function createMaterials() {
   const ceiling = surface("ceiling");
   const plaster = surface("plaster");
   const woodGrain = surface("wood");
+  // A prismatic acrylic lens over three tubes: brighter bands where the lamps
+  // sit, a fine pyramid texture, and falloff toward the painted steel rim.
   const lightMap = texture((ctx, s) => {
-    ctx.fillStyle = "#edeacf";
-    ctx.fillRect(0, 0, s, s);
-    for (let y = 0; y < s; y += 5) {
-      ctx.fillStyle = "rgba(114,121,90,.14)";
-      ctx.fillRect(0, y, s, 1);
-    }
-    grain(ctx, s, 9, 143);
-  });
+    const image = ctx.createImageData(s, s);
+    for (let y = 0; y < s; y++)
+      for (let x = 0; x < s; x++) {
+        const u = x / s, v = y / s;
+        const tubes = [0.22, 0.5, 0.78].reduce(
+          (sum, center) => sum + Math.exp(-(((v - center) / 0.085) ** 2)),
+          0,
+        );
+        const edge = Math.min(u, 1 - u, v, 1 - v);
+        const rim = Math.min(1, edge / 0.08) ** 0.6;
+        const prism = (x % 4 < 2) !== (y % 4 < 2) ? 1 : 0.955;
+        const value = (0.74 + tubes * 0.24) * (0.72 + rim * 0.28) * prism;
+        const at = (y * s + x) * 4;
+        image.data[at] = Math.min(255, value * 250);
+        image.data[at + 1] = Math.min(255, value * 247);
+        image.data[at + 2] = Math.min(255, value * 232);
+        image.data[at + 3] = 255;
+      }
+    ctx.putImageData(image, 0, 0);
+  }, 256);
+  lightMap.wrapS = lightMap.wrapT = THREE.ClampToEdgeWrapping;
   const ao = texture((ctx, s) => {
     const g = ctx.createLinearGradient(0, 0, 0, s);
     g.addColorStop(0, "rgba(60,49,16,.23)");
@@ -102,7 +117,8 @@ export function createMaterials() {
     roughness: 1,
     color: "#ffffff",
     emissive: "#d4ceb1",
-    emissiveIntensity: 0.075,
+    // Carpet and wall bounce lights the board; the outage mask still dims it.
+    emissiveIntensity: 0.2,
   });
   const tileWall = new THREE.MeshStandardMaterial({
     ...plaster,
@@ -122,18 +138,50 @@ export function createMaterials() {
     color: "#a99b55",
     roughness: 0.85,
   });
+  // A tiny equirectangular stand-in for the maze: panel-dotted ceiling, ochre
+  // walls, brown carpet. Only untextured metal and enamel sample it, so their
+  // highlights read as reflected fluorescents instead of flat dark paint.
+  const reflections = texture((ctx, s) => {
+    const h = s / 2;
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, "#d9d3b4");
+    sky.addColorStop(0.42, "#bfb78f");
+    sky.addColorStop(0.5, "#b8a653");
+    sky.addColorStop(0.72, "#9d8e48");
+    sky.addColorStop(0.78, "#6d5f3a");
+    sky.addColorStop(1, "#4e4330");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, s, h);
+    ctx.fillStyle = "#fffbe6";
+    for (let row = 0; row < 4; row++)
+      for (let column = 0; column < 8; column++) {
+        const y = h * (0.04 + row * 0.085);
+        const width = s * (0.05 - row * 0.009);
+        ctx.fillRect(((column + (row % 2) * 0.5) / 8) * s, y, width, h * 0.018);
+      }
+  }, 256);
+  reflections.mapping = THREE.EquirectangularReflectionMapping;
+  reflections.wrapT = THREE.ClampToEdgeWrapping;
+  // Painted steel troffer rims catch the panel's own spill and carpet bounce.
+  const troffer = new THREE.MeshStandardMaterial({
+    color: "#e4dfc8",
+    roughness: 0.55,
+    emissive: "#f2e6bd",
+    emissiveIntensity: 0.18,
+  });
   const fixtures = new THREE.MeshStandardMaterial({
     color: "#bab37e",
     roughness: 0.7,
     metalness: 0.35,
+    envMap: reflections,
+    envMapIntensity: 0.55,
   });
   const luminous = new THREE.MeshBasicMaterial({
     map: lightMap,
-    // Authored HDR radiance keeps warm panels bright through the same ACES
-    // output as the room. Bypassing tone mapping only on the direct path made
-    // fixture brightness jump when post effects were enabled. Rounded radiance
-    // values preserve the former diffuser output under Three's ACES curve.
-    color: new THREE.Color(1.65, 1.61, 0.35),
+    // Authored HDR radiance keeps warm panels bright through the same tone-mapped
+    // output as the room. Real fluorescent diffusers clip to a warm near-white
+    // on camera; the excess feeds the lens bloom rather than tinting the lens.
+    color: new THREE.Color(2.5, 2.35, 1.45),
   });
   const deadLight = new THREE.MeshStandardMaterial({
     color: "#b2ad78",
@@ -170,8 +218,10 @@ export function createMaterials() {
   });
   const enamel = new THREE.MeshStandardMaterial({
     color: "#b4a052",
-    roughness: 0.72,
+    roughness: 0.6,
     metalness: 0.08,
+    envMap: reflections,
+    envMapIntensity: 0.45,
   });
   const fadedRed = new THREE.MeshStandardMaterial({
     color: "#9b5942",
@@ -185,7 +235,9 @@ export function createMaterials() {
   const metal = new THREE.MeshStandardMaterial({
     color: "#32392d",
     metalness: 0.65,
-    roughness: 0.55,
+    roughness: 0.45,
+    envMap: reflections,
+    envMapIntensity: 0.7,
   });
   const paper = new THREE.MeshStandardMaterial({
     color: "#b0aa7e",
@@ -247,6 +299,7 @@ export function createMaterials() {
   const courtyardGlass = new THREE.MeshStandardMaterial({
     color: "#a2ae94", transparent: true, opacity: 0.1,
     roughness: 0.18, metalness: 0.15, depthWrite: false, side: THREE.DoubleSide,
+    envMap: reflections, envMapIntensity: 0.6,
   });
   // The indoor street: painted sky walls, lap siding, shingles, and lawn.
   const streetWall = new THREE.MeshStandardMaterial({
@@ -308,12 +361,12 @@ export function createMaterials() {
       configureSurfaceSampling(material);
     }
   // Upholstery has finer fibers than floor carpet but shares its relief maps.
-  fabric.userData.surfaceMeters = upholstery.userData.surfaceMeters = 0.6;
+  fabric.userData.surfaceMeters = upholstery.userData.surfaceMeters = 1.2;
   configureSurfaceSampling(fabric);
   configureSurfaceSampling(upholstery);
-  courtyardGrass.userData.surfaceMeters = 1.2;
+  courtyardGrass.userData.surfaceMeters = 2.4;
   configureSurfaceSampling(courtyardGrass);
-  streetGrass.userData.surfaceMeters = streetHedge.userData.surfaceMeters = 1.2;
+  streetGrass.userData.surfaceMeters = streetHedge.userData.surfaceMeters = 2.4;
   configureSurfaceSampling(streetGrass);
   configureSurfaceSampling(streetHedge);
   const furniture: FurnitureLibrary = new FurnitureLibrary(() => materials);
@@ -329,6 +382,7 @@ export function createMaterials() {
     tileFloor,
     trim,
     fixtures,
+    troffer,
     luminous,
     lampGlow,
     deadLight,
@@ -382,6 +436,7 @@ export function createMaterials() {
         archive,
         trim,
         fixtures,
+        troffer,
         luminous,
         lampGlow,
         deadLight,
